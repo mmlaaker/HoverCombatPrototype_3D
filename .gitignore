@@ -1,0 +1,102 @@
+# =============================================
+# Unity Core
+# =============================================
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Aa]sset[Ss]tore/
+Recordings/
+Sysroot/
+DerivedDataCache/
+
+# =============================================
+# Rider / VS / IDE Generated Files
+# =============================================
+# JetBrains Rider
+.idea/
+*.sln
+*.csproj
+*.unityproj
+*.pidb
+*.user
+*.userprefs
+*.DotSettings
+*.DotSettings.user
+
+# Visual Studio
+.vscode/
+.vs/
+*.suo
+*.tmp
+*.pdb
+*.mdb
+*.opendb
+
+# =============================================
+# Unity Generated Files
+# =============================================
+*.booproj
+*.svd
+*.pdb.meta
+*.mdb.meta
+*.bak
+*.backup
+*.tmp
+*.temp
+*.log
+
+# Crash and error logs
+sysinfo.txt
+*.stacktrace
+
+# =============================================
+# Asset Store Tools / Packages
+# =============================================
+Assets/AssetStoreTools*
+Assets/Plugins/Editor/JetBrains*
+Assets/Plugins/Editor/Rider*
+Assets/Plugins/Editor/VisualStudio*
+
+# =============================================
+# Build Artifacts
+# =============================================
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+*.dSYM/
+
+# =============================================
+# OS Specific
+# =============================================
+# Windows
+[Dd]esktop.ini
+[Tt]humbs.db
+ehthumbs.db
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Linux
+*~
+.nfs*
+
+# =============================================
+# Git Metadata
+# =============================================
+*.orig
+*.patch
+*.rej
