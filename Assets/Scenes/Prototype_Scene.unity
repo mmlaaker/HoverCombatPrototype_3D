@@ -131,6 +131,7 @@ GameObject:
   - component: {fileID: 330585545}
   - component: {fileID: 330585544}
   - component: {fileID: 330585547}
+  - component: {fileID: 330585548}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -205,8 +206,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.12581319, y: -0.84982437, z: 0.23519495, w: 0.45459083}
-  m_LocalPosition: {x: 8.236259, y: 6.707602, z: 6.28443}
+  m_LocalRotation: {x: 0.06063111, y: -0.92384815, z: 0.16467744, w: 0.3401615}
+  m_LocalPosition: {x: 7.1538715, y: 7.1287055, z: 11.176593}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -256,6 +257,30 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &330585548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 198d575d8db1617408a1af462c97ae5a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverFollowCamera
+  target: {fileID: 1559420101}
+  offset: {x: 0, y: 5, z: -11.5}
+  positionSmoothTime: 0.05
+  rotationSmoothTime: 20
+  velocityLag: 0
+  turnBankAmount: 0
+  enableMouseControl: 1
+  mouseSensitivity: 3
+  returnToFollowSpeed: 1.5
+  pitchUpLimit: 60
+  pitchDownLimit: 20
+  yawLimit: 80
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -448,7 +473,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: 1fdc055e88746154f9a6b55287728189, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -487,9 +512,9 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 727282428}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0, z: 0}
-  m_LocalScale: {x: 25, y: 0.1, z: 25}
+  m_LocalRotation: {x: 0.7078121, y: -0.0014128085, z: 0.0014156371, w: 0.70639795}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1000, y: 1000, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -543,6 +568,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!4 &1559420101 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8392167502604612172, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+  m_PrefabInstance: {fileID: 54492972804885089}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &54492972804885089
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -554,6 +584,30 @@ PrefabInstance:
     - target: {fileID: 607793786297508095, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Name
       value: HoverCar_Prototype
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224385582087146019, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: maxSpeed
+      value: 100
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224385582087146019, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: driftDamp
+      value: 1.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224385582087146019, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: turnTorque
+      value: 60
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224385582087146019, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: thrustForce
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224385582087146019, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: alignStrength
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 2224385582087146019, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: driftBoostFactor
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 8392167502604612172, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_LocalPosition.x
@@ -595,7 +649,8 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
+    m_RemovedComponents:
+    - {fileID: 3663368735868975063, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents: []

@@ -1,8 +1,11 @@
 using UnityEngine;
 
 /// <summary>
-/// Physics-based hovercraft controller with lift, thrust, steering,
-/// instant spawn-height alignment, and self-leveling stabilization.
+/// Physics-based hovercraft controller with:
+/// - Stable hover and self-leveling
+/// - Instant spawn-height alignment (no bounce)
+/// - Physically grounded thrust & turning (mass-scaled)
+/// - Dynamic drift damping + velocity alignment assist
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class HoverController : MonoBehaviour
@@ -14,22 +17,29 @@ public class HoverController : MonoBehaviour
     public float hoverDamp = 50f;
 
     [Header("Movement Settings")]
-    public float thrustForce = 50f;
-    public float turnTorque = 10f;
-    public float maxSpeed = 25f;
+    public float thrustForce = 150f;
+    public float turnTorque = 35f;
+    public float maxSpeed = 100f;
+
+    [Header("Thrust Refinement")]
+    public float driftDamp = 1.5f;
+    public float verticalDamp = 5.0f;
+
+    [Header("Turn Assist Settings")]
+    [Tooltip("Multiplier for drift damping while turning.")]
+    public float driftBoostFactor = 3f;
+    [Tooltip("How quickly velocity re-aligns with facing direction (2–4 is typical).")]
+    public float alignStrength = 2.5f;
 
     [Header("Drag Settings")]
     public float linearDrag = 0.1f;
     public float angularDrag = 0.2f;
 
     [Header("Center of Mass")]
-    [Tooltip("Child transform defining the Rigidbody's physical center of mass.")]
     public Transform centerOfMassTransform;
 
     [Header("Leveling Settings")]
-    [Tooltip("How aggressively the craft tries to align with world up.")]
-    public float levelingStrength = 100f;
-    [Tooltip("Damping applied to pitch/roll angular velocity (0–1 factor).")]
+    public float levelingStrength = 130f;
     [Range(0f, 1f)] public float angularDampFactor = 0.8f;
 
     private Rigidbody rb;
@@ -45,7 +55,6 @@ public class HoverController : MonoBehaviour
         rb.linearDamping = linearDrag;
         rb.angularDamping = angularDrag;
 
-        // Validate COM
         if (!centerOfMassTransform)
         {
             centerOfMassTransform = transform.Find("CenterOfMass");
@@ -58,8 +67,6 @@ public class HoverController : MonoBehaviour
         }
 
         rb.centerOfMass = transform.InverseTransformPoint(centerOfMassTransform.position);
-
-        // --- Instant spawn height alignment (no initial drop) ---
         AdjustSpawnHeightInstantly();
 
         if (hoverPoints != null)
@@ -136,12 +143,11 @@ public class HoverController : MonoBehaviour
     }
 
     // ------------------------------------------------------------------------
-    // MOVEMENT
+    // MOVEMENT (MASS-SCALED + HYBRID TURN ASSIST)
     // ------------------------------------------------------------------------
 
     private void ApplyMovementForces()
     {
-        // Basic input; replace with new Input System later
         float forwardInput = 0f;
         float turnInput = 0f;
 
@@ -159,13 +165,67 @@ public class HoverController : MonoBehaviour
         turnInput = Input.GetAxis("Horizontal");
 #endif
 
-        Vector3 velocity = rb.linearVelocity;
-        Vector3 localVel = transform.InverseTransformDirection(velocity);
+        // --- Determine hover-plane direction ---
+        Vector3 planeNormal = GetAverageGroundNormal();
+        Vector3 thrustDir = Vector3.ProjectOnPlane(transform.forward, planeNormal).normalized;
 
-        if (localVel.z < maxSpeed)
-            rb.AddForce(transform.forward * forwardInput * thrustForce, ForceMode.Force);
+        // --- Apply thrust scaled by mass ---
+        Vector3 currentVel = rb.linearVelocity;
+        float speed = Vector3.Dot(currentVel, thrustDir);
 
-        rb.AddTorque(Vector3.up * turnInput * turnTorque, ForceMode.Force);
+        if (Mathf.Abs(forwardInput) > 0.01f && speed < maxSpeed)
+            rb.AddForce(thrustDir * forwardInput * thrustForce * rb.mass, ForceMode.Force);
+
+        // --- Apply yaw torque scaled by mass ---
+        Vector3 yawAxis = transform.up;
+        if (Mathf.Abs(turnInput) > 0.01f)
+            rb.AddTorque(yawAxis * turnInput * turnTorque * rb.mass * 0.5f, ForceMode.Force);
+        else
+        {
+            // Light yaw damping when no input
+            Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
+            localAngVel.y *= 0.9f;
+            rb.angularVelocity = transform.TransformDirection(localAngVel);
+        }
+
+        // --- Drift damping (reduce sideways slide) ---
+        Vector3 forwardVel = Vector3.Project(currentVel, transform.forward);
+        Vector3 lateralVel = currentVel - forwardVel;
+
+        // Boost damping when steering for sharper turn response
+        float dynamicDrift = driftDamp * (Mathf.Abs(turnInput) > 0.01f ? driftBoostFactor : 1f);
+        rb.AddForce(-lateralVel * dynamicDrift, ForceMode.Acceleration);
+
+        // --- Vertical damping (stay near plane) ---
+        Vector3 verticalVel = Vector3.Project(currentVel, planeNormal);
+        rb.AddForce(-verticalVel * verticalDamp, ForceMode.Acceleration);
+
+        // --- Velocity alignment assist (rotates velocity toward facing dir) ---
+        if (rb.linearVelocity.sqrMagnitude > 1f)
+        {
+            Vector3 desiredVel = transform.forward * Vector3.Dot(rb.linearVelocity, transform.forward);
+            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, desiredVel, Time.fixedDeltaTime * alignStrength);
+        }
+    }
+
+    private Vector3 GetAverageGroundNormal()
+    {
+        if (hoverPoints == null || hoverPoints.Length == 0)
+            return Vector3.up;
+
+        Vector3 avg = Vector3.zero;
+        int hits = 0;
+
+        foreach (var point in hoverPoints)
+        {
+            if (point && Physics.Raycast(point.position, -Vector3.up, out RaycastHit hit, hoverHeight * 3f))
+            {
+                avg += hit.normal;
+                hits++;
+            }
+        }
+
+        return hits > 0 ? (avg / hits).normalized : Vector3.up;
     }
 
     // ------------------------------------------------------------------------
@@ -174,7 +234,6 @@ public class HoverController : MonoBehaviour
 
     private void ApplyLevelingTorque()
     {
-        // Align craft's up vector with world up
         Vector3 localUp = transform.up;
         Vector3 desiredUp = Vector3.up;
 
@@ -182,9 +241,7 @@ public class HoverController : MonoBehaviour
         float tiltAngle = Vector3.Angle(localUp, desiredUp);
 
         if (tiltAngle > 0.01f)
-        {
             rb.AddTorque(correctionAxis * (tiltAngle * levelingStrength), ForceMode.Acceleration);
-        }
 
         // Dampen pitch and roll
         Vector3 localAngular = transform.InverseTransformDirection(rb.angularVelocity);
@@ -202,7 +259,6 @@ public class HoverController : MonoBehaviour
         if (!centerOfMassTransform || hoverPoints == null) return;
 
         Vector3 comWorld = centerOfMassTransform.position;
-
         Gizmos.color = Color.yellow;
         Gizmos.DrawSphere(comWorld, 0.15f);
         Gizmos.DrawWireSphere(comWorld, 0.3f);
@@ -220,7 +276,6 @@ public class HoverController : MonoBehaviour
             if (!p) continue;
 
             bool hit = Physics.Raycast(p.position, -Vector3.up, out RaycastHit hitInfo, hoverHeight * 3f);
-
             Gizmos.color = hit ? Color.green : Color.red;
             Gizmos.DrawLine(p.position, p.position - Vector3.up * hoverHeight);
 
