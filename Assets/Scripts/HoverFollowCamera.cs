@@ -1,59 +1,55 @@
 using UnityEngine;
-#if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
-#endif
 
 /// <summary>
-/// Smooth third-person follow camera for HoverController testing.
-/// Compatible with Unity's new Input System.
-/// Now includes yaw/pitch clamping to prevent excessive orbit.
+/// Smoothed follow camera for ballistic hovercraft motion.
+/// - Position & rotation smoothing
+/// - Velocity-based look-ahead
+/// - Independent vertical smoothing
+/// - Optional mouse orbit
 /// </summary>
 public class HoverFollowCamera : MonoBehaviour
 {
-    [Header("Target Settings")]
+    [Header("Target")]
     public Transform target;
-    public Vector3 offset = new Vector3(0f, 4f, -10f);
 
-    [Header("Follow Settings")]
-    public float positionSmoothTime = 0.2f;
-    public float rotationSmoothTime = 5f;
+    [Header("Offsets")]
+    public Vector3 offset = new Vector3(0f, 3f, -8f);
+    [Tooltip("How much the camera looks ahead in movement direction.")]
+    public float lookAheadDistance = 5f;
 
-    [Header("Dynamic Behavior")]
-    public float velocityLag = 0.1f;
-    public float turnBankAmount = 3f;
+    [Header("Smoothing")]
+    public float positionSmooth = 6f;
+    public float rotationSmooth = 5f;
+    [Tooltip("Vertical smoothing (lower = more floaty).")]
+    public float verticalSmooth = 3f;
 
     [Header("Mouse Control")]
-    public bool enableMouseControl = true;
-    public float mouseSensitivity = 3f;
+    public bool enableMouseOrbit = true;
+    public float mouseSensitivity = 2f;
+    public float minPitch = -15f;
+    public float maxPitch = 60f;
 
-    [Tooltip("How quickly camera returns to default offset when not orbiting.")]
-    public float returnToFollowSpeed = 1.5f;
-
-    [Header("Angle Limits")]
-    [Tooltip("Maximum upward pitch (degrees).")]
-    public float pitchUpLimit = 60f;
-    [Tooltip("Maximum downward pitch (degrees).")]
-    public float pitchDownLimit = 20f;
-    [Tooltip("Yaw limit left/right (degrees from behind the craft).")]
-    public float yawLimit = 80f;
-
-    private Vector3 velocitySmoothDamp;
-    private Rigidbody targetRb;
-
+    private Vector3 velocity;
+    private Vector3 smoothedPos;
     private float yaw;
-    private float pitch;
-    private bool isOrbiting;
+    private float pitch = 15f;
+    private Rigidbody targetRb;
 
     void Start()
     {
-        if (target != null)
+        if (!target)
         {
-            targetRb = target.GetComponent<Rigidbody>();
-            Vector3 relativePos = target.InverseTransformPoint(transform.position);
-            Vector3 dir = relativePos.normalized;
-            yaw = Mathf.Atan2(dir.x, -dir.z) * Mathf.Rad2Deg;
-            pitch = Mathf.Asin(dir.y) * Mathf.Rad2Deg;
+            Debug.LogError("HoverFollowCamera missing target!");
+            enabled = false;
+            return;
         }
+
+        targetRb = target.GetComponent<Rigidbody>();
+        smoothedPos = target.position + target.TransformVector(offset);
+        Vector3 euler = transform.eulerAngles;
+        yaw = euler.y;
+        pitch = euler.x;
     }
 
     void LateUpdate()
@@ -61,112 +57,63 @@ public class HoverFollowCamera : MonoBehaviour
         if (!target) return;
 
         HandleMouseInput();
-        UpdateCameraPositionAndRotation();
+        UpdateCamera();
     }
 
-    // ------------------------------------------------------------------------
-    // INPUT
-    // ------------------------------------------------------------------------
-    void HandleMouseInput()
+    // ----------------------------------------------------------
+    private void HandleMouseInput()
     {
-        if (!enableMouseControl) return;
-
 #if ENABLE_INPUT_SYSTEM
-        if (Mouse.current != null)
-        {
-            if (Mouse.current.rightButton.isPressed)
-            {
-                isOrbiting = true;
+        if (!enableMouseOrbit || Mouse.current == null)
+            return;
 
-                Vector2 delta = Mouse.current.delta.ReadValue();
-                yaw += delta.x * mouseSensitivity * Time.deltaTime * 60f;
-                pitch -= delta.y * mouseSensitivity * Time.deltaTime * 60f;
-
-                // Clamp pitch (hard limit)
-                pitch = Mathf.Clamp(pitch, -pitchDownLimit, pitchUpLimit);
-
-                // Clamp yaw (soft limit)
-                yaw = Mathf.Clamp(yaw, -yawLimit, yawLimit);
-            }
-            else if (isOrbiting)
-            {
-                yaw = Mathf.Lerp(yaw, 0f, Time.deltaTime * returnToFollowSpeed);
-                pitch = Mathf.Lerp(pitch, 0f, Time.deltaTime * returnToFollowSpeed);
-
-                if (Mathf.Abs(yaw) < 0.1f && Mathf.Abs(pitch) < 0.1f)
-                    isOrbiting = false;
-            }
-        }
+        Vector2 delta = Mouse.current.delta.ReadValue() * mouseSensitivity;
+        yaw += delta.x;
+        pitch -= delta.y;
+        pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 #else
-        if (Input.GetMouseButton(1))
-        {
-            isOrbiting = true;
+        if (!enableMouseOrbit) return;
 
-            float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
-            float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
-
-            yaw += mouseX;
-            pitch -= mouseY;
-
-            pitch = Mathf.Clamp(pitch, -pitchDownLimit, pitchUpLimit);
-            yaw = Mathf.Clamp(yaw, -yawLimit, yawLimit);
-        }
-        else if (isOrbiting)
-        {
-            yaw = Mathf.Lerp(yaw, 0f, Time.deltaTime * returnToFollowSpeed);
-            pitch = Mathf.Lerp(pitch, 0f, Time.deltaTime * returnToFollowSpeed);
-
-            if (Mathf.Abs(yaw) < 0.1f && Mathf.Abs(pitch) < 0.1f)
-                isOrbiting = false;
-        }
+        yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
+        pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
+        pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 #endif
     }
 
-    // ------------------------------------------------------------------------
-    // CAMERA LOGIC
-    // ------------------------------------------------------------------------
-    void UpdateCameraPositionAndRotation()
+    // ----------------------------------------------------------
+    private void UpdateCamera()
     {
-        Vector3 dynamicOffset = offset;
+        // --- Target base position ---
+        Vector3 baseTargetPos = target.TransformPoint(offset);
 
-        if (targetRb)
-        {
-            Vector3 localVel = target.InverseTransformDirection(targetRb.linearVelocity);
-            dynamicOffset += target.TransformDirection(-localVel * velocityLag);
-        }
+        // --- Velocity-based look-ahead ---
+        Vector3 velocityDir = targetRb ? targetRb.linearVelocity.normalized : target.forward;
+        Vector3 lookAhead = velocityDir * lookAheadDistance;
+        Vector3 desiredPos = baseTargetPos + lookAhead;
 
-        if (enableMouseControl)
+        // --- Smooth position ---
+        Vector3 horizTarget = new Vector3(desiredPos.x, smoothedPos.y, desiredPos.z);
+        smoothedPos = Vector3.Lerp(smoothedPos, horizTarget, Time.deltaTime * positionSmooth);
+
+        // Separate vertical smoothing (gentler on hops)
+        smoothedPos.y = Mathf.Lerp(smoothedPos.y, desiredPos.y, Time.deltaTime * verticalSmooth);
+
+        // --- Compute rotation ---
+        Quaternion targetRot;
+
+        if (enableMouseOrbit)
         {
             Quaternion orbitRot = Quaternion.Euler(pitch, yaw, 0f);
-            dynamicOffset = orbitRot * offset;
+            targetRot = orbitRot;
         }
-
-        Vector3 desiredPosition = target.TransformPoint(dynamicOffset);
-
-        transform.position = Vector3.SmoothDamp(transform.position, desiredPosition,
-                                                ref velocitySmoothDamp, positionSmoothTime);
-
-        Quaternion lookRot = Quaternion.LookRotation(target.position - transform.position, Vector3.up);
-
-        if (targetRb)
+        else
         {
-            float yawRate = targetRb.angularVelocity.y;
-            lookRot *= Quaternion.Euler(0f, 0f, -yawRate * turnBankAmount);
+            Vector3 dirToTarget = (target.position - smoothedPos).normalized;
+            targetRot = Quaternion.LookRotation(dirToTarget, Vector3.up);
         }
 
-        transform.rotation = Quaternion.Slerp(transform.rotation, lookRot, rotationSmoothTime * Time.deltaTime);
+        // --- Apply smoothed rotation ---
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotationSmooth);
+        transform.position = smoothedPos;
     }
-
-#if UNITY_EDITOR
-    private void OnDrawGizmosSelected()
-    {
-        if (target)
-        {
-            Gizmos.color = Color.cyan;
-            Vector3 desiredPos = target.TransformPoint(offset);
-            Gizmos.DrawLine(target.position, desiredPos);
-            Gizmos.DrawWireSphere(desiredPos, 0.25f);
-        }
-    }
-#endif
 }
