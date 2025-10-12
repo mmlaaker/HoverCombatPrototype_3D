@@ -2,11 +2,11 @@ using UnityEngine;
 using System.Linq;
 
 /// <summary>
-/// Hovercraft Controller (Stable + Realistic Fall v2)
+/// Hovercraft Controller (Stable + Realistic Fall v3)
 /// - Smooth spring-based hover physics
-/// - Instant gravity when airborne
-/// - Distance-based lift cutoff (prevents hovering over pits)
-/// - Natural blending between ground and air
+/// - Distance-based lift cutoff to prevent floating above pits
+/// - Natural gravity blending
+/// - Visual pitch tilt for uphill/downhill motion
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class HoverController : MonoBehaviour
@@ -99,6 +99,21 @@ public class HoverController : MonoBehaviour
 
 
     // ============================================================
+    // --- Visual Tilt ---
+    // ============================================================
+
+    [Header("Visual Tilt (Pitch Response)")]
+    [Tooltip("Multiplier for pitch tilt when ascending or descending.")]
+    public float pitchResponse = 0.5f;
+
+    [Tooltip("Maximum visual pitch angle (degrees).")]
+    public float maxPitchAngle = 10f;
+
+    [Tooltip("Smoothing speed for pitch reaction.")]
+    public float tiltSmooth = 2f;
+
+
+    // ============================================================
     // --- Center of Mass ---
     // ============================================================
 
@@ -115,6 +130,8 @@ public class HoverController : MonoBehaviour
     private Vector3 smoothedGroundNormal = Vector3.up;
     private float groundedBlend = 1f;
     private bool initialized;
+
+    private float visualPitchOffset = 0f; // visual pitch tracking
 
 
     // ============================================================
@@ -146,6 +163,7 @@ public class HoverController : MonoBehaviour
         ApplyHoverForces();
         ApplyMovementForces();
         ApplyLevelingTorque();
+        ApplyVisualTilt();
     }
 
 
@@ -265,7 +283,7 @@ public class HoverController : MonoBehaviour
 
 
     // ============================================================
-    // --- Leveling ---
+    // --- Leveling & Pitch Tilt ---
     // ============================================================
 
     private void ApplyLevelingTorque()
@@ -280,6 +298,16 @@ public class HoverController : MonoBehaviour
         localAngular.x *= angularDampFactor;
         localAngular.z *= angularDampFactor;
         rb.angularVelocity = transform.TransformDirection(localAngular);
+    }
+
+    private void ApplyVisualTilt()
+    {
+        Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
+        float targetPitch = Mathf.Clamp(-localVel.y * pitchResponse, -maxPitchAngle, maxPitchAngle);
+        visualPitchOffset = Mathf.Lerp(visualPitchOffset, targetPitch, Time.deltaTime * tiltSmooth);
+
+        Quaternion tiltRot = Quaternion.Euler(visualPitchOffset, transform.localEulerAngles.y, transform.localEulerAngles.z);
+        transform.localRotation = Quaternion.Slerp(transform.localRotation, tiltRot, Time.deltaTime * tiltSmooth);
     }
 
 
