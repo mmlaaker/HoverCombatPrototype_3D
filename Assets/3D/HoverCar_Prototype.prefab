@@ -83,24 +83,27 @@ MonoBehaviour:
   - {fileID: 6908107666642186709}
   - {fileID: 4878345212704071205}
   - {fileID: 5629699384281370388}
-  hoverHeight: 8
-  hoverForce: 100
+  hoverHeight: 4
+  hoverForce: 150
   hoverDamp: 1.5
   preloadBias: 0.1
-  thrustAccel: 100
+  thrustAccel: 125
   turnTorque: 10
   maxSpeed: 200
   driftDamp: 0.6
   driftBoostFactor: 3
-  verticalDamp: 10
+  verticalDamp: 35
   alignStrength: 5
-  minGroundedRatio: 0.65
+  minGroundedRatio: 0.5
   groundedBlendSpeed: 10
   airAngularDrag: 0.05
   linearDrag: 1
   groundAngularDrag: 0.2
   levelingStrength: 15
-  angularDampFactor: 0.8
+  angularDampFactor: 0.5
+  pitchResponse: 0.5
+  maxPitchAngle: 10
+  tiltSmooth: 2
   centerOfMassTransform: {fileID: 2728044530725349004}
 --- !u!1 &1894106255394494861
 GameObject:
@@ -447,39 +450,10 @@ PrefabInstance:
     - {fileID: 450908455139490471, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
     - {fileID: -3614945896092128877, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: -8391222552659086748, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 3663368735868975063}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
 --- !u!4 &4701752765214074395 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
   m_PrefabInstance: {fileID: 5095051429890408944}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &5564515974036910996 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: -8391222552659086748, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
-  m_PrefabInstance: {fileID: 5095051429890408944}
-  m_PrefabAsset: {fileID: 0}
---- !u!65 &3663368735868975063
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5564515974036910996}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 0
-  serializedVersion: 3
-  m_Size: {x: 0.028335497, y: 0.066599905, z: 0.011562176}
-  m_Center: {x: 0, y: -0.0077170436, z: 0.002691056}
