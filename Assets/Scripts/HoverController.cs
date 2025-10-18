@@ -1,167 +1,55 @@
 using UnityEngine;
 using System.Linq;
 
-/*
-=====================================================================
- HOVER CONTROLLER (With Custom Editor System Overview)
-=====================================================================
-
-Core hovercraft controller featuring physics-based lift, thrust,
-steering, damping, and terrain-aligned orientation.
-
-System documentation is shown in the Unity Inspector through
-HoverControllerEditor.cs (scrollable, read-only section at top).
-
-=====================================================================
-*/
-
 [RequireComponent(typeof(Rigidbody))]
 public class HoverController : MonoBehaviour
 {
     // ============================================================
-    // --- System Overview (Used by Custom Editor Only) ---
-    // ============================================================
-
-    private const string systemOverview =
-        "<b>VERTICAL STABILITY (Hover Height Control)</b>\n" +
-        "â€¢ <b>hoverHeight</b> â€“ Target ride height above ground.\n" +
-        "â€¢ <b>hoverForce / hoverDamp / preloadBias / verticalDamp</b> â€“ Control lift strength, smoothing, and rebound.\n" +
-        "  â†‘ Higher hoverForce = stiffer lift, more reactive.\n" +
-        "  â†‘ Higher hoverDamp = smoother, slower altitude correction.\n\n" +
-        "<b>LATERAL CONTROL (Side Slip & Steering)</b>\n" +
-        "â€¢ <b>driftDamp / driftBoostFactor / alignStrength</b> â€“ Control side friction and how tightly velocity follows facing.\n\n" +
-        "<b>GROUND TRANSITION (Hover vs. Air)</b>\n" +
-        "â€¢ <b>minGroundedRatio / groundedBlendSpeed</b> â€“ Control how easily the craft transitions between hover and fall.\n" +
-        "  â†‘ Higher ratio = drops off sooner on crests.\n" +
-        "  â†‘ Faster blend = snappier lift recovery.\n\n" +
-        "<b>LEVELING & ORIENTATION</b>\n" +
-        "â€¢ <b>levelingStrength / angularDampFactor</b> â€“ How strongly the craft stays upright and smooths rotation.\n\n" +
-        "<b>VISUAL TILT (Aesthetic Response)</b>\n" +
-        "â€¢ <b>pitchResponse / maxPitchAngle / tiltSmooth</b> â€“ Cosmetic tilt when climbing or descending.\n\n" +
-        "<b>RECOMMENDED TUNING ORDER:</b>\n" +
-        "1. Movement (thrustAccel, turnTorque, maxSpeed)\n" +
-        "2. Hover Core (hoverHeight, hoverForce, hoverDamp)\n" +
-        "3. Vertical Stability (verticalDamp, preloadBias)\n" +
-        "4. Lateral Control (driftDamp, alignStrength, driftBoostFactor)\n" +
-        "5. Ground Transition (minGroundedRatio, groundedBlendSpeed)\n" +
-        "6. Leveling (levelingStrength, angularDampFactor)\n" +
-        "7. Final Polish (linearDrag, visual tilt, airAngularDrag)\n";
-
-    public string GetOverviewText() => systemOverview;
-
-
-    // ============================================================
-    // --- Hover Settings ---
+    // --- Hover Configuration (Weighted Sedan Stable) ---
     // ============================================================
 
     [Header("Hover Settings")]
-    [Tooltip("Transforms where hover forces are applied. Place these roughly under each corner of the vehicle.")]
     public Transform[] hoverPoints;
-
-    [Tooltip("Target hover height above ground.")]
-    public float hoverHeight = 6f;
-
-    [Tooltip("Upward force used to maintain hover height.")]
-    public float hoverForce = 5f;
-
-    [Tooltip("Damping applied to reduce vertical oscillation.")]
-    public float hoverDamp = 1.0f;
-
-    [Tooltip("Small upward bias near ground to prevent bottoming out.")]
-    public float preloadBias = 0.1f;
-
-
-    // ============================================================
-    // --- Movement ---
-    // ============================================================
+    public float hoverHeight = 1.8f;
+    public float hoverForce = 280f;
+    public float hoverDamp = 12f; // slightly higher damping
+    public float preloadBias = 0.2f;
 
     [Header("Movement Settings")]
-    [Tooltip("Forward/backward acceleration.")]
     public float thrustAccel = 100f;
-
-    [Tooltip("Yaw torque strength.")]
     public float turnTorque = 10f;
-
-    [Tooltip("Maximum forward speed before thrust stops adding velocity.")]
-    public float maxSpeed = 100f;
-
-
-    // ============================================================
-    // --- Stability & Refinement ---
-    // ============================================================
+    public float maxSpeed = 200f;
 
     [Header("Stability Settings")]
-    [Tooltip("Resistance against sideways sliding. Higher = more grip.")]
     public float driftDamp = 0.6f;
-
-    [Tooltip("Multiplier to drift damping during turns.")]
     public float driftBoostFactor = 3f;
-
-    [Tooltip("Additional damping on vertical velocity to prevent bobbing.")]
-    public float verticalDamp = 3f;
-
-    [Tooltip("Realignment speed of velocity toward facing direction.")]
+    public float verticalDamp = 7f;
     public float alignStrength = 5f;
 
-
-    // ============================================================
-    // --- Gravity Blending & Airtime ---
-    // ============================================================
-
     [Header("Air Control")]
-    [Range(0f, 1f)]
-    [Tooltip("Fraction of hover points that must detect ground to be considered 'grounded'.")]
-    public float minGroundedRatio = 0.65f;
-
-    [Tooltip("How quickly lift and gravity transition when leaving or regaining ground contact.")]
-    public float groundedBlendSpeed = 8f;
-
-    [Tooltip("Angular drag used while airborne.")]
+    [Range(0f, 1f)] public float minGroundedRatio = 0.2f;
+    public float groundedBlendSpeed = 15f;
     public float airAngularDrag = 0.05f;
 
-
-    // ============================================================
-    // --- Drag & Leveling ---
-    // ============================================================
-
     [Header("Drag & Leveling")]
-    [Tooltip("Base linear drag applied constantly.")]
     public float linearDrag = 1f;
-
-    [Tooltip("Angular drag applied when grounded.")]
     public float groundAngularDrag = 0.2f;
-
-    [Tooltip("Torque strength aligning craft 'up' to the terrain normal.")]
-    public float levelingStrength = 10f;
-
-    [Range(0f, 1f)]
-    [Tooltip("Pitch/roll damping scale. 1 = no damping.")]
-    public float angularDampFactor = 0.8f;
-
-
-    // ============================================================
-    // --- Visual Tilt ---
-    // ============================================================
+    public float levelingStrength = 5.5f;  // lowered from 6.5
+    [Range(0f, 1f)] public float angularDampFactor = 0.75f;
 
     [Header("Visual Tilt (Pitch Response)")]
-    [Tooltip("Pitch tilt strength based on vertical velocity.")]
-    public float pitchResponse = 0.5f;
-
-    [Tooltip("Maximum pitch tilt in degrees.")]
-    public float maxPitchAngle = 10f;
-
-    [Tooltip("Smooth speed of visual tilt transitions.")]
+    public float pitchResponse = 1.2f;
+    public float maxPitchAngle = 12f;
     public float tiltSmooth = 2f;
 
-
-    // ============================================================
-    // --- Center of Mass ---
-    // ============================================================
-
     [Header("Center of Mass")]
-    [Tooltip("Optional Transform for custom center of mass (low = stable, high = twitchy).")]
     public Transform centerOfMassTransform;
 
+    [Header("Airborne Drop Recovery")]
+    public float groundMemoryDuration = 0.15f;
+    [Range(0f, 1f)] public float airborneDescentGain = 0.3f;
+    public float airborneGravityBoost = 1.5f;
+    public float noContactBlendFalloff = 10f;
 
     // ============================================================
     // --- Internal State ---
@@ -170,23 +58,32 @@ public class HoverController : MonoBehaviour
     private Rigidbody rb;
     private Vector3 smoothedGroundNormal = Vector3.up;
     private float groundedBlend = 1f;
-    private bool initialized;
     private float visualPitchOffset = 0f;
+    private bool initialized;
 
+    // Hover-point smoothing
+    private float[] smoothedHeightErrors = new float[8];
+    private const float heightSmoothFactor = 0.3f;
+
+    // Drop-recovery memory
+    private float lastKnownGroundY = 0f;
+    private float groundMemoryTimer = 0f;
 
     // ============================================================
     // --- Unity Lifecycle ---
     // ============================================================
 
-    void Awake()
+    private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         rb.useGravity = false;
         rb.linearDamping = linearDrag;
         rb.angularDamping = groundAngularDrag;
 
-        if (centerOfMassTransform)
+        if (centerOfMassTransform != null)
             rb.centerOfMass = transform.InverseTransformPoint(centerOfMassTransform.position);
+        else
+            rb.centerOfMass = new Vector3(0f, -0.2f, -0.3f);
 
         if (hoverPoints != null)
             hoverPoints = hoverPoints.Where(p => p != null).ToArray();
@@ -195,10 +92,9 @@ public class HoverController : MonoBehaviour
         initialized = true;
     }
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
-        if (!initialized || hoverPoints == null || hoverPoints.Length == 0)
-            return;
+        if (!initialized || hoverPoints == null || hoverPoints.Length == 0) return;
 
         ApplyHoverForces();
         ApplyMovementForces();
@@ -206,64 +102,109 @@ public class HoverController : MonoBehaviour
         ApplyVisualTilt();
     }
 
-
     // ============================================================
     // --- Hover Physics ---
     // ============================================================
 
     private void ApplyHoverForces()
     {
+        if (smoothedHeightErrors.Length != hoverPoints.Length)
+            smoothedHeightErrors = new float[hoverPoints.Length];
+
         int contactCount = 0;
         float avgDistance = 0f;
+        float totalGroundY = 0f;
+        float avgHeightError = 0f;
         RaycastHit hit;
 
-        foreach (var point in hoverPoints)
+        for (int i = 0; i < hoverPoints.Length; i++)
         {
+            var point = hoverPoints[i];
+            if (!point) continue;
+
             if (Physics.Raycast(point.position, Vector3.down, out hit, hoverHeight * 6f))
             {
-                if (hit.distance > hoverHeight * 2.5f)
+                if (hit.distance > hoverHeight * 3.5f)
                     continue;
 
                 contactCount++;
                 avgDistance += hit.distance;
+                totalGroundY += hit.point.y;
 
+                // Smoothed height error
                 float heightError = hoverHeight - hit.distance;
-                float normalized = Mathf.Clamp01((heightError + preloadBias) / hoverHeight);
+                smoothedHeightErrors[i] = Mathf.Lerp(smoothedHeightErrors[i], heightError, heightSmoothFactor);
+                float smoothedError = smoothedHeightErrors[i];
+
+                float normalized = Mathf.Clamp01((smoothedError + preloadBias) / hoverHeight);
                 float upwardSpeed = rb.GetPointVelocity(point.position).y;
 
-                float damping = Mathf.Clamp(upwardSpeed * hoverDamp, -hoverForce * 1.5f, hoverForce * 1.5f);
-                float distFactor = Mathf.Clamp01(1f - (hit.distance / (hoverHeight * 2.5f)));
+                // --- Variable damping: stronger near zero velocity ---
+                float dampingScale = Mathf.Lerp(1.5f, 0.8f, Mathf.Clamp01(Mathf.Abs(upwardSpeed) / 5f));
+                float damping = Mathf.Clamp(upwardSpeed * hoverDamp * dampingScale, -hoverForce, hoverForce);
 
-                float liftAccel = (Mathf.Pow(normalized, 2.2f) * hoverForce * distFactor) - damping;
+                float distanceFalloff = Mathf.Clamp01(1f - (hit.distance / (hoverHeight * 3.5f)));
+
+                // --- Front-point bias ---
+                float frontBias = 1f;
+                if (i <= 1) frontBias = 0.8f;
+
+                float liftAccel = Mathf.Clamp(
+                    ((Mathf.Pow(normalized, 2.0f) * hoverForce * distanceFalloff * frontBias) - damping),
+                    -hoverForce, hoverForce);
+
                 rb.AddForceAtPosition(hit.normal * liftAccel * groundedBlend, point.position, ForceMode.Acceleration);
+                avgHeightError += heightError;
             }
         }
 
+        // Shared body-lift bias (halved intensity)
+        if (contactCount > 0)
+        {
+            avgHeightError /= contactCount;
+            rb.AddForce(Vector3.up * avgHeightError * hoverForce * 0.025f, ForceMode.Acceleration);
+        }
+
+        // --- Grounded blend with soft ramp-in ---
         float contactRatio = (float)contactCount / hoverPoints.Length;
         float rawBlend = Mathf.Clamp01((contactRatio - minGroundedRatio) / (1f - minGroundedRatio));
         float targetBlend = Mathf.Pow(rawBlend, 2f);
 
+        float blendLerpSpeed = groundedBlend < targetBlend ? groundedBlendSpeed * 0.25f : groundedBlendSpeed;
+        groundedBlend = Mathf.Lerp(groundedBlend, targetBlend, 1f - Mathf.Exp(-blendLerpSpeed * Time.fixedDeltaTime));
+
+        // --- Airborne logic ---
         if (contactCount == 0)
         {
-            groundedBlend = 0f;
-            rb.AddForce(Physics.gravity, ForceMode.Acceleration);
-            rb.AddForce(Vector3.down * 2f, ForceMode.Acceleration);
+            rb.AddForce(Physics.gravity * (1f + airborneGravityBoost * (1f - groundedBlend)), ForceMode.Acceleration);
+
+            if (groundMemoryTimer > 0f)
+            {
+                groundMemoryTimer -= Time.fixedDeltaTime;
+                float desiredY = lastKnownGroundY + hoverHeight;
+                float heightError = Mathf.Clamp(desiredY - transform.position.y, -hoverHeight * 2f, hoverHeight * 2f);
+                rb.AddForce(Vector3.up * heightError * hoverForce * airborneDescentGain, ForceMode.Acceleration);
+            }
+
             rb.angularDamping = airAngularDrag;
             return;
         }
 
-        groundedBlend = SmoothStepTowards(groundedBlend, targetBlend, groundedBlendSpeed);
+        // Contacts found
+        lastKnownGroundY = totalGroundY / contactCount;
+        groundMemoryTimer = groundMemoryDuration;
+
         rb.AddForce(Physics.gravity * (1f - groundedBlend), ForceMode.Acceleration);
         rb.angularDamping = Mathf.Lerp(airAngularDrag, groundAngularDrag, groundedBlend);
 
-        if (contactCount > 0 && groundedBlend > 0.5f)
+        // Gentle global correction
+        if (groundedBlend > 0.5f)
         {
             float avgError = hoverHeight - (avgDistance / contactCount);
             if (avgError > 0.15f)
                 rb.AddForce(Vector3.up * avgError * hoverForce * 0.1f, ForceMode.Acceleration);
         }
     }
-
 
     // ============================================================
     // --- Movement Forces ---
@@ -305,9 +246,8 @@ public class HoverController : MonoBehaviour
         }
     }
 
-
     // ============================================================
-    // --- Leveling & Visual Tilt ---
+    // --- Leveling & Tilt ---
     // ============================================================
 
     private void ApplyLevelingTorque()
@@ -315,7 +255,6 @@ public class HoverController : MonoBehaviour
         Vector3 localUp = transform.up;
         Vector3 desiredUp = smoothedGroundNormal;
         Vector3 correctionAxis = Vector3.Cross(localUp, desiredUp);
-
         rb.AddTorque(correctionAxis * levelingStrength, ForceMode.Acceleration);
 
         Vector3 localAngular = transform.InverseTransformDirection(rb.angularVelocity);
@@ -334,15 +273,13 @@ public class HoverController : MonoBehaviour
         transform.localRotation = Quaternion.Slerp(transform.localRotation, tiltRot, Time.deltaTime * tiltSmooth);
     }
 
-
     // ============================================================
     // --- Utility ---
     // ============================================================
 
     private Vector3 GetSmoothedGroundNormal()
     {
-        if (hoverPoints == null || hoverPoints.Length == 0)
-            return smoothedGroundNormal;
+        if (hoverPoints == null || hoverPoints.Length == 0) return smoothedGroundNormal;
 
         Vector3 avg = Vector3.zero;
         int hits = 0;
@@ -358,7 +295,9 @@ public class HoverController : MonoBehaviour
         }
 
         Vector3 targetNormal = hits > 0 ? (avg / hits).normalized : Vector3.up;
-        smoothedGroundNormal = Vector3.Slerp(smoothedGroundNormal, targetNormal, Time.fixedDeltaTime * 8f);
+
+        // Slower smoothing to reduce normal “whip”
+        smoothedGroundNormal = Vector3.Slerp(smoothedGroundNormal, targetNormal, Time.fixedDeltaTime * 4f);
         return smoothedGroundNormal;
     }
 
@@ -366,7 +305,6 @@ public class HoverController : MonoBehaviour
     {
         float forward = 0f;
         float turn = 0f;
-
 #if ENABLE_INPUT_SYSTEM
         if (UnityEngine.InputSystem.Keyboard.current != null)
         {
@@ -409,12 +347,6 @@ public class HoverController : MonoBehaviour
         }
     }
 
-    private float SmoothStepTowards(float current, float target, float rate)
-    {
-        return Mathf.Lerp(current, target, 1f - Mathf.Exp(-rate * Time.fixedDeltaTime));
-    }
-
-
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
@@ -428,11 +360,12 @@ public class HoverController : MonoBehaviour
         }
 
         RaycastHit hit;
-        foreach (var p in hoverPoints)
+        for (int i = 0; i < hoverPoints.Length; i++)
         {
+            var p = hoverPoints[i];
             if (!p) continue;
             bool grounded = Physics.Raycast(p.position, Vector3.down, out hit, hoverHeight * 6f);
-            Gizmos.color = grounded && hit.distance <= hoverHeight * 2.5f ? Color.green : Color.red;
+            Gizmos.color = grounded && hit.distance <= hoverHeight * 3.5f ? Color.green : Color.red;
             Gizmos.DrawLine(p.position, p.position - Vector3.up * hoverHeight);
             Vector3 contact = grounded ? hit.point : p.position - Vector3.up * hoverHeight;
             Gizmos.DrawWireSphere(contact, 0.07f);

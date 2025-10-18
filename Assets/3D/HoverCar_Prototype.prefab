@@ -83,19 +83,19 @@ MonoBehaviour:
   - {fileID: 6908107666642186709}
   - {fileID: 4878345212704071205}
   - {fileID: 5629699384281370388}
-  hoverHeight: 4
+  hoverHeight: 5
   hoverForce: 150
-  hoverDamp: 1.5
+  hoverDamp: 1
   preloadBias: 0.1
-  thrustAccel: 125
+  thrustAccel: 100
   turnTorque: 10
   maxSpeed: 200
   driftDamp: 0.6
   driftBoostFactor: 3
-  verticalDamp: 35
+  verticalDamp: 25
   alignStrength: 5
-  minGroundedRatio: 0.5
-  groundedBlendSpeed: 10
+  minGroundedRatio: 0.3
+  groundedBlendSpeed: 15
   airAngularDrag: 0.05
   linearDrag: 1
   groundAngularDrag: 0.2
@@ -105,6 +105,10 @@ MonoBehaviour:
   maxPitchAngle: 10
   tiltSmooth: 2
   centerOfMassTransform: {fileID: 2728044530725349004}
+  groundMemoryDuration: 0.2
+  airborneDescentGain: 0.6
+  airborneGravityBoost: 40
+  noContactBlendFalloff: 2
 --- !u!1 &1894106255394494861
 GameObject:
   m_ObjectHideFlags: 0
