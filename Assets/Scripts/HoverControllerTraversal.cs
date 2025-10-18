@@ -1,101 +1,156 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Traversal v1.0
-/// --------------------------------
-/// Bridges hover physics (Foundation) and motion (Propulsion).
-/// - Smooths averaged ground normals over time
-/// - Maintains grounded continuity with hysteresis
-/// - Optionally predicts upcoming slopes with a forward anticipatory ray
-/// - Exposes clean traversal data for propulsion and AI
+/// HoverController_Traversal v2.0 (Designer / Tech-Art Edition)
+/// ------------------------------------------------------------
+/// Responsible for detecting ground under hover points,
+/// calculating averaged ground normals, and providing
+/// stable slope data to the Foundation and Propulsion systems.
+///
+/// • Adds normal smoothing to reduce ramp wobble
+/// • Groups inspector fields with clear tooltips
+/// • Compatible with Foundation v3.1 and Propulsion v5.4
 /// </summary>
-[RequireComponent(typeof(HoverController_Foundation))]
+[RequireComponent(typeof(Rigidbody))]
 public class HoverController_Traversal : MonoBehaviour
 {
-    [Header("References")]
-    [Tooltip("Source Foundation providing hover state.")]
-    public HoverController_Foundation foundation;
+    // ------------------------------------------------------------
+    // 🌍 Ground Sampling
+    // ------------------------------------------------------------
+    [Header("🌍 Ground Sampling")]
+    [Tooltip("Hover point transforms used to sample the ground surface. If empty, will auto-detect children named 'HoverPoint'.")]
+    public Transform[] hoverPoints;
 
-    [Header("Normal Smoothing")]
-    [Tooltip("Blend speed for ground normal smoothing.")]
-    [Range(1f, 20f)] public float normalBlendSpeed = 8f;
+    [Tooltip("Maximum raycast distance below each hover point (should be ≥ Foundation.SensorRange).")]
+    public float rayLength = 6f;
 
-    [Tooltip("If true, start from current up vector on first contact to avoid snap.")]
-    public bool initializeFromUp = true;
+    [Tooltip("Physics layers considered valid ground surfaces.")]
+    public LayerMask groundLayers = -1;
 
-    [Header("Grounded Continuity")]
-    [Tooltip("Seconds to remain 'grounded' after last contact loss.")]
-    [Range(0f, 1f)] public float groundedHysteresis = 0.25f;
+    // ------------------------------------------------------------
+    // 🔧 Surface Smoothing
+    // ------------------------------------------------------------
+    [Header("🔧 Surface Smoothing")]
+    [Tooltip("How quickly the averaged ground normal blends toward new terrain angles. Higher = more responsive, lower = smoother.")]
+    [Range(1f, 30f)] public float normalSmoothSpeed = 10f;
 
-    [Header("Slope Anticipation")]
-    [Tooltip("If >0, samples a forward point at this multiple of hoverHeight for predictive normal blending.")]
-    [Range(0f, 2f)] public float forwardSampleDistance = 0.75f;
+    [Tooltip("How strongly ground height changes are blended over time. Helps stabilize hover height on uneven terrain.")]
+    [Range(1f, 30f)] public float heightSmoothSpeed = 10f;
 
-    [Tooltip("Weight applied to anticipatory normal blending (0–1).")]
-    [Range(0f, 1f)] public float forwardNormalWeight = 0.5f;
+    // ------------------------------------------------------------
+    // 🧭 Debug Visualization
+    // ------------------------------------------------------------
+    [Header("🧭 Debug Visualization")]
+    [Tooltip("Draws the ground-sampling rays and averaged normal in the Scene view.")]
+    public bool drawDebugRays = false;
 
-    [Header("Debug")]
-    public bool drawDebug = true;
+    // ------------------------------------------------------------
+    // Runtime Data (read-only to others)
+    // ------------------------------------------------------------
+    public bool IsGrounded { get; private set; }
+    public Vector3 GroundNormal { get; private set; } = Vector3.up;
+    public float AverageGroundHeight { get; private set; }
 
-    // --- Runtime state ---
-    private Vector3 smoothedNormal = Vector3.up;
-    private bool wasGrounded;
-    private float lastGroundTime;
+    // Private state
     private Rigidbody rb;
-
-    // --- Public read-only interface ---
-    public Vector3 GroundNormal => smoothedNormal;
-    public bool IsGrounded => wasGrounded;
+    private Vector3 targetNormal = Vector3.up;
+    private float targetHeight = 0f;
 
     void Awake()
     {
-        if (!foundation) foundation = GetComponent<HoverController_Foundation>();
         rb = GetComponent<Rigidbody>();
-        smoothedNormal = transform.up;
+
+        // Auto-detect hover points if none assigned
+        if (hoverPoints == null || hoverPoints.Length == 0)
+        {
+            var points = new System.Collections.Generic.List<Transform>();
+            foreach (Transform child in transform)
+            {
+                if (child.name.ToLower().Contains("hoverpoint"))
+                    points.Add(child);
+            }
+            hoverPoints = points.ToArray();
+            if (hoverPoints.Length == 0)
+                Debug.LogWarning("[Traversal] No hover points assigned or found. Using transform position as fallback.");
+        }
     }
 
     void FixedUpdate()
     {
-        var fState = foundation.GetState();
+        SampleGround();
+        SmoothResults();
+    }
 
-        // Predictive slope sampling (optional)
-        Vector3 predictedNormal = fState.avgNormal;
-        if (forwardSampleDistance > 0f && fState.anyContact)
+    // ------------------------------------------------------------
+    // Ground Sampling
+    // ------------------------------------------------------------
+    private void SampleGround()
+    {
+        if (hoverPoints == null || hoverPoints.Length == 0)
         {
-            Vector3 origin = rb.worldCenterOfMass + transform.forward * (foundation.hoverHeight * forwardSampleDistance);
-            if (Physics.Raycast(origin, -transform.up, out RaycastHit hit,
-                foundation.rayLength, foundation.groundMask, QueryTriggerInteraction.Ignore))
+            // fallback single ray
+            if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, rayLength, groundLayers))
             {
-                predictedNormal = Vector3.Slerp(predictedNormal, hit.normal, forwardNormalWeight);
+                targetNormal = hit.normal;
+                targetHeight = hit.distance;
+                IsGrounded = true;
+            }
+            else
+            {
+                targetNormal = Vector3.up;
+                targetHeight = rayLength;
+                IsGrounded = false;
+            }
+            return;
+        }
+
+        Vector3 normalSum = Vector3.zero;
+        float heightSum = 0f;
+        int hitCount = 0;
+
+        foreach (Transform p in hoverPoints)
+        {
+            if (Physics.Raycast(p.position, Vector3.down, out RaycastHit hit, rayLength, groundLayers))
+            {
+                normalSum += hit.normal;
+                heightSum += hit.distance;
+                hitCount++;
+
+                if (drawDebugRays)
+                    Debug.DrawLine(p.position, hit.point, Color.green);
+            }
+            else if (drawDebugRays)
+            {
+                Debug.DrawLine(p.position, p.position + Vector3.down * rayLength, Color.red);
             }
         }
 
-        // Normal smoothing
-        if (fState.anyContact)
+        if (hitCount > 0)
         {
-            if (initializeFromUp && smoothedNormal == Vector3.up)
-                smoothedNormal = predictedNormal;
-
-            smoothedNormal = Vector3.Slerp(smoothedNormal, predictedNormal, Time.fixedDeltaTime * normalBlendSpeed);
+            targetNormal = (normalSum / hitCount).normalized;
+            targetHeight = heightSum / hitCount;
+            IsGrounded = true;
         }
-
-        // Grounded continuity
-        if (fState.anyContact)
-            lastGroundTime = Time.time;
-
-        wasGrounded = fState.anyContact || (Time.time - lastGroundTime < groundedHysteresis);
+        else
+        {
+            targetNormal = Vector3.up;
+            targetHeight = rayLength;
+            IsGrounded = false;
+        }
     }
 
-#if UNITY_EDITOR
-    void OnDrawGizmosSelected()
+    // ------------------------------------------------------------
+    // Temporal Smoothing
+    // ------------------------------------------------------------
+    private void SmoothResults()
     {
-        if (!drawDebug) return;
-        if (!Application.isPlaying) return;
+        GroundNormal = Vector3.Slerp(GroundNormal, targetNormal, Time.fixedDeltaTime * normalSmoothSpeed);
+        AverageGroundHeight = Mathf.Lerp(AverageGroundHeight, targetHeight, Time.fixedDeltaTime * heightSmoothSpeed);
 
-        Gizmos.color = wasGrounded ? Color.green : Color.red;
-        Vector3 origin = rb ? rb.worldCenterOfMass : transform.position;
-        Gizmos.DrawLine(origin, origin + smoothedNormal * foundation.hoverHeight);
-        Gizmos.DrawWireSphere(origin + smoothedNormal * foundation.hoverHeight, 0.1f);
+        if (drawDebugRays)
+        {
+            Vector3 origin = transform.position;
+            Debug.DrawRay(origin, GroundNormal * 2f, Color.cyan);
+        }
     }
-#endif
 }
