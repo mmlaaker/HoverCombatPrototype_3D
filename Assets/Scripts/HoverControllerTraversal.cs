@@ -1,60 +1,67 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Traversal v2.0 (Designer / Tech-Art Edition)
+/// HoverController_Traversal v2.1 (Designer / Tech-Art Edition)
 /// ------------------------------------------------------------
-/// Responsible for detecting ground under hover points,
-/// calculating averaged ground normals, and providing
-/// stable slope data to the Foundation and Propulsion systems.
-///
-/// • Adds normal smoothing to reduce ramp wobble
-/// • Groups inspector fields with clear tooltips
-/// • Compatible with Foundation v3.1 and Propulsion v5.4
+/// Handles terrain sampling and slope blending for the hover system.
+/// Feeds averaged ground height and normals to HoverController_Foundation.
+/// 
+/// • Clean Designer/Tech-Art layout
+/// • Slope and height smoothing for stability
+/// • Auto-detects hover points in prefab hierarchy
+/// • Visual debug lines for sampling and averaged normal
 /// </summary>
-[RequireComponent(typeof(Rigidbody))]
+[DisallowMultipleComponent]
 public class HoverController_Traversal : MonoBehaviour
 {
     // ------------------------------------------------------------
     // 🌍 Ground Sampling
     // ------------------------------------------------------------
     [Header("🌍 Ground Sampling")]
-    [Tooltip("Hover point transforms used to sample the ground surface. If empty, will auto-detect children named 'HoverPoint'.")]
+    [Tooltip("Hover points used to sample terrain. If left empty, automatically detects child objects named 'HoverPoint'.")]
     public Transform[] hoverPoints;
 
-    [Tooltip("Maximum raycast distance below each hover point (should be ≥ Foundation.SensorRange).")]
-    public float rayLength = 6f;
+    [Tooltip("Maximum ray length cast downward from each hover point. Should be slightly greater than Foundation.SensorRange.")]
+    [Min(1f)] public float rayLength = 6f;
 
     [Tooltip("Physics layers considered valid ground surfaces.")]
-    public LayerMask groundLayers = -1;
+    public LayerMask groundLayers = ~0;
 
     // ------------------------------------------------------------
-    // 🔧 Surface Smoothing
+    // 🧩 Surface Smoothing
     // ------------------------------------------------------------
-    [Header("🔧 Surface Smoothing")]
-    [Tooltip("How quickly the averaged ground normal blends toward new terrain angles. Higher = more responsive, lower = smoother.")]
-    [Range(1f, 30f)] public float normalSmoothSpeed = 10f;
+    [Header("🧩 Surface Smoothing")]
+    [Tooltip("How quickly averaged ground normals adapt to changing slopes. Lower = smoother, higher = more responsive.")]
+    [Range(1f, 30f)] public float normalSmoothSpeed = 8f;
 
-    [Tooltip("How strongly ground height changes are blended over time. Helps stabilize hover height on uneven terrain.")]
-    [Range(1f, 30f)] public float heightSmoothSpeed = 10f;
+    [Tooltip("How quickly averaged ground height adapts to changes in terrain height.")]
+    [Range(1f, 30f)] public float heightSmoothSpeed = 12f;
 
     // ------------------------------------------------------------
     // 🧭 Debug Visualization
     // ------------------------------------------------------------
     [Header("🧭 Debug Visualization")]
-    [Tooltip("Draws the ground-sampling rays and averaged normal in the Scene view.")]
+    [Tooltip("Draws sampling rays and averaged ground normal in Scene view.")]
     public bool drawDebugRays = false;
 
+    [Tooltip("Color for hit rays.")]
+    public Color hitRayColor = Color.green;
+    [Tooltip("Color for miss rays.")]
+    public Color missRayColor = Color.red;
+    [Tooltip("Color for averaged normal vector.")]
+    public Color normalColor = Color.cyan;
+
     // ------------------------------------------------------------
-    // Runtime Data (read-only to others)
+    // Runtime Output (read-only to other systems)
     // ------------------------------------------------------------
     public bool IsGrounded { get; private set; }
     public Vector3 GroundNormal { get; private set; } = Vector3.up;
     public float AverageGroundHeight { get; private set; }
 
     // Private state
-    private Rigidbody rb;
     private Vector3 targetNormal = Vector3.up;
-    private float targetHeight = 0f;
+    private float targetHeight;
+    private Rigidbody rb;
 
     void Awake()
     {
@@ -64,12 +71,14 @@ public class HoverController_Traversal : MonoBehaviour
         if (hoverPoints == null || hoverPoints.Length == 0)
         {
             var points = new System.Collections.Generic.List<Transform>();
-            foreach (Transform child in transform)
+            foreach (Transform child in GetComponentsInChildren<Transform>())
             {
                 if (child.name.ToLower().Contains("hoverpoint"))
                     points.Add(child);
             }
+
             hoverPoints = points.ToArray();
+
             if (hoverPoints.Length == 0)
                 Debug.LogWarning("[Traversal] No hover points assigned or found. Using transform position as fallback.");
         }
@@ -88,18 +97,24 @@ public class HoverController_Traversal : MonoBehaviour
     {
         if (hoverPoints == null || hoverPoints.Length == 0)
         {
-            // fallback single ray
+            // fallback single ray from transform
             if (Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, rayLength, groundLayers))
             {
                 targetNormal = hit.normal;
                 targetHeight = hit.distance;
                 IsGrounded = true;
+
+                if (drawDebugRays)
+                    Debug.DrawLine(transform.position, hit.point, hitRayColor);
             }
             else
             {
                 targetNormal = Vector3.up;
                 targetHeight = rayLength;
                 IsGrounded = false;
+
+                if (drawDebugRays)
+                    Debug.DrawLine(transform.position, transform.position + Vector3.down * rayLength, missRayColor);
             }
             return;
         }
@@ -117,11 +132,11 @@ public class HoverController_Traversal : MonoBehaviour
                 hitCount++;
 
                 if (drawDebugRays)
-                    Debug.DrawLine(p.position, hit.point, Color.green);
+                    Debug.DrawLine(p.position, hit.point, hitRayColor);
             }
             else if (drawDebugRays)
             {
-                Debug.DrawLine(p.position, p.position + Vector3.down * rayLength, Color.red);
+                Debug.DrawLine(p.position, p.position + Vector3.down * rayLength, missRayColor);
             }
         }
 
@@ -148,9 +163,6 @@ public class HoverController_Traversal : MonoBehaviour
         AverageGroundHeight = Mathf.Lerp(AverageGroundHeight, targetHeight, Time.fixedDeltaTime * heightSmoothSpeed);
 
         if (drawDebugRays)
-        {
-            Vector3 origin = transform.position;
-            Debug.DrawRay(origin, GroundNormal * 2f, Color.cyan);
-        }
+            Debug.DrawRay(transform.position, GroundNormal * 2f, normalColor);
     }
 }
