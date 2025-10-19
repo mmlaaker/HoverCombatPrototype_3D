@@ -487,16 +487,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b756b19bbed4ab42bedc1a00848ca3a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Foundation
-  forceMode: 0
   hoverHeight: 3
-  liftStrength: 40000
-  liftDamping: 8000
+  liftStrength: 10000
+  liftDamping: 1000
   sensorRange: 4
-  selfLevelStrength: 0.9
+  selfLevelStrength: 0.3
+  maxStepRecovery: 0.05
   idleLiftBias: 0.015
   groundEffectRange: {x: 0.35, y: 2}
   uprightRecoverySpeed: 3
   separationVelocityLimit: 5
+  enableSlopeLiftCompensation: 1
+  slopeLiftMultiplier: 2
   angularDampingMultiplier: 5
   torqueClampPerKg: 10
   groundLayers:
@@ -517,7 +519,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHoverInput
   throttleAxis: Vertical
   turnAxis: Horizontal
-  inputSmoothing: 0.15
+  boostKey: 304
+  useNewInputSystem: 0
 --- !u!114 &327217712
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -60983,12 +60986,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Propulsion
   enginePower: 1000
-  turnAgility: 300
-  topSpeed: 40
-  boostMultiplier: 1.5
+  turnAgility: 10
+  topSpeed: 50
+  enableBoost: 1
+  boostPowerMultiplier: 2
+  boostSpeedMultiplier: 1.5
+  boostBlendSpeed: 0.5
   vehicleWeight: 1
-  accelerationResponsiveness: 2.5
-  steeringResponsiveness: 4
+  accelerationResponsiveness: 4
+  steeringResponsiveness: 5
   momentumRetention: 1
   surfaceGrip: 3
   airDragMultiplier: 0.1

@@ -1,11 +1,11 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v5.9 (Assist Scaling Edition)
-/// --------------------------------------------------------
-/// • Hybrid assist is now gated by engine power  
-/// • Optional scaling mode blends assist intensity with engine output  
-/// • Maintains all designer-friendly naming and grouping
+/// HoverController_Propulsion v6.1 (Adaptive Yaw Damping Edition)
+/// ---------------------------------------------------------------
+/// • Adds adaptive yaw damping based on speed & boost intensity
+/// • Retains smooth boost blending, hybrid assist, and weighted control
+/// • Polished inspector organization and designer tooltips
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(HoverController_Foundation))]
@@ -24,8 +24,23 @@ public class HoverController_Propulsion : MonoBehaviour
     [Tooltip("Maximum forward speed (m/s).")]
     [SerializeField] private float topSpeed = 40f;
 
-    [Tooltip("Speed boost multiplier for power-ups or temporary overdrive.")]
-    [Range(1f, 3f)] [SerializeField] private float boostMultiplier = 1.5f;
+    // ------------------------------------------------------------
+    // ⚡ Boost Settings
+    // ------------------------------------------------------------
+    [Header("⚡ Boost Settings")]
+    [Tooltip("Enable temporary thrust and top-speed increase when Boost input is active.")]
+    [SerializeField] private bool enableBoost = true;
+
+    [Tooltip("How much to multiply Engine Power while boosting.")]
+    [Range(1f, 3f)] [SerializeField] private float boostPowerMultiplier = 2f;
+
+    [Tooltip("How much to multiply Top Speed while boosting.")]
+    [Range(1f, 3f)] [SerializeField] private float boostSpeedMultiplier = 1.5f;
+
+    [Tooltip("How quickly boost power fades in/out (seconds).")]
+    [Range(0.1f, 2f)] [SerializeField] private float boostBlendSpeed = 0.5f;
+
+    private float currentBoostLerp = 1f;
 
     // ------------------------------------------------------------
     // 🕹 Handling Feel
@@ -83,7 +98,7 @@ public class HoverController_Propulsion : MonoBehaviour
     [Tooltip("Draw debug rays for velocity and thrust direction.")]
     [SerializeField] private bool drawDebugVectors = true;
 
-    [Tooltip("Show live input values in the console.")]
+    [Tooltip("Show live input values and damping logs in the console.")]
     [SerializeField] private bool debugInput = false;
 
     // ------------------------------------------------------------
@@ -135,25 +150,30 @@ public class HoverController_Propulsion : MonoBehaviour
         float throttleInput = input.ThrottleInput;
         Vector3 forwardDir = transform.forward;
 
-        // Project velocity on horizontal plane
-        Vector3 horizontalVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        // --- Boost logic ---
+        bool boosting = enableBoost && input.Boost;
+        float targetBoost = boosting ? boostPowerMultiplier : 1f;
+        currentBoostLerp = Mathf.MoveTowards(currentBoostLerp, targetBoost, Time.fixedDeltaTime / boostBlendSpeed);
 
-        // 1️⃣ Apply physics-based acceleration (true thrust)
-        if (enginePower > 0f)
+        float effectiveEnginePower = enginePower * currentBoostLerp;
+        float effectiveTopSpeed = topSpeed * (boosting ? boostSpeedMultiplier : 1f);
+
+        // --- Physics thrust ---
+        if (effectiveEnginePower > 0f)
         {
-            float accelPerSecond = enginePower / rb.mass;
+            float accelPerSecond = effectiveEnginePower / rb.mass;
             float desiredAccel = throttleInput * accelPerSecond;
             rb.AddForce(forwardDir * desiredAccel, ForceMode.Acceleration);
         }
 
-        // 2️⃣ Hybrid assist (now gated by engine power)
-        if (hybridAssist && enginePower > 0f)
+        // --- Hybrid assist ---
+        if (hybridAssist && effectiveEnginePower > 0f)
         {
             float assistFactor = scaleAssistWithEnginePower
-                ? Mathf.Clamp01(enginePower / 5000f)   // scaled
-                : 1f;                                  // binary
+                ? Mathf.Clamp01(effectiveEnginePower / 5000f)
+                : 1f;
 
-            Vector3 targetVel = forwardDir * (throttleInput * topSpeed * boostMultiplier);
+            Vector3 targetVel = forwardDir * (throttleInput * effectiveTopSpeed);
             Vector3 preserved = rb.linearVelocity * momentumRetention;
             preserved.y = rb.linearVelocity.y;
 
@@ -164,42 +184,54 @@ public class HoverController_Propulsion : MonoBehaviour
             );
         }
 
-        // 3️⃣ Clamp top speed
+        // --- Clamp top speed ---
         Vector3 horizVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-        if (horizVel.magnitude > topSpeed)
+        if (horizVel.magnitude > effectiveTopSpeed)
         {
-            horizVel = horizVel.normalized * topSpeed;
+            horizVel = horizVel.normalized * effectiveTopSpeed;
             rb.linearVelocity = new Vector3(horizVel.x, rb.linearVelocity.y, horizVel.z);
         }
 
         if (debugInput)
-            Debug.Log($"[Propulsion] Throttle={throttleInput:F2}  Speed={horizVel.magnitude:F1}");
+            Debug.Log($"[Propulsion] Boost={currentBoostLerp:F2} Power={effectiveEnginePower:F0} TopSpeed={effectiveTopSpeed:F1} Throttle={throttleInput:F2}");
 
         if (drawDebugVectors)
-            Debug.DrawRay(transform.position, rb.linearVelocity, Color.cyan);
+            Debug.DrawRay(transform.position, rb.linearVelocity, boosting ? Color.yellow : Color.cyan);
     }
 
     // ------------------------------------------------------------
-    // 🔄 Turning (with yaw damping)
+    // 🔄 Turning (with adaptive yaw damping)
     // ------------------------------------------------------------
     private void ApplyTurning()
     {
         float turnInput = input.TurnInput;
-        if (Mathf.Abs(turnInput) < 0.001f)
-            return;
 
-        float torqueScale = foundation.IsHoverGrounded ? 1f : 0.5f;
+        // --- Torque Application ---
+        if (Mathf.Abs(turnInput) > 0.001f)
+        {
+            float torqueScale = foundation.IsHoverGrounded ? 1f : 0.5f;
+            rb.AddRelativeTorque(Vector3.up * turnInput * turnAgility * torqueScale, ForceMode.Acceleration);
+        }
 
-        rb.AddRelativeTorque(
-            Vector3.up * turnInput * turnAgility * torqueScale * Time.fixedDeltaTime,
-            ForceMode.Acceleration
-        );
-
-        // 🔧 Yaw damping to stop spin buildup
+        // --- Adaptive Yaw Damping ---
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
-        localAngVel.y *= 1f / (1f + steeringResponsiveness * Time.fixedDeltaTime);
+
+        float forwardSpeed = rb.linearVelocity.magnitude;
+        float speedFactor = Mathf.InverseLerp(0f, topSpeed * 1.5f, forwardSpeed);
+        float boostFactor = Mathf.Lerp(1f, 1.5f, currentBoostLerp - 1f);
+
+        // stronger when hybrid assist is on, ensuring responsiveness
+        float assistMultiplier = hybridAssist ? 1.5f : 1f;
+        float adaptiveDamp = steeringResponsiveness * assistMultiplier * boostFactor * (0.5f + speedFactor);
+
+        // exponential damping
+        localAngVel.y = Mathf.Lerp(localAngVel.y, 0f, adaptiveDamp * Time.fixedDeltaTime);
         rb.angularVelocity = transform.TransformDirection(localAngVel);
+
+        if (debugInput)
+            Debug.Log($"[Turn Damp] yawVel={localAngVel.y:F3}, damp={adaptiveDamp:F2}, assist={assistMultiplier:F1}");
     }
+
 
     // ------------------------------------------------------------
     // 🧲 Friction & Drag
