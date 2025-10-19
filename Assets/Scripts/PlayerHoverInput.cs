@@ -1,33 +1,40 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
+/// <summary>
+/// PlayerHoverInput v2.0
+/// ----------------------
+/// Player-controlled input provider for HoverController_Propulsion.
+/// Maps Unity Input axes to ThrottleInput and TurnInput.
+/// </summary>
+[DisallowMultipleComponent]
 public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 {
-    [Header("Boost Key")]
-    public Key boostKey = Key.LeftShift;
-    [Range(0f, 1f)] public float smoothing = 0.15f;
+    [Header("🎮 Input Mapping")]
+    [Tooltip("Name of the input axis for forward/backward movement (Project Settings → Input Manager or Input System).")]
+    public string throttleAxis = "Vertical";
 
-    public float Throttle { get; private set; }
-    public float Strafe => 0f;
-    public float Turn { get; private set; }
-    public bool Boost { get; private set; }
+    [Tooltip("Name of the input axis for left/right turning.")]
+    public string turnAxis = "Horizontal";
 
-    private float throttleVelocity;
-    private float turnVelocity;
+    [Header("⚙️ Input Settings")]
+    [Tooltip("Apply smoothing to input for a more analog feel.")]
+    [Range(0f, 1f)] public float inputSmoothing = 0.15f;
+
+    private float smoothedThrottle;
+    private float smoothedTurn;
+
+    // Exposed properties for Propulsion
+    public float ThrottleInput => smoothedThrottle;
+    public float TurnInput => smoothedTurn;
 
     void Update()
     {
-        // New Input System reads via Keyboard.current
-        float rawThrottle = 0f;
-        if (Keyboard.current.wKey.isPressed) rawThrottle += 1f;
-        if (Keyboard.current.sKey.isPressed) rawThrottle -= 1f;
+        // Raw input
+        float targetThrottle = Input.GetAxisRaw(throttleAxis);
+        float targetTurn = Input.GetAxisRaw(turnAxis);
 
-        float rawTurn = 0f;
-        if (Keyboard.current.dKey.isPressed) rawTurn += 1f;
-        if (Keyboard.current.aKey.isPressed) rawTurn -= 1f;
-
-        Throttle = Mathf.SmoothDamp(Throttle, rawThrottle, ref throttleVelocity, smoothing);
-        Turn = Mathf.SmoothDamp(Turn, rawTurn, ref turnVelocity, smoothing);
-        Boost = Keyboard.current[boostKey].isPressed;
+        // Smooth interpolation for analog feel
+        smoothedThrottle = Mathf.Lerp(smoothedThrottle, targetThrottle, 1f - Mathf.Pow(1f - inputSmoothing, Time.deltaTime * 60f));
+        smoothedTurn = Mathf.Lerp(smoothedTurn, targetTurn, 1f - Mathf.Pow(1f - inputSmoothing, Time.deltaTime * 60f));
     }
 }

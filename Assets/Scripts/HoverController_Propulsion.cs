@@ -1,204 +1,217 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v5.4 (Vertical Preservation Edition)
-/// ----------------------------------------------------------------
-/// Hybrid-Assist propulsion controller for hover vehicles.
-/// • Prevents vertical damping from momentumRetention (falls naturally)
-/// • Keeps all designer-friendly groupings and tooltips
-/// • Includes grounded-aware friction with air drag control
+/// HoverController_Propulsion v5.9 (Assist Scaling Edition)
+/// --------------------------------------------------------
+/// • Hybrid assist is now gated by engine power  
+/// • Optional scaling mode blends assist intensity with engine output  
+/// • Maintains all designer-friendly naming and grouping
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(HoverController_Foundation))]
-[RequireComponent(typeof(HoverController_Traversal))]
 public class HoverController_Propulsion : MonoBehaviour
 {
-    // -----------------------------
-    //  SECTION: Engine Performance
-    // -----------------------------
-    [Header("⚙️ Engine Performance")]
-    [Tooltip("How strong the vehicle’s forward drive is. Higher = faster acceleration.")]
-    public float enginePower = 20000f;
+    // ------------------------------------------------------------
+    // 🚀 Engine Performance
+    // ------------------------------------------------------------
+    [Header("🚀 Engine Performance")]
+    [Tooltip("Primary engine power (Newtons). Controls how fast the craft accelerates.")]
+    [SerializeField] private float enginePower = 20000f;
 
-    [Tooltip("How forcefully the craft can rotate (yaw). Higher = sharper steering response.")]
-    public float turnAgility = 8000f;
+    [Tooltip("Turning agility (torque applied to yaw rotation).")]
+    [SerializeField] private float turnAgility = 8000f;
 
-    [Tooltip("How much faster the craft goes while boosting (Spacebar by default).")]
-    public float boostMultiplier = 1.5f;
+    [Tooltip("Maximum forward speed (m/s).")]
+    [SerializeField] private float topSpeed = 40f;
 
-    [Tooltip("Maximum target speed in meters per second before the assist limits acceleration.")]
-    public float topSpeed = 40f;
+    [Tooltip("Speed boost multiplier for power-ups or temporary overdrive.")]
+    [Range(1f, 3f)] [SerializeField] private float boostMultiplier = 1.5f;
 
-    // -----------------------------
-    //  SECTION: Handling Feel
-    // -----------------------------
-    [Header("🎮 Handling Feel")]
-    [Tooltip("Vehicle 'weight class'. Lower = nimble and floaty. Higher = heavy and planted.")]
-    [Range(0.5f, 2f)] public float vehicleWeight = 1f;
+    // ------------------------------------------------------------
+    // 🕹 Handling Feel
+    // ------------------------------------------------------------
+    [Header("🕹 Handling Feel")]
+    [Tooltip("Relative mass scaling used for responsiveness calculations.")]
+    [Range(0.1f, 5f)] [SerializeField] private float vehicleWeight = 1f;
 
-    [Tooltip("How quickly the craft aligns to player throttle input. Higher = snappier control.")]
-    [Range(0f, 10f)] public float accelerationResponsiveness = 2.5f;
+    [Tooltip("How quickly acceleration responds to input changes.")]
+    [Range(0.1f, 10f)] [SerializeField] private float accelerationResponsiveness = 2.5f;
 
-    [Tooltip("How quickly the craft aligns to steering input. Higher = tighter turning.")]
-    [Range(0f, 10f)] public float steeringResponsiveness = 2f;
+    [Tooltip("How quickly steering responds (also affects yaw damping).")]
+    [Range(0.1f, 10f)] [SerializeField] private float steeringResponsiveness = 2f;
 
-    [Tooltip("How much momentum is preserved each tick. 0 = snappy arcade, 1 = floaty drift. Affects horizontal motion only.")]
-    [Range(0f, 1f)] public float momentumRetention = 0.85f;
+    [Tooltip("How much velocity is preserved each frame (1 = full momentum).")]
+    [Range(0f, 1f)] [SerializeField] private float momentumRetention = 1f;
 
-    // -----------------------------
-    //  SECTION: Friction & Resistance
-    // -----------------------------
+    // ------------------------------------------------------------
+    // 🧲 Friction & Resistance
+    // ------------------------------------------------------------
     [Header("🧲 Friction & Resistance")]
-    [Tooltip("General resistance applied to motion while grounded. Higher = stickier, slower craft.")]
-    [Range(0f, 10f)] public float surfaceGrip = 3f;
+    [Tooltip("Surface grip. Higher = more traction, less side-sliding.")]
+    [Range(0f, 10f)] [SerializeField] private float surfaceGrip = 3f;
 
-    [Tooltip("How much of the surfaceGrip applies while airborne. 0 = none, 1 = full drag.")]
-    [Range(0f, 1f)] public float airDragMultiplier = 0.1f;
+    [Tooltip("Drag applied to forward motion through air.")]
+    [Range(0f, 5f)] [SerializeField] private float airDragMultiplier = 0.1f;
 
-    // -----------------------------
-    //  SECTION: Gravity Behavior
-    // -----------------------------
-    [Header("🌍 Gravity Behavior")]
-    [Tooltip("Base gravity multiplier (1 = default Unity gravity).")]
-    [Range(0.5f, 5f)] public float gravityStrength = 2.5f;
+    // ------------------------------------------------------------
+    // 🌎 Gravity Behavior
+    // ------------------------------------------------------------
+    [Header("🌎 Gravity Behavior")]
+    [Tooltip("Base gravity multiplier for hovercraft weight.")]
+    [Range(0.1f, 5f)] [SerializeField] private float gravityStrength = 2.5f;
 
-    [Tooltip("Extra downward pull when airborne. 0 = none, 1 = +100%.")]
-    [Range(0f, 2f)] public float extraAirGravity = 0.5f;
+    [Tooltip("Extra gravity applied when airborne (helps prevent floatiness).")]
+    [Range(0f, 2f)] [SerializeField] private float extraAirGravity = 0.5f;
 
-    // -----------------------------
-    //  SECTION: Input & Debug
-    // -----------------------------
-    [Header("🎛 Input & Debug")]
-    [Tooltip("Optional manual assignment for an input provider. Leave empty for autodetect.")]
-    public MonoBehaviour inputProvider;
+    // ------------------------------------------------------------
+    // 🤖 Assist & Input
+    // ------------------------------------------------------------
+    [Header("🤖 Assist & Input")]
+    [Tooltip("Enable hybrid assist (blends physics with direct velocity control).")]
+    [SerializeField] private bool hybridAssist = true;
 
-    [Tooltip("Draws visual gizmos and ground normals for debugging.")]
-    public bool drawDebugVectors = true;
+    [Tooltip("When enabled, assist strength scales proportionally with Engine Power.")]
+    [SerializeField] private bool scaleAssistWithEnginePower = true;
 
-    [Tooltip("Logs live throttle/turn/boost values for testing.")]
-    public bool debugInput = false;
+    [Tooltip("Input provider (PlayerHoverInput, AIHoverInput, etc.) implementing IHoverInputProvider.")]
+    [SerializeField] private MonoBehaviour inputProvider;
 
-    // --------------------------------------------------
-    // Runtime references
-    private Rigidbody rb;
-    private HoverController_Foundation foundation;
-    private HoverController_Traversal traversal;
+    // ------------------------------------------------------------
+    // 🧭 Debug & Diagnostics
+    // ------------------------------------------------------------
+    [Header("🧭 Debug & Diagnostics")]
+    [Tooltip("Draw debug rays for velocity and thrust direction.")]
+    [SerializeField] private bool drawDebugVectors = true;
+
+    [Tooltip("Show live input values in the console.")]
+    [SerializeField] private bool debugInput = false;
+
+    // ------------------------------------------------------------
+    // Internal references
+    // ------------------------------------------------------------
     private IHoverInputProvider input;
+    private HoverController_Foundation foundation;
+    private Rigidbody rb;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
         foundation = GetComponent<HoverController_Foundation>();
-        traversal = GetComponent<HoverController_Traversal>();
 
-        // Manual + auto hybrid detection
-        if (inputProvider is IHoverInputProvider manual)
-        {
-            input = manual;
-            Debug.Log($"[Propulsion] Input provider manually assigned: {manual.GetType().Name}");
-        }
-        else
-        {
-            input = GetComponent<IHoverInputProvider>();
-            if (input != null)
-                Debug.Log($"[Propulsion] Input provider autodetected: {input.GetType().Name}");
-            else
-                Debug.LogWarning("[Propulsion] No input provider found. Assign one implementing IHoverInputProvider.");
-        }
+        if (inputProvider != null)
+            input = inputProvider as IHoverInputProvider;
+
+        if (input == null)
+            Debug.LogWarning("[Propulsion] No valid input provider found. Vehicle will not respond to input.");
     }
 
     void FixedUpdate()
     {
-        bool grounded = foundation.IsHoverGrounded || foundation.IsCollidedGrounded;
-        ApplyGravity(grounded);
+        if (input == null) return;
 
-        if (input == null)
-            return;
+        ApplyGravity();
+        ApplyMovement();
+        ApplyTurning();
+        ApplyFriction();
+    }
+
+    // ------------------------------------------------------------
+    // 🔽 Gravity
+    // ------------------------------------------------------------
+    private void ApplyGravity()
+    {
+        Vector3 customGravity = Physics.gravity * gravityStrength;
+        rb.AddForce(customGravity, ForceMode.Acceleration);
+
+        if (!foundation.IsHoverGrounded && extraAirGravity > 0f)
+            rb.AddForce(Physics.gravity * extraAirGravity, ForceMode.Acceleration);
+    }
+
+    // ------------------------------------------------------------
+    // 🚗 Movement
+    // ------------------------------------------------------------
+    private void ApplyMovement()
+    {
+        float throttleInput = input.ThrottleInput;
+        Vector3 forwardDir = transform.forward;
+
+        // Project velocity on horizontal plane
+        Vector3 horizontalVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+
+        // 1️⃣ Apply physics-based acceleration (true thrust)
+        if (enginePower > 0f)
+        {
+            float accelPerSecond = enginePower / rb.mass;
+            float desiredAccel = throttleInput * accelPerSecond;
+            rb.AddForce(forwardDir * desiredAccel, ForceMode.Acceleration);
+        }
+
+        // 2️⃣ Hybrid assist (now gated by engine power)
+        if (hybridAssist && enginePower > 0f)
+        {
+            float assistFactor = scaleAssistWithEnginePower
+                ? Mathf.Clamp01(enginePower / 5000f)   // scaled
+                : 1f;                                  // binary
+
+            Vector3 targetVel = forwardDir * (throttleInput * topSpeed * boostMultiplier);
+            Vector3 preserved = rb.linearVelocity * momentumRetention;
+            preserved.y = rb.linearVelocity.y;
+
+            rb.linearVelocity = Vector3.Lerp(
+                preserved,
+                targetVel,
+                assistFactor * Time.fixedDeltaTime * accelerationResponsiveness / vehicleWeight
+            );
+        }
+
+        // 3️⃣ Clamp top speed
+        Vector3 horizVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+        if (horizVel.magnitude > topSpeed)
+        {
+            horizVel = horizVel.normalized * topSpeed;
+            rb.linearVelocity = new Vector3(horizVel.x, rb.linearVelocity.y, horizVel.z);
+        }
 
         if (debugInput)
-            Debug.Log($"[Input] Throttle={input.Throttle:F2}, Turn={input.Turn:F2}, Boost={input.Boost}");
+            Debug.Log($"[Propulsion] Throttle={throttleInput:F2}  Speed={horizVel.magnitude:F1}");
 
-        ApplyMovement(input.Throttle, input.Turn, input.Boost, grounded);
-        ApplyFriction(grounded);
+        if (drawDebugVectors)
+            Debug.DrawRay(transform.position, rb.linearVelocity, Color.cyan);
     }
 
-    // --------------------------------------------------
-    // Physics Core
-    // --------------------------------------------------
-
-    private void ApplyGravity(bool grounded)
+    // ------------------------------------------------------------
+    // 🔄 Turning (with yaw damping)
+    // ------------------------------------------------------------
+    private void ApplyTurning()
     {
-        // baseline gravity correction (adds only difference from default)
-        rb.AddForce(Physics.gravity * rb.mass * (gravityStrength - 1f), ForceMode.Force);
+        float turnInput = input.TurnInput;
+        if (Mathf.Abs(turnInput) < 0.001f)
+            return;
 
-        // extra gravity when airborne for more grounded feel
-        if (!grounded)
-        {
-            float extraMult = Mathf.Lerp(0.5f, 1.2f, vehicleWeight - 0.5f);
-            float delta = (gravityStrength * (1f + extraAirGravity * extraMult)) - gravityStrength;
-            rb.AddForce(Physics.gravity * rb.mass * delta, ForceMode.Acceleration);
-        }
+        float torqueScale = foundation.IsHoverGrounded ? 1f : 0.5f;
+
+        rb.AddRelativeTorque(
+            Vector3.up * turnInput * turnAgility * torqueScale * Time.fixedDeltaTime,
+            ForceMode.Acceleration
+        );
+
+        // 🔧 Yaw damping to stop spin buildup
+        Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
+        localAngVel.y *= 1f / (1f + steeringResponsiveness * Time.fixedDeltaTime);
+        rb.angularVelocity = transform.TransformDirection(localAngVel);
     }
 
-    private void ApplyMovement(float throttle, float turn, bool boost, bool grounded)
+    // ------------------------------------------------------------
+    // 🧲 Friction & Drag
+    // ------------------------------------------------------------
+    private void ApplyFriction()
     {
-        float boostMult = boost ? boostMultiplier : 1f;
+        if (!foundation.IsHoverGrounded)
+            return;
 
-        // Shape input for smoother low-end response
-        float curvedThrottle = Mathf.Sign(throttle) * Mathf.Pow(Mathf.Abs(throttle), 1.2f);
-        float curvedTurn = Mathf.Sign(turn) * Mathf.Pow(Mathf.Abs(turn), 1.1f);
-
-        // Forward direction aligned to slope
-        Vector3 forwardDir = Vector3.ProjectOnPlane(transform.forward, traversal.GroundNormal).normalized;
-
-        // Desired target velocity
-        Vector3 desiredVel = forwardDir * (curvedThrottle * topSpeed * boostMult);
-
-        // Momentum retention for horizontal components only
-        Vector3 preserved = rb.linearVelocity * momentumRetention;
-        preserved.y = rb.linearVelocity.y; // ✅ Preserve vertical speed for natural gravity/falls
-
-        desiredVel.y = preserved.y;
-        rb.linearVelocity = Vector3.Lerp(preserved, desiredVel,
-            Time.fixedDeltaTime * accelerationResponsiveness / vehicleWeight);
-
-        // Apply yaw control (rotation)
-        float targetYawRate = curvedTurn * turnAgility * Mathf.Deg2Rad * 0.001f;
-        Vector3 angVel = rb.angularVelocity;
-        angVel.y = Mathf.Lerp(angVel.y, targetYawRate,
-            Time.fixedDeltaTime * steeringResponsiveness / vehicleWeight);
-        rb.angularVelocity = angVel;
+        Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
+        localVel.x *= 1f / (1f + surfaceGrip * Time.fixedDeltaTime);
+        localVel.z *= 1f / (1f + airDragMultiplier * Time.fixedDeltaTime);
+        rb.linearVelocity = transform.TransformDirection(localVel);
     }
-
-    private void ApplyFriction(bool grounded)
-    {
-        float dragMult = grounded ? 1f : airDragMultiplier;
-
-        // Linear damping
-        rb.AddForce(-rb.linearVelocity * surfaceGrip * dragMult, ForceMode.Force);
-
-        // Rotational damping
-        rb.AddTorque(-rb.angularVelocity * surfaceGrip * 0.5f * dragMult, ForceMode.Force);
-
-        // Lateral stabilization only when grounded
-        if (grounded)
-        {
-            Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
-            localVel.x = Mathf.Lerp(localVel.x, 0f, Time.fixedDeltaTime * surfaceGrip);
-            rb.linearVelocity = transform.TransformDirection(localVel);
-        }
-    }
-
-#if UNITY_EDITOR
-    void OnDrawGizmosSelected()
-    {
-        if (!drawDebugVectors || traversal == null) return;
-        Vector3 origin = transform.position;
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawLine(origin, origin + transform.forward * 2f);
-        Gizmos.DrawSphere(origin + transform.forward * 2f, 0.05f);
-        Gizmos.color = Color.cyan;
-        Gizmos.DrawRay(origin, traversal.GroundNormal * 2f);
-    }
-#endif
 }

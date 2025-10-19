@@ -1,18 +1,18 @@
 /// <summary>
-/// Common interface for hovercraft input.
-/// Allows player and AI controllers to drive the same propulsion system.
+/// IHoverInputProvider v2.0
+/// ------------------------
+/// Standardized input interface for hover vehicle control.
+/// Used by HoverController_Propulsion to receive directional input.
 /// </summary>
 public interface IHoverInputProvider
 {
-    /// <summary>Forward/reverse input, typically W/S. Range -1 to +1.</summary>
-    float Throttle { get; }
+    /// <summary>
+    /// Forward/backward input (-1 = reverse, 0 = idle, 1 = forward)
+    /// </summary>
+    float ThrottleInput { get; }
 
-    /// <summary>Strafing input, optional (used for hover drones). Range -1 to +1.</summary>
-    float Strafe { get; }
-
-    /// <summary>Turning input, typically A/D or Left/Right. Range -1 to +1.</summary>
-    float Turn { get; }
-
-    /// <summary>Boost toggle, true while boosting.</summary>
-    bool Boost { get; }
+    /// <summary>
+    /// Left/right turning input (-1 = left, 0 = neutral, 1 = right)
+    /// </summary>
+    float TurnInput { get; }
 }
