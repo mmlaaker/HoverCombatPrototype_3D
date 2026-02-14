@@ -487,20 +487,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b756b19bbed4ab42bedc1a00848ca3a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Foundation
+  hoverPoints:
+  - {fileID: 951891659267850361}
+  - {fileID: 6908107665126405460}
+  - {fileID: 4878345212195969700}
+  - {fileID: 5629699384780032917}
+  hoverPointNamePrefix: HoverPoint_
   hoverHeight: 3
   liftStrength: 10000
   liftDamping: 1000
   sensorRange: 4
   selfLevelStrength: 0.3
-  maxStepRecovery: 0.05
-  idleLiftBias: 0.015
-  groundEffectRange: {x: 0.35, y: 2}
-  uprightRecoverySpeed: 3
-  separationVelocityLimit: 5
   enableSlopeLiftCompensation: 1
   slopeLiftMultiplier: 2
   angularDampingMultiplier: 5
-  torqueClampPerKg: 10
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -521,29 +521,6 @@ MonoBehaviour:
   turnAxis: Horizontal
   boostKey: 304
   useNewInputSystem: 0
---- !u!114 &327217712
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 607793784648688766}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 93da0857ab702764fa36485751f44073, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HoverController_Traversal
-  hoverPoints: []
-  rayLength: 5
-  groundLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  normalSmoothSpeed: 12
-  heightSmoothSpeed: 15
-  drawDebugRays: 1
-  hitRayColor: {r: 0, g: 1, b: 0, a: 1}
-  missRayColor: {r: 1, g: 0, b: 0, a: 1}
-  normalColor: {r: 0, g: 1, b: 1, a: 1}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -732,14 +709,14 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 410087039}
   m_Enabled: 1
-  serializedVersion: 11
+  serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_Intensity: 2
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
-  m_CookieSize: 10
+  m_CookieSize2D: {x: 10, y: 10}
   m_Shadows:
     m_Type: 2
     m_Resolution: -1
@@ -1109,6 +1086,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &464729750
 MonoBehaviour:
@@ -5376,6 +5354,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &1160673178
 MonoBehaviour:
@@ -6087,6 +6066,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &1508991350
 MonoBehaviour:
@@ -8397,6 +8377,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &1618751888
 MonoBehaviour:
@@ -8752,6 +8733,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &1705116799
 MonoBehaviour:
@@ -59440,6 +59422,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &1918509550
 MonoBehaviour:
@@ -59758,6 +59741,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!114 &1990755738
 MonoBehaviour:
@@ -60078,7 +60062,6 @@ GameObject:
   - component: {fileID: 4199427420099158995}
   - component: {fileID: 327217703}
   - component: {fileID: 8392167502029534926}
-  - component: {fileID: 327217712}
   - component: {fileID: 327217710}
   m_Layer: 0
   m_Name: HoverCar_Prototype
@@ -60188,6 +60171,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!23 &2330652264789658818
 MeshRenderer:
@@ -60236,6 +60220,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!4 &2613265333083584176
 Transform:
@@ -60251,21 +60236,6 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 4701752765982220954}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!4 &2728044532566057485
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7779293683496635424}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.2, z: -0.3}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 8392167502029534925}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &2893126278493732497
 Transform:
@@ -60329,6 +60299,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!1 &3420770237920356750
 GameObject:
@@ -60395,6 +60366,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &3615539269259400243
 MeshFilter:
@@ -60451,6 +60423,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!64 &3634610068463281302
 MeshCollider:
@@ -60547,6 +60520,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!54 &4199427420099158995
 Rigidbody:
@@ -60864,22 +60838,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4495491559239615841}
   m_Mesh: {fileID: 4493585093827132993, guid: 6e698f7facb293040b8c86402c08740c, type: 3}
---- !u!1 &7779293683496635424
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2728044532566057485}
-  m_Layer: 0
-  m_Name: CenterofMass
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
 --- !u!1 &7821973394641195305
 GameObject:
   m_ObjectHideFlags: 0
@@ -60943,6 +60901,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &8030774103533791905
 MeshFilter:
@@ -60970,7 +60929,6 @@ Transform:
   - {fileID: 6908107665126405460}
   - {fileID: 4878345212195969700}
   - {fileID: 5629699384780032917}
-  - {fileID: 2728044532566057485}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &8392167502029534926
@@ -61067,6 +61025,7 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!4 &9039014084408272896
 Transform:

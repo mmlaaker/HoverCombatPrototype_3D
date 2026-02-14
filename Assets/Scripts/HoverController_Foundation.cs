@@ -4,6 +4,16 @@ using UnityEngine;
 public class HoverController_Foundation : MonoBehaviour
 {
     // ------------------------------------------------------------
+    // 🧩 Hover Points
+    // ------------------------------------------------------------
+    [Header("🧩 Hover Points")]
+    [Tooltip("Only these transforms are used as hover ray origins (e.g., HoverPoint_FL/FR/RL/RR).")]
+    [SerializeField] private Transform[] hoverPoints;
+
+    [Tooltip("Auto-fills Hover Points from children whose name starts with this prefix.")]
+    [SerializeField] private string hoverPointNamePrefix = "HoverPoint_";
+
+    // ------------------------------------------------------------
     // 🚀 Hover Lift Settings
     // ------------------------------------------------------------
     [Header("🚀 Hover Lift Settings")]
@@ -23,25 +33,6 @@ public class HoverController_Foundation : MonoBehaviour
     [Range(0f, 1f)] [SerializeField] private float selfLevelStrength = 0.5f;
 
     // ------------------------------------------------------------
-    // 🧲 Stability & Recovery
-    // ------------------------------------------------------------
-    [Header("🧲 Stability & Recovery")]
-    [Tooltip("Maximum step offset the hover can recover from before resetting.")]
-    [SerializeField] private float maxStepRecovery = 0.05f;
-
-    [Tooltip("Baseline lift applied even when not grounded (keeps craft from sinking).")]
-    [SerializeField] private float idleLiftBias = 0.015f;
-
-    [Tooltip("Min/Max ground effect multiplier range for extra stability near surfaces.")]
-    [SerializeField] private Vector2 groundEffectRange = new Vector2(0.35f, 2f);
-
-    [Tooltip("How quickly the hovercraft realigns upright after tilting.")]
-    [SerializeField] private float uprightRecoverySpeed = 3f;
-
-    [Tooltip("Maximum velocity at which separation recovery still applies.")]
-    [SerializeField] private float separationVelocityLimit = 5f;
-
-    // ------------------------------------------------------------
     // 🧮 Slope Lift Compensation
     // ------------------------------------------------------------
     [Header("🧮 Slope Lift Compensation")]
@@ -52,14 +43,11 @@ public class HoverController_Foundation : MonoBehaviour
     [Range(1f, 2f)] [SerializeField] private float slopeLiftMultiplier = 1.3f;
 
     // ------------------------------------------------------------
-    // ⚙️ Torque Damping & Limits
+    // ⚙️ Angular Damping
     // ------------------------------------------------------------
-    [Header("⚙️ Torque Damping & Limits")]
+    [Header("⚙️ Angular Damping")]
     [Tooltip("Damps pitch and roll oscillation without affecting yaw turning.")]
     [Range(0f, 10f)] [SerializeField] private float angularDampingMultiplier = 5f;
-
-    [Tooltip("Clamp torque magnitude applied per kg of mass (helps avoid flipping).")]
-    [SerializeField] private float torqueClampPerKg = 10f;
 
     // ------------------------------------------------------------
     // 🌍 Ground Interaction
@@ -68,69 +56,93 @@ public class HoverController_Foundation : MonoBehaviour
     [Tooltip("Layers considered as ground for hover detection.")]
     [SerializeField] private LayerMask groundLayers = ~0;
 
-    [Tooltip("Draws debug rays and normals in scene view.")]
+    [Tooltip("Draws debug rays in the scene view.")]
     [SerializeField] private bool drawDebugRays = true;
 
     // ------------------------------------------------------------
     // Runtime fields
     // ------------------------------------------------------------
     private Rigidbody rb;
-    private Transform[] hoverPoints;
     public bool IsHoverGrounded { get; private set; }
     private Vector3 avgNormal;
-    private float lastHitDistance;
 
-    void Awake()
+    private void Awake()
     {
         rb = GetComponent<Rigidbody>();
 
-        // Auto-collect hover points from children tagged "HoverPoint" or similar.
-        hoverPoints = GetComponentsInChildren<Transform>();
-        if (hoverPoints == null || hoverPoints.Length <= 1)
-            Debug.LogWarning("[Foundation] No hover points found — defaulting to object transform.");
+        if (hoverPoints == null || hoverPoints.Length == 0)
+        {
+            Debug.LogWarning(
+                $"[Foundation] No hoverPoints assigned on '{name}'. " +
+                $"Assign HoverPoint transforms (e.g., HoverPoint_FL/FR/RL/RR). Hover will be disabled."
+            );
+        }
     }
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
         ApplyHoverForces();
         ApplyTorqueDamping();
     }
+
+#if UNITY_EDITOR
+    private void OnValidate()
+    {
+        // Auto-fill hover points if missing or contains nulls.
+        bool needsFill = hoverPoints == null || hoverPoints.Length == 0;
+        if (!needsFill)
+        {
+            for (int i = 0; i < hoverPoints.Length; i++)
+            {
+                if (hoverPoints[i] == null) { needsFill = true; break; }
+            }
+        }
+
+        if (!needsFill) return;
+
+        var all = GetComponentsInChildren<Transform>(true);
+        System.Collections.Generic.List<Transform> found = new System.Collections.Generic.List<Transform>();
+
+        foreach (var t in all)
+        {
+            if (t == transform) continue;
+            if (!string.IsNullOrEmpty(hoverPointNamePrefix) && t.name.StartsWith(hoverPointNamePrefix))
+                found.Add(t);
+        }
+
+        hoverPoints = found.ToArray();
+    }
+#endif
 
     // ------------------------------------------------------------
     // 🧠 Core Hover Logic
     // ------------------------------------------------------------
     private void ApplyHoverForces()
     {
-        if (hoverPoints == null || hoverPoints.Length == 0)
-        {
-            hoverPoints = new Transform[] { transform };
-        }
-
-        Vector3 totalForce = Vector3.zero;
-        avgNormal = Vector3.zero;
         IsHoverGrounded = false;
+        avgNormal = Vector3.zero;
+
+        if (hoverPoints == null || hoverPoints.Length == 0)
+            return;
 
         foreach (var point in hoverPoints)
         {
-            if (point == transform) continue;
+            if (point == null) continue;
 
             if (Physics.Raycast(point.position, -point.up, out RaycastHit hit, sensorRange, groundLayers))
             {
                 IsHoverGrounded = true;
                 avgNormal += hit.normal;
 
-                // Spring physics
                 float compression = hoverHeight - hit.distance;
                 float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), hit.normal);
 
                 float springForce = (compression * liftStrength) - (velocityAlongNormal * liftDamping);
 
-                // 🧮 Apply slope compensation
                 if (enableSlopeLiftCompensation)
                 {
                     float slopeFactor = Mathf.Clamp01(1f - hit.normal.y);
-                    float slopeBoost = Mathf.Lerp(1f, slopeLiftMultiplier, slopeFactor);
-                    springForce *= slopeBoost;
+                    springForce *= Mathf.Lerp(1f, slopeLiftMultiplier, slopeFactor);
                 }
 
                 springForce = Mathf.Max(springForce, 0f);
@@ -149,29 +161,29 @@ public class HoverController_Foundation : MonoBehaviour
         if (IsHoverGrounded && avgNormal != Vector3.zero)
         {
             avgNormal.Normalize();
-            ApplyLevelingTorque(avgNormal);
+            ApplyLeveling(avgNormal);
         }
     }
 
-    // ------------------------------------------------------------
-    // 🧍 Leveling
-    // ------------------------------------------------------------
-    private void ApplyLevelingTorque(Vector3 groundNormal)
+    private void ApplyLeveling(Vector3 groundNormal)
     {
         Quaternion currentRot = transform.rotation;
         Quaternion targetRot = Quaternion.FromToRotation(transform.up, groundNormal) * currentRot;
-        Quaternion newRot = Quaternion.Slerp(currentRot, targetRot, selfLevelStrength);
-        rb.MoveRotation(newRot);
+        rb.MoveRotation(Quaternion.Slerp(currentRot, targetRot, selfLevelStrength));
     }
 
     // ------------------------------------------------------------
-    // ⚖️ Angular Damping
+    // ⚙️ Pitch/Roll Damping
     // ------------------------------------------------------------
     private void ApplyTorqueDamping()
     {
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
-        localAngVel.x *= 1f / (1f + angularDampingMultiplier * Time.fixedDeltaTime);
-        localAngVel.z *= 1f / (1f + angularDampingMultiplier * Time.fixedDeltaTime);
+
+        // Exponential-ish damping (stable across framerates)
+        float damp = 1f / (1f + angularDampingMultiplier * Time.fixedDeltaTime);
+        localAngVel.x *= damp;
+        localAngVel.z *= damp;
+
         rb.angularVelocity = transform.TransformDirection(localAngVel);
     }
 }
