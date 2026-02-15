@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -30,7 +31,8 @@ public class HoverController_Foundation : MonoBehaviour
     [SerializeField] private float sensorRange = 5f;
 
     [Tooltip("Controls how strongly the craft aligns to the average ground normal (0–1).")]
-    [Range(0f, 1f)] [SerializeField] private float selfLevelStrength = 0.5f;
+    [Range(0f, 1f)]
+    [SerializeField] private float selfLevelStrength = 0.5f;
 
     // ------------------------------------------------------------
     // 🧮 Slope Lift Compensation
@@ -40,14 +42,16 @@ public class HoverController_Foundation : MonoBehaviour
     [SerializeField] private bool enableSlopeLiftCompensation = true;
 
     [Tooltip("Multiplier for lift boost on steep slopes (1.0 = none, 1.3 = subtle, 1.6 = strong).")]
-    [Range(1f, 2f)] [SerializeField] private float slopeLiftMultiplier = 1.3f;
+    [Range(1f, 2f)]
+    [SerializeField] private float slopeLiftMultiplier = 1.3f;
 
     // ------------------------------------------------------------
     // ⚙️ Angular Damping
     // ------------------------------------------------------------
     [Header("⚙️ Angular Damping")]
     [Tooltip("Damps pitch and roll oscillation without affecting yaw turning.")]
-    [Range(0f, 10f)] [SerializeField] private float angularDampingMultiplier = 5f;
+    [Range(0f, 10f)]
+    [SerializeField] private float angularDampingMultiplier = 5f;
 
     // ------------------------------------------------------------
     // 🌍 Ground Interaction
@@ -60,11 +64,11 @@ public class HoverController_Foundation : MonoBehaviour
     [SerializeField] private bool drawDebugRays = true;
 
     // ------------------------------------------------------------
-    // Runtime fields
+    // Runtime
     // ------------------------------------------------------------
     private Rigidbody rb;
+
     public bool IsHoverGrounded { get; private set; }
-    private Vector3 avgNormal;
 
     private void Awake()
     {
@@ -100,14 +104,18 @@ public class HoverController_Foundation : MonoBehaviour
 
         if (!needsFill) return;
 
-        var all = GetComponentsInChildren<Transform>(true);
-        System.Collections.Generic.List<Transform> found = new System.Collections.Generic.List<Transform>();
+        Transform[] all = GetComponentsInChildren<Transform>(true);
+        List<Transform> found = new List<Transform>();
 
-        foreach (var t in all)
+        foreach (Transform t in all)
         {
             if (t == transform) continue;
-            if (!string.IsNullOrEmpty(hoverPointNamePrefix) && t.name.StartsWith(hoverPointNamePrefix))
+
+            if (!string.IsNullOrEmpty(hoverPointNamePrefix) &&
+                t.name.StartsWith(hoverPointNamePrefix))
+            {
                 found.Add(t);
+            }
         }
 
         hoverPoints = found.ToArray();
@@ -120,19 +128,22 @@ public class HoverController_Foundation : MonoBehaviour
     private void ApplyHoverForces()
     {
         IsHoverGrounded = false;
-        avgNormal = Vector3.zero;
 
         if (hoverPoints == null || hoverPoints.Length == 0)
             return;
 
-        foreach (var point in hoverPoints)
+        Vector3 normalSum = Vector3.zero;
+
+        foreach (Transform point in hoverPoints)
         {
             if (point == null) continue;
 
-            if (Physics.Raycast(point.position, -point.up, out RaycastHit hit, sensorRange, groundLayers))
+            Vector3 rayDir = -point.up;
+
+            if (Physics.Raycast(point.position, rayDir, out RaycastHit hit, sensorRange, groundLayers))
             {
                 IsHoverGrounded = true;
-                avgNormal += hit.normal;
+                normalSum += hit.normal;
 
                 float compression = hoverHeight - hit.distance;
                 float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), hit.normal);
@@ -149,19 +160,22 @@ public class HoverController_Foundation : MonoBehaviour
                 rb.AddForceAtPosition(hit.normal * springForce, point.position, ForceMode.Force);
 
                 if (drawDebugRays)
-                    Debug.DrawRay(point.position, -point.up * hit.distance, Color.green);
+                {
+                    Debug.DrawRay(point.position, rayDir * hit.distance, Color.green);
+                }
             }
             else
             {
                 if (drawDebugRays)
-                    Debug.DrawRay(point.position, -point.up * sensorRange, Color.red);
+                {
+                    Debug.DrawRay(point.position, rayDir * sensorRange, Color.red);
+                }
             }
         }
 
-        if (IsHoverGrounded && avgNormal != Vector3.zero)
+        if (IsHoverGrounded && normalSum != Vector3.zero)
         {
-            avgNormal.Normalize();
-            ApplyLeveling(avgNormal);
+            ApplyLeveling(normalSum.normalized);
         }
     }
 
@@ -169,6 +183,8 @@ public class HoverController_Foundation : MonoBehaviour
     {
         Quaternion currentRot = transform.rotation;
         Quaternion targetRot = Quaternion.FromToRotation(transform.up, groundNormal) * currentRot;
+
+        // Intentionally uses MoveRotation (stabilizing / arcade-friendly leveling).
         rb.MoveRotation(Quaternion.Slerp(currentRot, targetRot, selfLevelStrength));
     }
 
@@ -179,8 +195,10 @@ public class HoverController_Foundation : MonoBehaviour
     {
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
 
-        // Exponential-ish damping (stable across framerates)
-        float damp = 1f / (1f + angularDampingMultiplier * Time.fixedDeltaTime);
+        // Exponential-ish damping (stable across framerates).
+        float dt = Time.fixedDeltaTime;
+        float damp = 1f / (1f + angularDampingMultiplier * dt);
+
         localAngVel.x *= damp;
         localAngVel.z *= damp;
 

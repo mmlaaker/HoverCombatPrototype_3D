@@ -25,10 +25,12 @@ public class HoverController_Propulsion : MonoBehaviour
     [SerializeField] private float yawAccel = 8f;
 
     [Tooltip("Yaw damping strength (higher = more resistant to spinning). Uses torque, not angular-velocity overwrite.")]
-    [Range(0f, 20f)] [SerializeField] private float yawDamping = 6f;
+    [Range(0f, 20f)]
+    [SerializeField] private float yawDamping = 6f;
 
     [Tooltip("Air control multiplier for yaw torque (0–1).")]
-    [Range(0f, 1f)] [SerializeField] private float airTurnMultiplier = 0.5f;
+    [Range(0f, 1f)]
+    [SerializeField] private float airTurnMultiplier = 0.5f;
 
     // ------------------------------------------------------------
     // ⚡ Boost
@@ -38,13 +40,16 @@ public class HoverController_Propulsion : MonoBehaviour
     [SerializeField] private bool enableBoost = true;
 
     [Tooltip("Multiplier on forward acceleration while boosting.")]
-    [Range(1f, 3f)] [SerializeField] private float boostAccelMultiplier = 1.75f;
+    [Range(1f, 3f)]
+    [SerializeField] private float boostAccelMultiplier = 1.75f;
 
     [Tooltip("Multiplier on top speed while boosting.")]
-    [Range(1f, 3f)] [SerializeField] private float boostSpeedMultiplier = 1.5f;
+    [Range(1f, 3f)]
+    [SerializeField] private float boostSpeedMultiplier = 1.5f;
 
     [Tooltip("Seconds to blend boost strength in/out.")]
-    [Min(0.01f)] [SerializeField] private float boostBlendSeconds = 0.35f;
+    [Min(0.01f)]
+    [SerializeField] private float boostBlendSeconds = 0.35f;
 
     private float boostLerp = 0f; // 0..1
 
@@ -56,36 +61,43 @@ public class HoverController_Propulsion : MonoBehaviour
     [SerializeField] private bool enableSpeedAssist = true;
 
     [Tooltip("How strongly we chase the target speed (m/s²). Acts like a proportional controller.")]
-    [Range(0f, 100f)] [SerializeField] private float speedAssistStrength = 25f;
+    [Range(0f, 100f)]
+    [SerializeField] private float speedAssistStrength = 25f;
 
     [Tooltip("Limits how much the assist can accelerate (m/s²). Prevents 'teleporty' feel.")]
-    [Range(0f, 200f)] [SerializeField] private float speedAssistMaxAccel = 60f;
+    [Range(0f, 200f)]
+    [SerializeField] private float speedAssistMaxAccel = 60f;
 
     [Tooltip("If true, speed assist is reduced in air to preserve jump/impact dynamics.")]
     [SerializeField] private bool reduceAssistInAir = true;
 
     [Tooltip("Air multiplier for speed assist.")]
-    [Range(0f, 1f)] [SerializeField] private float airAssistMultiplier = 0.35f;
+    [Range(0f, 1f)]
+    [SerializeField] private float airAssistMultiplier = 0.35f;
 
     // ------------------------------------------------------------
     // 🧲 Simple Drag (Optional)
     // ------------------------------------------------------------
     [Header("🧲 Simple Drag (Optional)")]
     [Tooltip("Sideways slip damping (m/s²). Uses forces, not velocity overwrite.")]
-    [Range(0f, 50f)] [SerializeField] private float lateralDamp = 10f;
+    [Range(0f, 50f)]
+    [SerializeField] private float lateralDamp = 10f;
 
     [Tooltip("Forward drag when no throttle (m/s²). Helps settle quickly without fighting collisions too hard.")]
-    [Range(0f, 50f)] [SerializeField] private float coastDrag = 4f;
+    [Range(0f, 50f)]
+    [SerializeField] private float coastDrag = 4f;
 
     // ------------------------------------------------------------
     // 🌎 Gravity
     // ------------------------------------------------------------
     [Header("🌎 Gravity")]
     [Tooltip("Additional gravity multiplier applied via AddForce(Acceleration). Unity gravity can remain enabled.")]
-    [Range(0f, 5f)] [SerializeField] private float extraGravityMultiplier = 0f;
+    [Range(0f, 5f)]
+    [SerializeField] private float extraGravityMultiplier = 0f;
 
     [Tooltip("Extra gravity when airborne (Acceleration). Helps prevent floatiness.")]
-    [Range(0f, 30f)] [SerializeField] private float extraAirGravity = 0f;
+    [Range(0f, 30f)]
+    [SerializeField] private float extraAirGravity = 0f;
 
     // ------------------------------------------------------------
     // 🕹 Input
@@ -95,7 +107,7 @@ public class HoverController_Propulsion : MonoBehaviour
     [SerializeField] private MonoBehaviour inputProvider;
 
     // ------------------------------------------------------------
-    // Debug
+    // 🧭 Debug
     // ------------------------------------------------------------
     [Header("🧭 Debug")]
     [SerializeField] private bool drawDebug = false;
@@ -111,7 +123,9 @@ public class HoverController_Propulsion : MonoBehaviour
 
         input = inputProvider as IHoverInputProvider;
         if (input == null)
+        {
             Debug.LogWarning("[Propulsion] No valid input provider found. Vehicle will not respond.");
+        }
     }
 
     private void FixedUpdate()
@@ -130,7 +144,10 @@ public class HoverController_Propulsion : MonoBehaviour
     {
         bool boosting = enableBoost && input.Boost;
         float target = boosting ? 1f : 0f;
-        float step = Time.fixedDeltaTime / Mathf.Max(0.01f, boostBlendSeconds);
+
+        float dt = Time.fixedDeltaTime;
+        float step = dt / Mathf.Max(0.01f, boostBlendSeconds);
+
         boostLerp = Mathf.MoveTowards(boostLerp, target, step);
     }
 
@@ -159,52 +176,48 @@ public class HoverController_Propulsion : MonoBehaviour
         rb.AddForce(transform.forward * accel, ForceMode.Acceleration);
 
         // Speed assist (physical servo toward target velocity)
-        if (enableSpeedAssist)
+        if (!enableSpeedAssist)
+            return;
+
+        float targetSpeed = throttle * EffectiveTopSpeed();
+        float currentForward = Vector3.Dot(rb.linearVelocity, transform.forward);
+
+        float error = targetSpeed - currentForward; // m/s
+        float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
+
+        if (!foundation.IsHoverGrounded && reduceAssistInAir)
+            assistAccel *= airAssistMultiplier;
+
+        rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
+
+        if (drawDebug)
         {
-            float targetSpeed = throttle * EffectiveTopSpeed();
-
-            // current forward speed component
-            float currentForward = Vector3.Dot(rb.linearVelocity, transform.forward);
-
-            float error = targetSpeed - currentForward; // m/s
-            float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
-
-            if (!foundation.IsHoverGrounded && reduceAssistInAir)
-                assistAccel *= airAssistMultiplier;
-
-            rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
-
-            if (drawDebug)
-            {
-                Debug.DrawRay(transform.position, transform.forward * assistAccel, Color.yellow);
-            }
+            Debug.DrawRay(transform.position, transform.forward * assistAccel, Color.yellow);
         }
     }
 
     // ------------------------------------------------------------
-    // Turning: yaw torque via acceleration-like control, plus torque damping (no angVel overwrite)
+    // Turning: yaw torque + torque damping (no angular-velocity overwrite)
     // ------------------------------------------------------------
     private void ApplyTurning()
     {
         float turn = Mathf.Clamp(input.TurnInput, -1f, 1f);
         float turnScale = foundation.IsHoverGrounded ? 1f : airTurnMultiplier;
 
-        // Apply yaw "angular acceleration" by applying torque proportional to desired yaw accel.
-        // Unity torque units are N·m, but we're using ForceMode.Acceleration-like tuning via InertiaTensor approximation.
-        // Practical arcade approach: torque = desiredYawAccel * rb.inertiaTensor.y (scaled).
-        float inertiaY = rb.inertiaTensorRotation * Vector3.up == Vector3.up ? rb.inertiaTensor.y : rb.inertiaTensor.y;
+        // Practical arcade approach:
+        // torque ≈ desiredYawAccel * inertiaY (so yaw accel stays similar across bodies).
+        float inertiaY = Mathf.Max(0.001f, rb.inertiaTensor.y);
         float desiredYawAccel = turn * yawAccel * turnScale;
 
-        // Using ForceMode.Acceleration for torque is not available; use ForceMode.Force and scale by inertia.
-        rb.AddRelativeTorque(Vector3.up * desiredYawAccel * Mathf.Max(0.001f, inertiaY), ForceMode.Force);
+        rb.AddRelativeTorque(Vector3.up * desiredYawAccel * inertiaY, ForceMode.Force);
 
-        // Yaw damping torque opposes current yaw angular velocity.
-        if (yawDamping > 0f)
-        {
-            Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
-            float dampingTorque = -localAngVel.y * yawDamping * Mathf.Max(0.001f, inertiaY);
-            rb.AddRelativeTorque(Vector3.up * dampingTorque, ForceMode.Force);
-        }
+        if (yawDamping <= 0f)
+            return;
+
+        Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
+        float dampingTorque = -localAngVel.y * yawDamping * inertiaY;
+
+        rb.AddRelativeTorque(Vector3.up * dampingTorque, ForceMode.Force);
     }
 
     // ------------------------------------------------------------
@@ -214,14 +227,12 @@ public class HoverController_Propulsion : MonoBehaviour
     {
         Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
 
-        // Lateral damping
         if (lateralDamp > 0f)
         {
             float lateralAccel = -localVel.x * lateralDamp;
             rb.AddForce(transform.right * lateralAccel, ForceMode.Acceleration);
         }
 
-        // Forward coasting drag when no throttle
         if (coastDrag > 0f && Mathf.Abs(input.ThrottleInput) < 0.01f)
         {
             float forwardSpeed = localVel.z;
@@ -233,15 +244,20 @@ public class HoverController_Propulsion : MonoBehaviour
     private void ApplyExtraGravity()
     {
         if (extraGravityMultiplier > 0f)
+        {
             rb.AddForce(Physics.gravity * extraGravityMultiplier, ForceMode.Acceleration);
+        }
 
         if (!foundation.IsHoverGrounded && extraAirGravity > 0f)
+        {
             rb.AddForce(Vector3.down * extraAirGravity, ForceMode.Acceleration);
+        }
     }
 
     private void ClampTopSpeed()
     {
         float max = EffectiveTopSpeed();
+
         Vector3 v = rb.linearVelocity;
         Vector3 horiz = new Vector3(v.x, 0f, v.z);
 

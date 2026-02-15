@@ -752,7 +752,7 @@ MonoBehaviour:
   lateralDamp: 4
   coastDrag: 0
   extraGravityMultiplier: 3
-  extraAirGravity: 2
+  extraAirGravity: 3
   inputProvider: {fileID: 5761321178091812356}
   drawDebug: 0
 --- !u!114 &5761321178091812356
