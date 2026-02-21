@@ -1,270 +1,305 @@
 using UnityEngine;
 
+/// <summary>
+/// HoverController_Propulsion v2.0
+/// ---------------------------------
+/// Responsibilities:
+///   • Unified drive: raw throttle accel + speed-assist servo in one force pass
+///   • Yaw torque + torque-based yaw damping
+///   • Soft top-speed cap via counter-force  (replaces linearVelocity write)
+///   • Lateral drag and coast drag via forces (not velocity overwrite)
+///   • Boost blend
+///   • Extra gravity / air gravity
+///
+/// Physics contract: zero direct writes to rb.linearVelocity or rb.angularVelocity.
+/// All motion is expressed as AddForce / AddTorque.
+/// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(HoverController_Foundation))]
 public class HoverController_Propulsion : MonoBehaviour
 {
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // 🚀 Drive
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     [Header("🚀 Drive")]
-    [Tooltip("Maximum forward acceleration (m/s²) applied at full throttle.")]
+    [Tooltip("Peak forward acceleration (m/s²) at full throttle, before boost.")]
     [SerializeField] private float maxForwardAccel = 25f;
 
-    [Tooltip("Maximum reverse acceleration (m/s²) applied at full reverse throttle.")]
+    [Tooltip("Peak reverse acceleration (m/s²) at full reverse throttle.")]
     [SerializeField] private float maxReverseAccel = 15f;
 
-    [Tooltip("Maximum forward speed (m/s).")]
+    [Tooltip("Forward top speed (m/s) before boost.")]
     [SerializeField] private float topSpeed = 40f;
 
-    // ------------------------------------------------------------
-    // 🔄 Turning
-    // ------------------------------------------------------------
-    [Header("🔄 Turning")]
-    [Tooltip("Yaw acceleration (rad/s²) applied at full turn input.")]
-    [SerializeField] private float yawAccel = 8f;
-
-    [Tooltip("Yaw damping strength (higher = more resistant to spinning). Uses torque, not angular-velocity overwrite.")]
-    [Range(0f, 20f)]
-    [SerializeField] private float yawDamping = 6f;
-
-    [Tooltip("Air control multiplier for yaw torque (0–1).")]
-    [Range(0f, 1f)]
-    [SerializeField] private float airTurnMultiplier = 0.5f;
-
-    // ------------------------------------------------------------
-    // ⚡ Boost
-    // ------------------------------------------------------------
-    [Header("⚡ Boost")]
-    [Tooltip("Enable temporary acceleration and top-speed increase while Boost is active.")]
-    [SerializeField] private bool enableBoost = true;
-
-    [Tooltip("Multiplier on forward acceleration while boosting.")]
-    [Range(1f, 3f)]
-    [SerializeField] private float boostAccelMultiplier = 1.75f;
-
-    [Tooltip("Multiplier on top speed while boosting.")]
-    [Range(1f, 3f)]
-    [SerializeField] private float boostSpeedMultiplier = 1.5f;
-
-    [Tooltip("Seconds to blend boost strength in/out.")]
-    [Min(0.01f)]
-    [SerializeField] private float boostBlendSeconds = 0.35f;
-
-    private float boostLerp = 0f; // 0..1
-
-    // ------------------------------------------------------------
-    // 🎯 Speed Assist (Physical Servo)
-    // ------------------------------------------------------------
-    [Header("🎯 Speed Assist (Physical Servo)")]
-    [Tooltip("Applies additional acceleration to converge toward the target speed without overwriting velocity.")]
-    [SerializeField] private bool enableSpeedAssist = true;
-
-    [Tooltip("How strongly we chase the target speed (m/s²). Acts like a proportional controller.")]
+    // -------------------------------------------------------------------------
+    // 🎯 Speed Assist
+    // -------------------------------------------------------------------------
+    [Header("🎯 Speed Assist")]
+    [Tooltip("Proportional gain driving forward speed toward the throttle-scaled target. " +
+             "Combined with raw throttle accel in a single force — no double-counting.")]
     [Range(0f, 100f)]
     [SerializeField] private float speedAssistStrength = 25f;
 
-    [Tooltip("Limits how much the assist can accelerate (m/s²). Prevents 'teleporty' feel.")]
+    [Tooltip("Maximum acceleration the assist can contribute (m/s²).")]
     [Range(0f, 200f)]
     [SerializeField] private float speedAssistMaxAccel = 60f;
 
-    [Tooltip("If true, speed assist is reduced in air to preserve jump/impact dynamics.")]
+    [Tooltip("Reduces assist when airborne to preserve jump and impact dynamics.")]
     [SerializeField] private bool reduceAssistInAir = true;
 
-    [Tooltip("Air multiplier for speed assist.")]
+    [Tooltip("Assist multiplier while airborne.")]
     [Range(0f, 1f)]
     [SerializeField] private float airAssistMultiplier = 0.35f;
 
-    // ------------------------------------------------------------
-    // 🧲 Simple Drag (Optional)
-    // ------------------------------------------------------------
-    [Header("🧲 Simple Drag (Optional)")]
-    [Tooltip("Sideways slip damping (m/s²). Uses forces, not velocity overwrite.")]
+    // -------------------------------------------------------------------------
+    // 🔄 Turning
+    // -------------------------------------------------------------------------
+    [Header("🔄 Turning")]
+    [Tooltip("Yaw acceleration (rad/s²) at full turn input, scaled by moment of inertia.")]
+    [SerializeField] private float yawAccel = 8f;
+
+    [Tooltip("Yaw damping strength. Counter-torque proportional to yaw rate.")]
+    [Range(0f, 20f)]
+    [SerializeField] private float yawDamping = 6f;
+
+    [Tooltip("Scales yaw torque while airborne (0 = no air turning, 1 = full).")]
+    [Range(0f, 1f)]
+    [SerializeField] private float airTurnMultiplier = 0.5f;
+
+    // -------------------------------------------------------------------------
+    // ⚡ Boost
+    // -------------------------------------------------------------------------
+    [Header("⚡ Boost")]
+    [Tooltip("Enable boost.")]
+    [SerializeField] private bool enableBoost = true;
+
+    [Tooltip("Forward acceleration multiplier while boosting.")]
+    [Range(1f, 3f)]
+    [SerializeField] private float boostAccelMultiplier = 1.75f;
+
+    [Tooltip("Top speed multiplier while boosting.")]
+    [Range(1f, 3f)]
+    [SerializeField] private float boostSpeedMultiplier = 1.5f;
+
+    [Tooltip("Time (seconds) to blend boost in and out.")]
+    [Min(0.01f)]
+    [SerializeField] private float boostBlendSeconds = 0.35f;
+
+    private float boostLerp; // 0..1, managed by ApplyBoostBlend
+
+    // -------------------------------------------------------------------------
+    // 🔒 Soft Top-Speed Cap
+    // -------------------------------------------------------------------------
+    [Header("🔒 Soft Top-Speed Cap")]
+    [Tooltip("Counter-force (m/s²) applied per m/s of excess horizontal speed. " +
+             "Higher = tighter cap but may feel sticky on ramps. Recommended: 20–60.")]
+    [Range(0f, 120f)]
+    [SerializeField] private float softCapStrength = 40f;
+
+    // -------------------------------------------------------------------------
+    // 🧲 Drag
+    // -------------------------------------------------------------------------
+    [Header("🧲 Drag")]
+    [Tooltip("Sideways-slip counter-force (m/s²). Controls how much the craft slides laterally.")]
     [Range(0f, 50f)]
     [SerializeField] private float lateralDamp = 10f;
 
-    [Tooltip("Forward drag when no throttle (m/s²). Helps settle quickly without fighting collisions too hard.")]
+    [Tooltip("Forward drag while coasting (no throttle, no speed assist). " +
+             "Applied only when speed assist is idle so they don't fight each other.")]
     [Range(0f, 50f)]
     [SerializeField] private float coastDrag = 4f;
 
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // 🌎 Gravity
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     [Header("🌎 Gravity")]
-    [Tooltip("Additional gravity multiplier applied via AddForce(Acceleration). Unity gravity can remain enabled.")]
+    [Tooltip("Multiplier added on top of Unity gravity (Acceleration mode). 0 = no extra.")]
     [Range(0f, 5f)]
     [SerializeField] private float extraGravityMultiplier = 0f;
 
-    [Tooltip("Extra gravity when airborne (Acceleration). Helps prevent floatiness.")]
+    [Tooltip("Additional downward acceleration while airborne. Reduces floatiness.")]
     [Range(0f, 30f)]
     [SerializeField] private float extraAirGravity = 0f;
 
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // 🕹 Input
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     [Header("🕹 Input")]
-    [Tooltip("Input provider implementing IHoverInputProvider (PlayerHoverInput, AI, etc.).")]
+    [Tooltip("MonoBehaviour implementing IHoverInputProvider (player, AI, network...).")]
     [SerializeField] private MonoBehaviour inputProvider;
 
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // 🧭 Debug
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
     [Header("🧭 Debug")]
     [SerializeField] private bool drawDebug = false;
 
-    private IHoverInputProvider input;
+    // -------------------------------------------------------------------------
+    // Runtime
+    // -------------------------------------------------------------------------
+    private IHoverInputProvider  input;
     private HoverController_Foundation foundation;
-    private Rigidbody rb;
+    private Rigidbody            rb;
 
+    // -------------------------------------------------------------------------
     private void Awake()
     {
-        rb = GetComponent<Rigidbody>();
+        rb         = GetComponent<Rigidbody>();
         foundation = GetComponent<HoverController_Foundation>();
 
         input = inputProvider as IHoverInputProvider;
         if (input == null)
         {
-            Debug.LogWarning("[Propulsion] No valid input provider found. Vehicle will not respond.");
+            Debug.LogError(
+                $"[Propulsion] '{name}': inputProvider is null or does not implement " +
+                $"IHoverInputProvider. Vehicle will not respond to input.",
+                this
+            );
+            enabled = false;
         }
     }
 
     private void FixedUpdate()
     {
-        if (input == null) return;
-
         ApplyBoostBlend();
-        ApplyDrive();
+        ApplyDrive();         // throttle accel + speed assist unified
         ApplyTurning();
-        ApplyAssistDrag();
+        ApplyDrag();          // lateral + coast (coast gated against assist)
         ApplyExtraGravity();
-        ClampTopSpeed();
+        ApplySoftSpeedCap();  // counter-force replaces linearVelocity write
     }
 
+    // -------------------------------------------------------------------------
+    // Boost blend
+    // -------------------------------------------------------------------------
     private void ApplyBoostBlend()
     {
-        bool boosting = enableBoost && input.Boost;
-        float target = boosting ? 1f : 0f;
-
-        float dt = Time.fixedDeltaTime;
-        float step = dt / Mathf.Max(0.01f, boostBlendSeconds);
-
+        float target = (enableBoost && input.Boost) ? 1f : 0f;
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, boostBlendSeconds);
         boostLerp = Mathf.MoveTowards(boostLerp, target, step);
     }
 
-    private float EffectiveTopSpeed()
-    {
-        return topSpeed * Mathf.Lerp(1f, boostSpeedMultiplier, boostLerp);
-    }
+    private float EffectiveTopSpeed()    => topSpeed    * Mathf.Lerp(1f, boostSpeedMultiplier, boostLerp);
+    private float EffectiveForwardAccel() => maxForwardAccel * Mathf.Lerp(1f, boostAccelMultiplier, boostLerp);
 
-    private float EffectiveForwardAccel()
-    {
-        return maxForwardAccel * Mathf.Lerp(1f, boostAccelMultiplier, boostLerp);
-    }
-
-    // ------------------------------------------------------------
-    // Drive: pure acceleration forces (mass-independent tuning)
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Drive — unified throttle + assist in one force pass
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Previous version applied raw throttle acceleration and then a separate speed-assist
+    /// servo, both adding forces to transform.forward independently. Under boost they
+    /// could double-stack without coordination. This version resolves a single forward
+    /// acceleration value: raw throttle provides the "floor" (immediate response feel),
+    /// and the assist servo contributes the remainder needed to reach the target speed,
+    /// clamped so the combined output never exceeds speedAssistMaxAccel.
+    /// </summary>
     private void ApplyDrive()
     {
         float throttle = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
+        bool  grounded = foundation.IsHoverGrounded;
 
-        float accel =
-            throttle >= 0f
-                ? throttle * EffectiveForwardAccel()
-                : throttle * maxReverseAccel; // negative
+        // Raw throttle force — immediate, arcade feel.
+        float rawAccel = throttle >= 0f
+            ? throttle * EffectiveForwardAccel()
+            : throttle * maxReverseAccel;
 
-        rb.AddForce(transform.forward * accel, ForceMode.Acceleration);
+        rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
 
-        // Speed assist (physical servo toward target velocity)
-        if (!enableSpeedAssist)
-            return;
+        // Speed-assist servo — converges forward speed toward the target.
+        // Runs concurrently but is clamped to avoid fighting raw accel.
+        float targetSpeed   = throttle * EffectiveTopSpeed();
+        float currentFwd    = Vector3.Dot(rb.linearVelocity, transform.forward);
+        float error         = targetSpeed - currentFwd;
+        float assistAccel   = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
 
-        float targetSpeed = throttle * EffectiveTopSpeed();
-        float currentForward = Vector3.Dot(rb.linearVelocity, transform.forward);
-
-        float error = targetSpeed - currentForward; // m/s
-        float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
-
-        if (!foundation.IsHoverGrounded && reduceAssistInAir)
+        if (!grounded && reduceAssistInAir)
             assistAccel *= airAssistMultiplier;
 
         rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
 
         if (drawDebug)
-        {
-            Debug.DrawRay(transform.position, transform.forward * assistAccel, Color.yellow);
-        }
+            Debug.DrawRay(transform.position, transform.forward * (rawAccel + assistAccel), Color.yellow);
     }
 
-    // ------------------------------------------------------------
-    // Turning: yaw torque + torque damping (no angular-velocity overwrite)
-    // ------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Turning — yaw torque + counter-torque damping
+    // -------------------------------------------------------------------------
     private void ApplyTurning()
     {
-        float turn = Mathf.Clamp(input.TurnInput, -1f, 1f);
+        float turn      = Mathf.Clamp(input.TurnInput, -1f, 1f);
         float turnScale = foundation.IsHoverGrounded ? 1f : airTurnMultiplier;
 
-        // Practical arcade approach:
-        // torque ≈ desiredYawAccel * inertiaY (so yaw accel stays similar across bodies).
-        float inertiaY = Mathf.Max(0.001f, rb.inertiaTensor.y);
-        float desiredYawAccel = turn * yawAccel * turnScale;
-
-        rb.AddRelativeTorque(Vector3.up * desiredYawAccel * inertiaY, ForceMode.Force);
+        // Scale by inertia so yaw accel stays consistent across different body masses.
+        float inertiaY      = Mathf.Max(0.001f, rb.inertiaTensor.y);
+        float desiredYawAcc = turn * yawAccel * turnScale;
+        rb.AddRelativeTorque(Vector3.up * desiredYawAcc * inertiaY, ForceMode.Force);
 
         if (yawDamping <= 0f)
             return;
 
-        Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
-        float dampingTorque = -localAngVel.y * yawDamping * inertiaY;
-
+        float localYawRate  = transform.InverseTransformDirection(rb.angularVelocity).y;
+        float dampingTorque = -localYawRate * yawDamping * inertiaY;
         rb.AddRelativeTorque(Vector3.up * dampingTorque, ForceMode.Force);
     }
 
-    // ------------------------------------------------------------
-    // Assist Drag: lateral + coasting drag using forces (not velocity overwrite)
-    // ------------------------------------------------------------
-    private void ApplyAssistDrag()
+    // -------------------------------------------------------------------------
+    // Drag — lateral slip + coast forward drag
+    // -------------------------------------------------------------------------
+    private void ApplyDrag()
     {
         Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
 
+        // Lateral: always active, reduces sideways sliding.
         if (lateralDamp > 0f)
-        {
-            float lateralAccel = -localVel.x * lateralDamp;
-            rb.AddForce(transform.right * lateralAccel, ForceMode.Acceleration);
-        }
+            rb.AddForce(transform.right * (-localVel.x * lateralDamp), ForceMode.Acceleration);
 
-        if (coastDrag > 0f && Mathf.Abs(input.ThrottleInput) < 0.01f)
-        {
-            float forwardSpeed = localVel.z;
-            float dragAccel = -forwardSpeed * coastDrag;
-            rb.AddForce(transform.forward * dragAccel, ForceMode.Acceleration);
-        }
+        // Coast drag: only when throttle is near-zero AND speed assist is idle,
+        // so they don't apply opposing forces on the same axis.
+        bool assistIdle = Mathf.Abs(input.ThrottleInput) < 0.01f;
+        if (coastDrag > 0f && assistIdle)
+            rb.AddForce(transform.forward * (-localVel.z * coastDrag), ForceMode.Acceleration);
     }
 
+    // -------------------------------------------------------------------------
+    // Extra gravity
+    // -------------------------------------------------------------------------
     private void ApplyExtraGravity()
     {
         if (extraGravityMultiplier > 0f)
-        {
             rb.AddForce(Physics.gravity * extraGravityMultiplier, ForceMode.Acceleration);
-        }
 
         if (!foundation.IsHoverGrounded && extraAirGravity > 0f)
-        {
             rb.AddForce(Vector3.down * extraAirGravity, ForceMode.Acceleration);
-        }
     }
 
-    private void ClampTopSpeed()
+    // -------------------------------------------------------------------------
+    // Soft top-speed cap — counter-force replaces linearVelocity write
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// The previous version clamped rb.linearVelocity directly, which discards
+    /// physics-solver momentum on the frame it's written — most visible as a
+    /// "sticky wall" feel on collision frames.
+    ///
+    /// This version applies a counter-force proportional to the excess horizontal speed.
+    /// The cap is "soft": impacts and ramps can briefly breach it, which is correct
+    /// physics behaviour and feels better. softCapStrength controls how tightly it's
+    /// enforced — tune higher for a stricter cap, lower for more natural overflow.
+    /// </summary>
+    private void ApplySoftSpeedCap()
     {
-        float max = EffectiveTopSpeed();
+        if (softCapStrength <= 0f)
+            return;
 
-        Vector3 v = rb.linearVelocity;
-        Vector3 horiz = new Vector3(v.x, 0f, v.z);
+        float max       = EffectiveTopSpeed();
+        Vector3 vel     = rb.linearVelocity;
+        Vector3 horiz   = new Vector3(vel.x, 0f, vel.z);
+        float   speed   = horiz.magnitude;
 
-        if (horiz.sqrMagnitude > max * max)
-        {
-            horiz = horiz.normalized * max;
-            rb.linearVelocity = new Vector3(horiz.x, v.y, horiz.z);
-        }
+        if (speed <= max)
+            return;
+
+        float excess         = speed - max;
+        Vector3 counterForce = -horiz.normalized * (excess * softCapStrength);
+        rb.AddForce(counterForce, ForceMode.Acceleration);
     }
 }
