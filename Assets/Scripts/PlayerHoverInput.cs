@@ -1,82 +1,83 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
-/// PlayerHoverInput v3.0 (Boost Support Edition)
-/// ---------------------------------------------
-/// • Reads throttle, turn, and boost input
-/// • Supports both legacy and new Input System
-/// • Works with IHoverInputProvider interface
+/// PlayerHoverInput v4.0
+/// ----------------------------------------
+/// Reads movement (throttle + turn) and boost via Unity's New Input System.
+/// Requires a PlayerInput component with a HoverControls InputActionAsset assigned.
+/// Expected action map: 'Hover' with actions: 'Move' (Vector2), 'Boost' (Button)
+///
+/// Supported devices (configure bindings in HoverControls asset):
+/// • Keyboard: WASD / Arrow Keys + Left Shift for boost
+/// • PS4 DualShock (Bluetooth): Left Stick + Cross button for boost
+///
+/// Setup:
+/// 1. Attach PlayerInput component to this GameObject
+/// 2. Assign HoverControls asset to PlayerInput.Actions
+/// 3. Set Default Map to 'Hover' in PlayerInput inspector
 /// </summary>
+[RequireComponent(typeof(PlayerInput))]
 public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 {
-    [Header("🕹 Input Settings")]
-    [Tooltip("Axis name for forward/reverse movement.")]
-    [SerializeField] private string throttleAxis = "Vertical";
-
-    [Tooltip("Axis name for turning (left/right).")]
-    [SerializeField] private string turnAxis = "Horizontal";
-
-    [Tooltip("Key used to activate boost (hold to boost).")]
-    [SerializeField] private KeyCode boostKey = KeyCode.LeftShift;
-
-    [Tooltip("If enabled, uses Unity's new Input System instead of legacy Input.GetAxis.")]
-    [SerializeField] private bool useNewInputSystem = false;
-
-    // Input values (read-only via interface)
+    // ── IHoverInputProvider ──────────────────────────────────────────────
+    
+    /// <summary>Forward/reverse input. Range: -1 (reverse) to +1 (forward).</summary>
     public float ThrottleInput { get; private set; }
+    
+    /// <summary>Turn input. Range: -1 (left) to +1 (right).</summary>
     public float TurnInput { get; private set; }
+    
+    /// <summary>True while boost is held.</summary>
     public bool Boost { get; private set; }
 
-#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-    // Optional new Input System bindings (if you’re using InputActions)
-    private UnityEngine.InputSystem.InputAction moveAction;
-    private UnityEngine.InputSystem.InputAction turnAction;
-    private UnityEngine.InputSystem.InputAction boostAction;
-#endif
+    // ── Serialized ───────────────────────────────────────────────────────
+    
+    [Header("Input Settings")]
+    [Tooltip("Deadzone threshold below which axis input is zeroed out.")]
+    [SerializeField, Range(0f, 0.3f)] private float deadzone = 0.05f;
 
-    void Update()
+    // ── Private ──────────────────────────────────────────────────────────
+    
+    private InputAction _moveAction;
+    private InputAction _boostAction;
+
+    // ── Unity Lifecycle ──────────────────────────────────────────────────
+
+    private void Awake()
     {
-        if (useNewInputSystem)
-        {
-#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-            // Using Unity's new Input System (InputActions)
-            if (moveAction == null)
-            {
-                // Auto-bind default actions (optional)
-                moveAction = new UnityEngine.InputSystem.InputAction("Throttle", binding: "<Gamepad>/leftStick/y");
-                turnAction = new UnityEngine.InputSystem.InputAction("Turn", binding: "<Gamepad>/leftStick/x");
-                boostAction = new UnityEngine.InputSystem.InputAction("Boost", binding: "<Keyboard>/leftShift");
-                moveAction.Enable();
-                turnAction.Enable();
-                boostAction.Enable();
-            }
+        var playerInput = GetComponent<PlayerInput>();
 
-            ThrottleInput = moveAction.ReadValue<float>();
-            TurnInput = turnAction.ReadValue<float>();
-            Boost = boostAction.ReadValue<float>() > 0.5f;
-#else
-            Debug.LogWarning("[PlayerHoverInput] New Input System not enabled in Player Settings.");
-#endif
-        }
-        else
+        if (playerInput.actions == null)
         {
-            // Using classic Input Manager (GetAxis + GetKey)
-            ThrottleInput = Input.GetAxisRaw(throttleAxis);
-            TurnInput = Input.GetAxisRaw(turnAxis);
-            Boost = Input.GetKey(boostKey);
+            Debug.LogError("[PlayerHoverInput] No InputActionAsset assigned to PlayerInput component. " +
+                           "Assign HoverControls to the PlayerInput Actions field in the Inspector.", this);
+            enabled = false;
+            return;
         }
 
-        // Optional deadzone smoothing
-        if (Mathf.Abs(ThrottleInput) < 0.05f) ThrottleInput = 0f;
-        if (Mathf.Abs(TurnInput) < 0.05f) TurnInput = 0f;
+        _moveAction  = playerInput.actions["Hover/Move"];
+        _boostAction = playerInput.actions["Hover/Boost"];
+
+        if (_moveAction == null || _boostAction == null)
+        {
+            Debug.LogError("[PlayerHoverInput] One or more actions not found in InputActionAsset. " +
+                           "Expected action map 'Hover' with actions: 'Move' (Vector2), 'Boost' (Button).", this);
+            enabled = false;
+            return;
+        }
     }
 
-    private void OnDisable()
+    private void Update()
     {
-#if ENABLE_INPUT_SYSTEM && !ENABLE_LEGACY_INPUT_MANAGER
-        moveAction?.Disable();
-        turnAction?.Disable();
-        boostAction?.Disable();
-#endif
+        var move  = _moveAction.ReadValue<Vector2>();
+        ThrottleInput = ApplyDeadzone(move.y);
+        TurnInput     = ApplyDeadzone(move.x);
+        Boost         = _boostAction.ReadValue<float>() > 0.5f;
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    private float ApplyDeadzone(float value)
+        => Mathf.Abs(value) < deadzone ? 0f : value;
 }
