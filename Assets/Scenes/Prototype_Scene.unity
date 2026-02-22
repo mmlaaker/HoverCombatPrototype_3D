@@ -5775,10 +5775,6 @@ PrefabInstance:
       propertyPath: levelingTorqueStrength
       value: 5
       objectReference: {fileID: 0}
-    - target: {fileID: 1254805148386242258, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-      propertyPath: unstickImpulseStrength
-      value: 10
-      objectReference: {fileID: 0}
     - target: {fileID: 3191944406936877070, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Camera
       value: 

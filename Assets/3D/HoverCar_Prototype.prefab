@@ -638,6 +638,7 @@ GameObject:
   - component: {fileID: 1254805148386242258}
   - component: {fileID: 4964355425596500860}
   - component: {fileID: 5761321178091812356}
+  - component: {fileID: 3191944406936877070}
   m_Layer: 0
   m_Name: HoverCar_Prototype
   m_TagString: Untagged
@@ -709,15 +710,19 @@ MonoBehaviour:
   - {fileID: 7227002333060208497}
   - {fileID: 2380519266511721574}
   - {fileID: 8468858880958529594}
-  hoverPointNamePrefix: HoverPoint_
   hoverHeight: 3
   liftStrength: 10000
   liftDamping: 1500
   sensorRange: 5
-  selfLevelStrength: 0.1
   enableSlopeLiftCompensation: 1
   slopeLiftMultiplier: 1.15
-  angularDampingMultiplier: 4
+  levelingTorqueStrength: 12
+  pitchRollDamping: 8
+  flipRecoveryAngleThreshold: 80
+  recoveryDelay: 0.5
+  flipRecoveryTorque: 28
+  unstickSpeedThreshold: 0.5
+  unstickImpulseStrength: 10
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -737,6 +742,8 @@ MonoBehaviour:
   maxForwardAccel: 25
   maxReverseAccel: 15
   topSpeed: 50
+  speedAssistStrength: 15
+  speedAssistMaxAccel: 40
   yawAccel: 10
   yawDamping: 6
   airTurnMultiplier: 0.5
@@ -744,11 +751,7 @@ MonoBehaviour:
   boostAccelMultiplier: 1.75
   boostSpeedMultiplier: 1.5
   boostBlendSeconds: 0.35
-  enableSpeedAssist: 1
-  speedAssistStrength: 15
-  speedAssistMaxAccel: 40
-  reduceAssistInAir: 1
-  airAssistMultiplier: 0.35
+  softCapStrength: 40
   lateralDamp: 4
   coastDrag: 0
   extraGravityMultiplier: 3
@@ -767,10 +770,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7fcd85c81bbfe04585dedcbaf809d71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerHoverInput
-  throttleAxis: Vertical
-  turnAxis: Horizontal
-  boostKey: 304
-  useNewInputSystem: 0
+  deadzone: 0.05
+--- !u!114 &3191944406936877070
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4246840766707924649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62899f850307741f2a39c98a8b639597, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.PlayerInput
+  m_Actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_NotificationBehavior: 0
+  m_UIInputModule: {fileID: 0}
+  m_DeviceLostEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_DeviceRegainedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ControlsChangedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ActionEvents: []
+  m_NeverAutoSwitchControlSchemes: 0
+  m_DefaultControlScheme: 
+  m_DefaultActionMap: 
+  m_SplitScreenIndex: -1
+  m_Camera: {fileID: 0}
 --- !u!1 &5663106530677821410
 GameObject:
   m_ObjectHideFlags: 0

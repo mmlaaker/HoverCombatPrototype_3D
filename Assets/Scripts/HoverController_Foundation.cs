@@ -71,19 +71,23 @@ public class HoverController_Foundation : MonoBehaviour
     [SerializeField] private float pitchRollDamping = 8f;
 
     // -------------------------------------------------------------------------
-    // 🔄 Flip Recovery
+    // 🔄 Flip Recovery + 📌 Ground Unstick  (shared timer)
     // -------------------------------------------------------------------------
-    [Header("🔄 Flip Recovery")]
-    [Tooltip("Tilt angle from upright (degrees) that triggers flip recovery. " +
+    // Both systems share a single recoveryTimer and a single recoveryDelay threshold.
+    // Righting torque and the unstick impulse fire together when the timer is reached.
+    // The torque is continuous — it keeps applying after the impulse fires — so no
+    // artificial sequencing delay is needed between the two.
+    [Header("🔄 Flip Recovery + 📌 Ground Unstick")]
+    [Tooltip("Tilt angle from upright (degrees) that activates the recovery sequence. " +
              "90° = sideways, 180° = fully inverted. Recommended: 70–100.")]
     [Range(10f, 180f)]
     [SerializeField] private float flipRecoveryAngleThreshold = 80f;
 
-    [Tooltip("Seconds past the flip threshold before recovery torque fires. " +
-             "0 = immediate. A small value (0.5–1s) gives collisions a grace window " +
-             "before recovery kicks in, which prevents twitchy response on hard impacts.")]
+    [Tooltip("Seconds of ground contact while stuck or flipped before recovery fires. " +
+             "Both righting torque and the unstick impulse trigger at this threshold simultaneously. " +
+             "Grace window prevents twitchy response on hard impacts. Recommended: 0.5–1.0.")]
     [Min(0f)]
-    [SerializeField] private float flipRecoveryDelay = 0.75f;
+    [SerializeField] private float recoveryDelay = 0.75f;
 
     [Tooltip("Proportional torque strength driving the craft back to upright. " +
              "Needs to be stronger than levelingTorqueStrength to overcome extreme angles. " +
@@ -91,28 +95,29 @@ public class HoverController_Foundation : MonoBehaviour
     [Range(0f, 80f)]
     [SerializeField] private float flipRecoveryTorque = 28f;
 
+    [Tooltip("Speed (m/s) below which unstick will fire. Guards against triggering during active movement.")]
+    [Min(0f)]
+    [SerializeField] private float unstickSpeedThreshold = 0.5f;
+
+    [Tooltip("Speed (m/s) added along the contact normal on unstick.")]
+    [Min(0f)]
+    [SerializeField] private float unstickImpulseStrength = 4f;
+
     // -------------------------------------------------------------------------
-    // -------------------------------------------------------------------------
-    // 📡 Collision Tracking (feeds HandleGroundUnstick)
+    // 📡 Collision Tracking
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Tracks whether the craft body is currently in contact with a ground-layer object.
-    /// OnCollisionStay fires every FixedUpdate while contact persists, so isContactingGround
-    /// stays current without a separate polling pass.
-    ///
-    /// Layer check: we check each contact point's other collider against groundLayers.
-    /// This matches the same mask used by the hover raycasts, so "ground" means the same
-    /// thing to both systems.
+    /// Tracks ground-layer collision contact. OnCollisionStay fires every physics step
+    /// while contact persists — isContactingGround stays live without polling.
+    /// Both flip recovery and unstick read these values; neither writes them.
     /// </summary>
     private void OnCollisionStay(Collision collision)
     {
-        // Check whether the colliding object is on a ground layer.
         if ((groundLayers.value & (1 << collision.gameObject.layer)) == 0)
             return;
 
         isContactingGround = true;
 
-        // Cache the average contact normal for potential use in the impulse direction.
         Vector3 normalSum = Vector3.zero;
         foreach (ContactPoint cp in collision.contacts)
             normalSum += cp.normal;
@@ -130,24 +135,6 @@ public class HoverController_Foundation : MonoBehaviour
         groundContactNormal = Vector3.zero;
     }
 
-    // 📌 Ground Unstick
-    // -------------------------------------------------------------------------
-    [Header("📌 Ground Unstick")]
-    [Tooltip("Speed (m/s) below which the craft is considered stationary for unstick purposes. " +
-             "Only evaluated when grounded. Recommended: 0.3–0.8.")]
-    [Min(0f)]
-    [SerializeField] private float unstickSpeedThreshold = 0.5f;
-
-    [Tooltip("Seconds the craft must remain slow and grounded before an unstick impulse fires. " +
-             "Prevents triggering on normal low-speed ground contact.")]
-    [Min(0f)]
-    [SerializeField] private float unstickDelay = 0.4f;
-
-    [Tooltip("Speed (m/s) added along the average ground normal on unstick. " +
-             "Enough to break the pin; too high feels teleporty. Recommended: 3–6.")]
-    [Min(0f)]
-    [SerializeField] private float unstickImpulseStrength = 4f;
-
 
     // -------------------------------------------------------------------------
     // 🌍 Ground Interaction
@@ -164,11 +151,11 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private Rigidbody rb;
 
-    private float flipTimer;
-    private float   unstickTimer;
-    private bool    isContactingGround;  // set by OnCollisionStay/Exit, consumed by HandleGroundUnstick
+    private float   recoveryTimer;           // shared by flip recovery and ground unstick
+    private bool    isContactingGround;      // written by OnCollisionStay/Exit
     private Vector3 groundContactNormal;
-    private float   unstickFiredFlashTimer; // drives the fired-impulse gizmo
+    private float   unstickFiredFlashTimer;  // drives the fired-impulse gizmo
+    private bool    rightingAuthorized;      // true after unstick fires; cleared when craft rights or lands
     private bool    recoveryEnabled = true;
 
     /// <summary>True when at least one hover point has a ground hit this frame.</summary>
@@ -191,8 +178,8 @@ public class HoverController_Foundation : MonoBehaviour
         recoveryEnabled = enabled;
         if (!enabled)
         {
-            flipTimer    = 0f;
-            unstickTimer = 0f;
+            recoveryTimer      = 0f;
+            rightingAuthorized = false;
         }
     }
 
@@ -236,8 +223,7 @@ public class HoverController_Foundation : MonoBehaviour
         ApplyHoverForces();
         ApplyLevelingTorque();
         ApplyPitchRollDamping();
-        HandleFlipRecovery();
-        HandleGroundUnstick();
+        HandleRecovery();
     }
 
     // -------------------------------------------------------------------------
@@ -321,106 +307,87 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // 🔄 Flip Recovery
+    // 🔄 Flip Recovery + 📌 Ground Unstick
     // -------------------------------------------------------------------------
     /// <summary>
-    /// When the craft tilts past flipRecoveryAngleThreshold for longer than
-    /// flipRecoveryDelay seconds AND is in contact with a ground-layer surface,
-    /// applies a proportional righting torque toward Vector3.up.
+    /// Two systems with independent preconditions:
     ///
-    /// Ground contact is required: an airborne inverted craft is a legitimate physics
-    /// state that should resolve on landing. Recovering mid-air would fight the
-    /// physics solver and feel wrong. isContactingGround is used rather than
-    /// IsHoverGrounded because hover rays point away from ground when inverted
-    /// and won't hit — collision contact is the only reliable grounded signal here.
+    ///   Unstick impulse  — fires once after recoveryDelay seconds of isContactingGround
+    ///                      && isSlow. Resets timer after firing. Sets rightingAuthorized
+    ///                      if the craft is flipped at the moment of impulse.
     ///
-    /// Degeneracy note: at exactly 180° tilt, Cross(transform.up, Vector3.up) is
-    /// a zero vector — no preferred righting axis exists mathematically. We break
-    /// this by nudging along transform.forward, which biases the craft to pitch
-    /// forward rather than spin unpredictably.
+    ///   Righting torque  — only runs while rightingAuthorized is true. This flag is set
+    ///                      exclusively by the unstick impulse, so torque is a direct
+    ///                      consequence of being launched — not a general airborne corrector.
+    ///                      Clears when the craft rights itself or hover springs re-engage.
+    ///
+    /// This prevents torque from firing during any unrelated airborne tumble. It only
+    /// activates when the craft was specifically launched by the unstick system.
+    ///
+    /// 180° degeneracy: Cross(transform.up, Vector3.up) is zero when perfectly inverted.
+    /// A forward pitch bias breaks the symmetry.
+    ///
+    /// Unstick uses rb.linearVelocity addition rather than AddForce — an impulse force
+    /// large enough to overcome static friction and spring compression simultaneously
+    /// would fail across multiple frames. The addition is additive, not a hard set.
     /// </summary>
-    private void HandleFlipRecovery()
-    {
-        if (!recoveryEnabled || flipRecoveryTorque <= 0f)
-            return;
-
-        float tiltAngle = Vector3.Angle(transform.up, Vector3.up);
-
-        if (tiltAngle < flipRecoveryAngleThreshold || !isContactingGround)
-        {
-            flipTimer = 0f;
-            return;
-        }
-
-        flipTimer += Time.fixedDeltaTime;
-
-        if (flipTimer < flipRecoveryDelay)
-            return;
-
-        Vector3 torqueAxis = Vector3.Cross(transform.up, Vector3.up);
-
-        // Break the 180° degeneracy with a forward pitch bias.
-        if (torqueAxis.sqrMagnitude < 0.001f)
-            torqueAxis = transform.forward * 0.1f;
-
-        rb.AddTorque(torqueAxis.normalized * flipRecoveryTorque, ForceMode.Acceleration);
-    }
-
-    // -------------------------------------------------------------------------
-    // 📌 Ground Unstick
-    // -------------------------------------------------------------------------
-    /// <summary>
-    /// Detects when the craft is grounded, nearly stationary, AND in active contact
-    /// with a ground-layer surface — indicating it's physically pinned, not just idling
-    /// at normal hover height. After unstickDelay seconds in this state, fires a
-    /// one-shot velocity addition along the contact normal (or hover normal as fallback).
-    ///
-    /// Collision is the correct discriminator here: a craft hovering correctly at target
-    /// height has no collider contact with the ground. Only a pinned craft does.
-    /// Spring compression was the previous discriminator but had false-positive edge cases
-    /// on slopes and with asymmetric hover point layouts.
-    ///
-    /// Why rb.linearVelocity here instead of AddForce:
-    /// An impulse force large enough to overcome static friction and spring compression
-    /// simultaneously would need to be enormous and often fails across multiple frames
-    /// while the spring pushes back. The velocity addition is additive (not a hard set),
-    /// preserves lateral momentum, and fires exactly once per stuck event.
-    /// </summary>
-    private void HandleGroundUnstick()
+    private void HandleRecovery()
     {
         if (!recoveryEnabled)
             return;
 
-        bool isSlow      = rb.linearVelocity.sqrMagnitude < unstickSpeedThreshold * unstickSpeedThreshold;
+        float tiltAngle = Vector3.Angle(transform.up, Vector3.up);
+        bool  isFlipped = tiltAngle >= flipRecoveryAngleThreshold;
+        bool  isSlow    = rb.linearVelocity.sqrMagnitude < unstickSpeedThreshold * unstickSpeedThreshold;
 
-        // isContactingGround is the grounded discriminator here, not IsHoverGrounded.
-        // When inverted, hover rays point away from the ground and will never hit —
-        // IsHoverGrounded will always be false in exactly the state we need to recover from.
-        // Physical collision contact is the only reliable signal when the craft is flipped.
-        // isSlow guards against firing during a valid fast landing or active movement.
-        if (!isSlow || !isContactingGround)
+        // --- Righting authorization ---
+        // rightingAuthorized is set when an unstick impulse fires.
+        // It clears when the craft is no longer flipped, or when it re-establishes
+        // hover contact (springs engaged = successfully righted and landed).
+        if (!isFlipped || IsHoverGrounded)
+            rightingAuthorized = false;
+
+        // --- Righting torque ---
+        // Only runs when explicitly authorized by a prior unstick impulse.
+        // This prevents torque from firing during any airborne tumble — it's
+        // only active as a direct consequence of the craft being launched off the ground.
+        if (rightingAuthorized && flipRecoveryTorque > 0f)
         {
-            unstickTimer = 0f;
+            Vector3 torqueAxis = Vector3.Cross(transform.up, Vector3.up);
+
+            // Break 180° degeneracy with a forward pitch bias.
+            if (torqueAxis.sqrMagnitude < 0.001f)
+                torqueAxis = transform.forward * 0.1f;
+
+            rb.AddTorque(torqueAxis.normalized * flipRecoveryTorque, ForceMode.Acceleration);
+        }
+
+        // --- Unstick impulse ---
+        // Precondition: in ground contact and slow. Timer-gated.
+        // Grace window prevents triggering on hard-but-fast landings still playing out.
+        if (!isContactingGround || !isSlow)
+        {
+            recoveryTimer = 0f;
             return;
         }
 
-        unstickTimer += Time.fixedDeltaTime;
+        recoveryTimer += Time.fixedDeltaTime;
 
-        if (unstickTimer < unstickDelay)
+        if (recoveryTimer < recoveryDelay)
             return;
 
-        // Reset before applying so the impulse fires once, not continuously.
-        unstickTimer = 0f;
+        recoveryTimer = 0f;
 
-        // Prefer the contact normal if valid; fall back to average hover normal.
-        // The contact normal points directly away from the surface pressing on us,
-        // which is the most reliable escape direction when the craft is pinned.
         Vector3 impulseDir = groundContactNormal.sqrMagnitude > 0.01f
             ? groundContactNormal
             : AverageGroundNormal;
 
         rb.linearVelocity += impulseDir * unstickImpulseStrength;
-        unstickFiredFlashTimer = 0.5f; // keep gizmo visible for half a second
+        unstickFiredFlashTimer = 0.5f;
+
+        // Authorize righting torque for the duration of this launch.
+        if (isFlipped)
+            rightingAuthorized = true;
 
         if (drawDebugRays)
             Debug.DrawRay(transform.position, impulseDir * 2f, Color.cyan);
@@ -436,7 +403,7 @@ public class HoverController_Foundation : MonoBehaviour
     ///
     ///   Hover point spheres — green: hover ray hitting ground / red: no hit
     ///   Cyan line           — groundContactNormal direction when isContactingGround
-    ///   Yellow line + label — unstickTimer progress (grows toward unstickDelay)
+    ///   Yellow line + label — recoveryTimer progress toward recoveryDelay
     ///   Magenta sphere      — fired-impulse flash, visible for 0.5s after impulse
     /// </summary>
     private void OnDrawGizmos()
@@ -467,10 +434,10 @@ public class HoverController_Foundation : MonoBehaviour
             Gizmos.DrawWireSphere(transform.position + groundContactNormal * 1.5f, 0.1f);
         }
 
-        // --- Unstick timer progress bar (line that grows toward unstickDelay) ---
-        if (isContactingGround && unstickTimer > 0f)
+        // --- Recovery timer progress bar ---
+        if (isContactingGround && recoveryTimer > 0f)
         {
-            float progress  = Mathf.Clamp01(unstickTimer / Mathf.Max(0.01f, unstickDelay));
+            float progress  = Mathf.Clamp01(recoveryTimer / Mathf.Max(0.01f, recoveryDelay));
             // Blend yellow -> orange as timer fills
             Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.4f, 0f), progress);
             Vector3 start   = transform.position + Vector3.up * 0.3f;
@@ -482,9 +449,10 @@ public class HoverController_Foundation : MonoBehaviour
 
             // Label above the craft showing timer value
             UnityEditor.Handles.color = Gizmos.color;
+            // Show which phase the shared timer is currently in
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 1.5f,
-                $"Unstick: {unstickTimer:F2} / {unstickDelay:F2}s"
+                $"Recovery {recoveryTimer:F2} / {recoveryDelay:F2}s"
             );
         }
 
