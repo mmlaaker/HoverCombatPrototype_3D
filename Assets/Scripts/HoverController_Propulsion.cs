@@ -4,7 +4,7 @@ using UnityEngine;
 /// HoverController_Propulsion v2.0
 /// ---------------------------------
 /// Responsibilities:
-///   • Unified drive: raw throttle accel + speed-assist servo in one force pass
+///   • Unified drive: grounded only — throttle + assist suppressed airborne unless boosting
 ///   • Yaw torque + torque-based yaw damping
 ///   • Soft top-speed cap via counter-force  (replaces linearVelocity write)
 ///   • Lateral drag and coast drag via forces (not velocity overwrite)
@@ -44,12 +44,6 @@ public class HoverController_Propulsion : MonoBehaviour
     [Range(0f, 200f)]
     [SerializeField] private float speedAssistMaxAccel = 60f;
 
-    [Tooltip("Reduces assist when airborne to preserve jump and impact dynamics.")]
-    [SerializeField] private bool reduceAssistInAir = true;
-
-    [Tooltip("Assist multiplier while airborne.")]
-    [Range(0f, 1f)]
-    [SerializeField] private float airAssistMultiplier = 0.35f;
 
     // -------------------------------------------------------------------------
     // 🔄 Turning
@@ -186,34 +180,58 @@ public class HoverController_Propulsion : MonoBehaviour
     // Drive — unified throttle + assist in one force pass
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Previous version applied raw throttle acceleration and then a separate speed-assist
-    /// servo, both adding forces to transform.forward independently. Under boost they
-    /// could double-stack without coordination. This version resolves a single forward
-    /// acceleration value: raw throttle provides the "floor" (immediate response feel),
-    /// and the assist servo contributes the remainder needed to reach the target speed,
-    /// clamped so the combined output never exceeds speedAssistMaxAccel.
+    /// Airborne drive rules:
+    ///   • Throttle accel and speed-assist servo are both suppressed when airborne.
+    ///   • Boost is the only way to gain speed in the air — boostLerp > 0 re-enables
+    ///     both the raw accel and the assist servo scaled by their boost multipliers.
+    ///   • This preserves exit velocity as a projectile feel: whatever speed you had
+    ///     when you left the ground is what you carry through the air.
+    ///
+    /// Grounded drive rules:
+    ///   • Raw throttle provides the immediate arcade response floor.
+    ///   • Speed-assist servo converges forward speed toward the target, clamped to
+    ///     avoid fighting raw accel.
     /// </summary>
     private void ApplyDrive()
     {
-        float throttle = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
         bool  grounded = foundation.IsHoverGrounded;
+        bool  boosting = boostLerp > 0f;
 
-        // Raw throttle force — immediate, arcade feel.
-        float rawAccel = throttle >= 0f
-            ? throttle * EffectiveForwardAccel()
-            : throttle * maxReverseAccel;
+        // Airborne with no boost — nothing to do. Exit velocity carries unchanged.
+        if (!grounded && !boosting)
+            return;
+
+        float throttle = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
+
+        // Raw throttle force.
+        // Airborne + boosting: boost multipliers are already baked into EffectiveForwardAccel().
+        // Reverse is suppressed in air — no reason to decelerate hard mid-flight.
+        float rawAccel = 0f;
+        if (grounded)
+        {
+            rawAccel = throttle >= 0f
+                ? throttle * EffectiveForwardAccel()
+                : throttle * maxReverseAccel;
+        }
+        else
+        {
+            // Airborne boost: only forward, scaled by boost lerp to blend in/out smoothly.
+            rawAccel = Mathf.Max(throttle, 0f) * EffectiveForwardAccel();
+        }
 
         rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
 
-        // Speed-assist servo — converges forward speed toward the target.
-        // Runs concurrently but is clamped to avoid fighting raw accel.
-        float targetSpeed   = throttle * EffectiveTopSpeed();
-        float currentFwd    = Vector3.Dot(rb.linearVelocity, transform.forward);
-        float error         = targetSpeed - currentFwd;
-        float assistAccel   = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
+        // Speed-assist servo — target is throttle * effective top speed.
+        // Airborne: only runs when boosting, giving boost its air-speed identity.
+        float targetSpeed = throttle * EffectiveTopSpeed();
+        float currentFwd  = Vector3.Dot(rb.linearVelocity, transform.forward);
+        float error       = targetSpeed - currentFwd;
+        float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
 
-        if (!grounded && reduceAssistInAir)
-            assistAccel *= airAssistMultiplier;
+        // Suppress deceleration assist in air even during boost — let the craft
+        // carry excess speed naturally rather than actively scrubbing it.
+        if (!grounded && assistAccel < 0f)
+            assistAccel = 0f;
 
         rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
 
@@ -247,14 +265,19 @@ public class HoverController_Propulsion : MonoBehaviour
     // -------------------------------------------------------------------------
     private void ApplyDrag()
     {
+        // Both lateral and coast drag are grounded-only.
+        // Airborne: the craft maintains its exit velocity as a projectile.
+        // Applying lateral drag in air would kill the natural arc feel.
+        if (!foundation.IsHoverGrounded)
+            return;
+
         Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
 
-        // Lateral: always active, reduces sideways sliding.
+        // Lateral: reduces sideways sliding while grounded.
         if (lateralDamp > 0f)
             rb.AddForce(transform.right * (-localVel.x * lateralDamp), ForceMode.Acceleration);
 
-        // Coast drag: only when throttle is near-zero AND speed assist is idle,
-        // so they don't apply opposing forces on the same axis.
+        // Coast drag: only when throttle is near-zero so it doesn't fight the servo.
         bool assistIdle = Mathf.Abs(input.ThrottleInput) < 0.01f;
         if (coastDrag > 0f && assistIdle)
             rb.AddForce(transform.forward * (-localVel.z * coastDrag), ForceMode.Acceleration);

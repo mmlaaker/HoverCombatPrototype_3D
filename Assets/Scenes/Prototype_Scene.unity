@@ -852,7 +852,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverFollowCamera
   target: {fileID: 1662246331}
-  offset: {x: 0, y: 5, z: -15}
+  offset: {x: 0, y: 7, z: -12.5}
   lookAheadDistance: 2
   lookAheadThreshold: 1
   positionSmoothTime: 0.1
@@ -863,7 +863,7 @@ MonoBehaviour:
   minPitch: -15
   maxPitch: 60
   recenterSpeed: 3
-  neutralPitch: 10
+  neutralPitch: -5
 --- !u!1 &392276825
 GameObject:
   m_ObjectHideFlags: 0
