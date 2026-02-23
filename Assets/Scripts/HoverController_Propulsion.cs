@@ -1,18 +1,22 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v2.0
-/// ---------------------------------
+/// HoverController_Propulsion v3.0 (Drift Support)
+/// -------------------------------------------------
 /// Responsibilities:
 ///   • Unified drive: grounded only — throttle + assist suppressed airborne unless boosting
 ///   • Yaw torque + torque-based yaw damping
-///   • Soft top-speed cap via counter-force  (replaces linearVelocity write)
-///   • Lateral drag and coast drag via forces (not velocity overwrite)
+///   • Soft top-speed cap via counter-force
+///   • Lateral drag via force (grounded only)
+///   • Drift state: reduces lateral damp, boosts yaw, banks mesh root visually
 ///   • Boost blend
 ///   • Extra gravity / air gravity
 ///
 /// Physics contract: zero direct writes to rb.linearVelocity or rb.angularVelocity.
 /// All motion is expressed as AddForce / AddTorque.
+///
+/// Drift state modifies two physics values (lateralDamp, yawAccel) and one
+/// visual transform (meshRoot local Z rotation). No new forces are introduced.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(HoverController_Foundation))]
@@ -43,7 +47,6 @@ public class HoverController_Propulsion : MonoBehaviour
     [Tooltip("Maximum acceleration the assist can contribute (m/s²).")]
     [Range(0f, 200f)]
     [SerializeField] private float speedAssistMaxAccel = 60f;
-
 
     // -------------------------------------------------------------------------
     // 🔄 Turning
@@ -94,14 +97,53 @@ public class HoverController_Propulsion : MonoBehaviour
     // 🧲 Drag
     // -------------------------------------------------------------------------
     [Header("🧲 Drag")]
-    [Tooltip("Sideways-slip counter-force (m/s²). Controls how much the craft slides laterally.")]
+    [Tooltip("Sideways-slip counter-force (m/s²) during normal flight. " +
+             "Controls how tightly the craft tracks its heading. " +
+             "0 = fully slippery, 10 = sticky. Your testing found 0–2 feels best.")]
     [Range(0f, 50f)]
-    [SerializeField] private float lateralDamp = 10f;
+    [SerializeField] private float lateralDamp = 2f;
 
-    [Tooltip("Forward drag while coasting (no throttle, no speed assist). " +
-             "Applied only when speed assist is idle so they don't fight each other.")]
+    // -------------------------------------------------------------------------
+    // 🌀 Drift
+    // -------------------------------------------------------------------------
+    [Header("🌀 Drift")]
+    [Tooltip("Lateral damp value while fully in drift state. " +
+             "Lower than lateralDamp — the craft slides through the turn. " +
+             "0 = fully free, your testing found this feels good.")]
     [Range(0f, 50f)]
-    [SerializeField] private float coastDrag = 4f;
+    [SerializeField] private float driftLateralDamp = 0f;
+
+    [Tooltip("Yaw acceleration multiplier while fully in drift state. " +
+             "Higher than 1 — nose rotates faster than the momentum vector, " +
+             "creating the shouldering angle. Recommended: 1.2–1.6.")]
+    [Range(1f, 3f)]
+    [SerializeField] private float driftYawMultiplier = 1.4f;
+
+    [Tooltip("Minimum absolute turn input required to engage drift. " +
+             "Prevents drift activating on gentle steering. Recommended: 0.3–0.5.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float driftTurnThreshold = 0.4f;
+
+    [Tooltip("Time (seconds) to blend drift in and out. " +
+             "Faster = snappier entry/exit. Recommended: 0.1–0.25.")]
+    [Min(0.01f)]
+    [SerializeField] private float driftBlendSeconds = 0.15f;
+
+    [Tooltip("Mesh parent object (HoverCar). Rotated on local Z for chassis bank visual. " +
+             "Assign the HoverCar object in the inspector — not the root or individual meshes.")]
+    [SerializeField] private Transform meshRoot;
+
+    [Tooltip("Maximum chassis bank angle (degrees) at full drift. " +
+             "Recommended: 15–25. Exaggerate slightly — readability matters at speed.")]
+    [Range(0f, 45f)]
+    [SerializeField] private float maxBankAngle = 20f;
+
+    [Tooltip("Speed (lerp t per second) at which the chassis bank visually catches up. " +
+             "Recommended: 6–10.")]
+    [Range(1f, 20f)]
+    [SerializeField] private float bankLerpSpeed = 8f;
+
+    private float driftLerp; // 0..1, managed by ApplyDriftBlend
 
     // -------------------------------------------------------------------------
     // 🌎 Gravity
@@ -131,9 +173,9 @@ public class HoverController_Propulsion : MonoBehaviour
     // -------------------------------------------------------------------------
     // Runtime
     // -------------------------------------------------------------------------
-    private IHoverInputProvider  input;
+    private IHoverInputProvider      input;
     private HoverController_Foundation foundation;
-    private Rigidbody            rb;
+    private Rigidbody                rb;
 
     // -------------------------------------------------------------------------
     private void Awake()
@@ -151,16 +193,31 @@ public class HoverController_Propulsion : MonoBehaviour
             );
             enabled = false;
         }
+
+        if (meshRoot == null)
+            Debug.LogWarning(
+                $"[Propulsion] '{name}': meshRoot is not assigned. Chassis bank will not display. " +
+                $"Assign the HoverCar object to the Mesh Root field in the Inspector.",
+                this
+            );
     }
 
     private void FixedUpdate()
     {
         ApplyBoostBlend();
-        ApplyDrive();         // throttle accel + speed assist unified
+        ApplyDriftBlend();
+        ApplyDrive();
         ApplyTurning();
-        ApplyDrag();          // lateral + coast (coast gated against assist)
+        ApplyDrag();
         ApplyExtraGravity();
-        ApplySoftSpeedCap();  // counter-force replaces linearVelocity write
+        ApplySoftSpeedCap();
+    }
+
+    private void Update()
+    {
+        // Chassis bank is visual only — runs in Update for smooth interpolation
+        // independent of the physics timestep.
+        ApplyChassisBank();
     }
 
     // -------------------------------------------------------------------------
@@ -173,8 +230,37 @@ public class HoverController_Propulsion : MonoBehaviour
         boostLerp = Mathf.MoveTowards(boostLerp, target, step);
     }
 
-    private float EffectiveTopSpeed()    => topSpeed    * Mathf.Lerp(1f, boostSpeedMultiplier, boostLerp);
-    private float EffectiveForwardAccel() => maxForwardAccel * Mathf.Lerp(1f, boostAccelMultiplier, boostLerp);
+    private float EffectiveTopSpeed()     => topSpeed        * Mathf.Lerp(1f, boostSpeedMultiplier,  boostLerp);
+    private float EffectiveForwardAccel() => maxForwardAccel * Mathf.Lerp(1f, boostAccelMultiplier,  boostLerp);
+
+    // -------------------------------------------------------------------------
+    // Drift blend
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Drift engages when:
+    ///   1. Drift button is held
+    ///   2. Turn input exceeds driftTurnThreshold
+    ///   3. Craft is grounded (no drift airborne — carry is already free in air)
+    ///
+    /// driftLerp drives all drift-state values: lateralDamp, yawAccel, chassis bank.
+    /// Using the same MoveTowards pattern as boostLerp for consistency.
+    /// </summary>
+    private void ApplyDriftBlend()
+    {
+        bool driftCondition = input.Drift
+                           && Mathf.Abs(input.TurnInput) >= driftTurnThreshold
+                           && foundation.IsHoverGrounded;
+
+        float target = driftCondition ? 1f : 0f;
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, driftBlendSeconds);
+        driftLerp = Mathf.MoveTowards(driftLerp, target, step);
+    }
+
+    // Effective lateral damp lerps between normal and drift value.
+    private float EffectiveLateralDamp() => Mathf.Lerp(lateralDamp, driftLateralDamp, driftLerp);
+
+    // Effective yaw multiplier lerps between 1 and driftYawMultiplier.
+    private float EffectiveYawMultiplier() => Mathf.Lerp(1f, driftYawMultiplier, driftLerp);
 
     // -------------------------------------------------------------------------
     // Drive — unified throttle + assist in one force pass
@@ -194,8 +280,8 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyDrive()
     {
-        bool  grounded = foundation.IsHoverGrounded;
-        bool  boosting = boostLerp > 0f;
+        bool grounded = foundation.IsHoverGrounded;
+        bool boosting = boostLerp > 0f;
 
         // Airborne with no boost — nothing to do. Exit velocity carries unchanged.
         if (!grounded && !boosting)
@@ -203,9 +289,6 @@ public class HoverController_Propulsion : MonoBehaviour
 
         float throttle = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
 
-        // Raw throttle force.
-        // Airborne + boosting: boost multipliers are already baked into EffectiveForwardAccel().
-        // Reverse is suppressed in air — no reason to decelerate hard mid-flight.
         float rawAccel = 0f;
         if (grounded)
         {
@@ -222,14 +305,12 @@ public class HoverController_Propulsion : MonoBehaviour
         rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
 
         // Speed-assist servo — target is throttle * effective top speed.
-        // Airborne: only runs when boosting, giving boost its air-speed identity.
         float targetSpeed = throttle * EffectiveTopSpeed();
         float currentFwd  = Vector3.Dot(rb.linearVelocity, transform.forward);
         float error       = targetSpeed - currentFwd;
         float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
 
-        // Suppress deceleration assist in air even during boost — let the craft
-        // carry excess speed naturally rather than actively scrubbing it.
+        // Suppress deceleration assist in air even during boost.
         if (!grounded && assistAccel < 0f)
             assistAccel = 0f;
 
@@ -242,14 +323,18 @@ public class HoverController_Propulsion : MonoBehaviour
     // -------------------------------------------------------------------------
     // Turning — yaw torque + counter-torque damping
     // -------------------------------------------------------------------------
+    /// <summary>
+    /// Drift state increases yaw via EffectiveYawMultiplier(), causing the nose
+    /// to rotate faster than the momentum vector — this is what creates the
+    /// shouldering angle where the craft is traveling one direction but facing another.
+    /// </summary>
     private void ApplyTurning()
     {
         float turn      = Mathf.Clamp(input.TurnInput, -1f, 1f);
         float turnScale = foundation.IsHoverGrounded ? 1f : airTurnMultiplier;
 
-        // Scale by inertia so yaw accel stays consistent across different body masses.
         float inertiaY      = Mathf.Max(0.001f, rb.inertiaTensor.y);
-        float desiredYawAcc = turn * yawAccel * turnScale;
+        float desiredYawAcc = turn * yawAccel * turnScale * EffectiveYawMultiplier();
         rb.AddRelativeTorque(Vector3.up * desiredYawAcc * inertiaY, ForceMode.Force);
 
         if (yawDamping <= 0f)
@@ -261,26 +346,53 @@ public class HoverController_Propulsion : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // Drag — lateral slip + coast forward drag
+    // Drag — lateral slip (grounded only)
     // -------------------------------------------------------------------------
+    /// <summary>
+    /// lateralDamp is lerped toward driftLateralDamp during drift state.
+    /// At driftLateralDamp = 0, lateral velocity is completely unresisted —
+    /// the craft slides freely through the turn, carrying its momentum arc.
+    /// CoastDrag removed — zero was the correct value and dead code adds noise.
+    /// </summary>
     private void ApplyDrag()
     {
-        // Both lateral and coast drag are grounded-only.
-        // Airborne: the craft maintains its exit velocity as a projectile.
-        // Applying lateral drag in air would kill the natural arc feel.
         if (!foundation.IsHoverGrounded)
             return;
 
         Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
 
-        // Lateral: reduces sideways sliding while grounded.
-        if (lateralDamp > 0f)
-            rb.AddForce(transform.right * (-localVel.x * lateralDamp), ForceMode.Acceleration);
+        float effectiveDamp = EffectiveLateralDamp();
+        if (effectiveDamp > 0f)
+            rb.AddForce(transform.right * (-localVel.x * effectiveDamp), ForceMode.Acceleration);
+    }
 
-        // Coast drag: only when throttle is near-zero so it doesn't fight the servo.
-        bool assistIdle = Mathf.Abs(input.ThrottleInput) < 0.01f;
-        if (coastDrag > 0f && assistIdle)
-            rb.AddForce(transform.forward * (-localVel.z * coastDrag), ForceMode.Acceleration);
+    // -------------------------------------------------------------------------
+    // Chassis bank — visual only, runs in Update
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Rotates meshRoot on its local Z axis to bank the chassis into the drift.
+    /// Bank direction is determined by turn input sign — left turn banks left, etc.
+    /// Bank magnitude scales with driftLerp so it fades in/out with the drift state.
+    ///
+    /// This runs in Update (not FixedUpdate) so the visual is smooth at any frame rate.
+    /// The physics body is unaffected — only the mesh parent rotates.
+    /// </summary>
+    private void ApplyChassisBank()
+    {
+        if (meshRoot == null)
+            return;
+
+        // Bank toward the turn direction, scaled by how deep into drift state we are.
+        // Negative Z rotation = right bank (right turn), positive = left bank (left turn).
+        float turnSign    = Mathf.Sign(input.TurnInput);
+        float targetAngle = -turnSign * maxBankAngle * driftLerp;
+
+        Quaternion targetRot = Quaternion.Euler(0f, 0f, targetAngle);
+        meshRoot.localRotation = Quaternion.Lerp(
+            meshRoot.localRotation,
+            targetRot,
+            bankLerpSpeed * Time.deltaTime
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -299,29 +411,24 @@ public class HoverController_Propulsion : MonoBehaviour
     // Soft top-speed cap — counter-force replaces linearVelocity write
     // -------------------------------------------------------------------------
     /// <summary>
-    /// The previous version clamped rb.linearVelocity directly, which discards
-    /// physics-solver momentum on the frame it's written — most visible as a
-    /// "sticky wall" feel on collision frames.
-    ///
-    /// This version applies a counter-force proportional to the excess horizontal speed.
-    /// The cap is "soft": impacts and ramps can briefly breach it, which is correct
-    /// physics behaviour and feels better. softCapStrength controls how tightly it's
-    /// enforced — tune higher for a stricter cap, lower for more natural overflow.
+    /// Applies a counter-force proportional to excess horizontal speed.
+    /// Soft cap allows brief breaches on impacts and ramps — correct and feels better
+    /// than a hard clamp which creates a sticky wall feel on collision frames.
     /// </summary>
     private void ApplySoftSpeedCap()
     {
         if (softCapStrength <= 0f)
             return;
 
-        float max       = EffectiveTopSpeed();
-        Vector3 vel     = rb.linearVelocity;
-        Vector3 horiz   = new Vector3(vel.x, 0f, vel.z);
-        float   speed   = horiz.magnitude;
+        float   max   = EffectiveTopSpeed();
+        Vector3 vel   = rb.linearVelocity;
+        Vector3 horiz = new Vector3(vel.x, 0f, vel.z);
+        float   speed = horiz.magnitude;
 
         if (speed <= max)
             return;
 
-        float excess         = speed - max;
+        float   excess       = speed - max;
         Vector3 counterForce = -horiz.normalized * (excess * softCapStrength);
         rb.AddForce(counterForce, ForceMode.Acceleration);
     }

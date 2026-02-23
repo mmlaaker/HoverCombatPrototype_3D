@@ -722,7 +722,7 @@ MonoBehaviour:
   recoveryDelay: 0.5
   flipRecoveryTorque: 28
   unstickSpeedThreshold: 0.5
-  unstickImpulseStrength: 10
+  unstickImpulseStrength: 15
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
