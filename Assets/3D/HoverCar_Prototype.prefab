@@ -637,6 +637,7 @@ GameObject:
   - component: {fileID: 4826641157319664335}
   - component: {fileID: 1254805148386242258}
   - component: {fileID: 4964355425596500860}
+  - component: {fileID: 3396267810379779740}
   - component: {fileID: 5761321178091812356}
   - component: {fileID: 3191944406936877070}
   m_Layer: 0
@@ -723,6 +724,8 @@ MonoBehaviour:
   flipRecoveryTorque: 28
   unstickSpeedThreshold: 0.5
   unstickImpulseStrength: 15
+  extraGravityMultiplier: 3
+  extraAirGravity: 3
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -751,13 +754,43 @@ MonoBehaviour:
   boostAccelMultiplier: 1.75
   boostSpeedMultiplier: 1.5
   boostBlendSeconds: 0.35
+  boostEnergyPerSecond: 20
+  enableJump: 1
+  jumpImpulseMin: 20
+  jumpImpulseMax: 40
+  jumpMaxChargeTime: 2
+  jumpGroundedLockout: 0.2
+  jumpGroundedEnergyCost: 25
+  jumpAirEnergyCost: 25
+  airJumpImpulse: 7
   softCapStrength: 40
   lateralDamp: 4
-  coastDrag: 0
-  extraGravityMultiplier: 3
-  extraAirGravity: 3
+  driftLateralDamp: 0
+  driftYawMultiplier: 1.4
+  driftTurnThreshold: 0.4
+  driftBlendSeconds: 0.15
+  meshRoot: {fileID: 1837740655522995287}
+  maxBankAngle: 20
+  bankLerpSpeed: 8
   inputProvider: {fileID: 5761321178091812356}
   drawDebug: 0
+--- !u!114 &3396267810379779740
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4246840766707924649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d612f9a5cf343c4baaf7ce8fee02a9e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverController_Energy
+  maxEnergy: 100
+  startingEnergy: 100
+  regenRate: 20
+  regenDelay: 1
+  empFreezeRemaining: 0
 --- !u!114 &5761321178091812356
 MonoBehaviour:
   m_ObjectHideFlags: 0

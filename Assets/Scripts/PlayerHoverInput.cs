@@ -2,24 +2,25 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// PlayerHoverInput v5.0 (Drift Support)
-/// ----------------------------------------
-/// Reads movement (throttle + turn), boost, and drift via Unity's New Input System.
+/// PlayerHoverInput v7.0 (Jump Support)
+/// ------------------------------------------------
+/// Reads throttle, turn, boost, drift, and jump via Unity's New Input System.
 /// Requires a PlayerInput component with a HoverControls InputActionAsset assigned.
 /// Expected action map: 'Hover' with actions:
-///   • 'Move'  (Vector2) — Left Stick
-///   • 'Boost' (Button)  — L3 (or reassigned)
-///   • 'Drift' (Button)  — L1
+///   • 'Throttle' (float)  — Left Stick Y
+///   • 'Turn'     (float)  — Right Stick X
+///   • 'Boost'    (Button) — Square
+///   • 'Drift'    (Button) — L1
+///   • 'Jump'     (Button) — Cross / X
 ///
-/// Supported devices (configure bindings in HoverControls asset):
-/// • Keyboard: WASD / Arrow Keys + Left Shift (boost) + Q (drift)
-/// • PS4 DualShock: Left Stick + L3 (boost) + L1 (drift)
+/// Supported devices:
+/// • Keyboard: W/S (throttle) + A/D (turn) + Left Shift (boost) + Left Alt (drift) + Space (jump)
+/// • PS4: Left Stick Y (throttle) + Right Stick X (turn) + Square (boost) + L1 (drift) + Cross (jump)
 ///
 /// Setup:
-/// 1. Attach PlayerInput component to this GameObject
-/// 2. Assign HoverControls asset to PlayerInput.Actions
-/// 3. Set Default Map to 'Hover' in PlayerInput inspector
-/// 4. Add a 'Drift' Button action bound to L1 in your HoverControls asset
+/// 1. Add 'Jump' action (Button) to the Hover action map in HoverControls asset
+/// 2. Bind to Cross [PlayStation Controller]
+/// 3. Bind to Space [Keyboard]
 /// </summary>
 [RequireComponent(typeof(PlayerInput))]
 public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
@@ -35,12 +36,11 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
     /// <summary>True while boost is held.</summary>
     public bool Boost { get; private set; }
 
-    /// <summary>
-    /// True while drift is held (L1).
-    /// Whether drift actually engages depends on TurnInput exceeding the
-    /// threshold defined in HoverController_Propulsion.
-    /// </summary>
+    /// <summary>True while drift is held (L1).</summary>
     public bool Drift { get; private set; }
+
+    /// <summary>True while jump is held (Cross / X).</summary>
+    public bool Jump { get; private set; }
 
     // ── Serialized ───────────────────────────────────────────────────────
 
@@ -50,9 +50,11 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 
     // ── Private ──────────────────────────────────────────────────────────
 
-    private InputAction _moveAction;
+    private InputAction _throttleAction;
+    private InputAction _turnAction;
     private InputAction _boostAction;
     private InputAction _driftAction;
+    private InputAction _jumpAction;
 
     // ── Unity Lifecycle ──────────────────────────────────────────────────
 
@@ -68,14 +70,19 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
             return;
         }
 
-        _moveAction  = playerInput.actions["Hover/Move"];
-        _boostAction = playerInput.actions["Hover/Boost"];
-        _driftAction = playerInput.actions["Hover/Drift"];
+        _throttleAction = playerInput.actions["Hover/Throttle"];
+        _turnAction     = playerInput.actions["Hover/Turn"];
+        _boostAction    = playerInput.actions["Hover/Boost"];
+        _driftAction    = playerInput.actions["Hover/Drift"];
+        _jumpAction     = playerInput.actions["Hover/Jump"];
 
-        if (_moveAction == null || _boostAction == null || _driftAction == null)
+        if (_throttleAction == null || _turnAction == null || _boostAction == null ||
+            _driftAction    == null || _jumpAction == null)
         {
             Debug.LogError("[PlayerHoverInput] One or more actions not found in InputActionAsset. " +
-                           "Expected action map 'Hover' with actions: 'Move' (Vector2), 'Boost' (Button), 'Drift' (Button).", this);
+                           "Expected action map 'Hover' with actions: " +
+                           "'Throttle' (float), 'Turn' (float), 'Boost' (Button), " +
+                           "'Drift' (Button), 'Jump' (Button).", this);
             enabled = false;
             return;
         }
@@ -83,11 +90,11 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 
     private void Update()
     {
-        var move      = _moveAction.ReadValue<Vector2>();
-        ThrottleInput = ApplyDeadzone(move.y);
-        TurnInput     = ApplyDeadzone(move.x);
+        ThrottleInput = ApplyDeadzone(_throttleAction.ReadValue<float>());
+        TurnInput     = ApplyDeadzone(_turnAction.ReadValue<float>());
         Boost         = _boostAction.ReadValue<float>() > 0.5f;
         Drift         = _driftAction.ReadValue<float>() > 0.5f;
+        Jump          = _jumpAction.ReadValue<float>()  > 0.5f;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

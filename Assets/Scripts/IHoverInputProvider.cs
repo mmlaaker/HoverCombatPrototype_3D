@@ -1,5 +1,5 @@
 /// <summary>
-/// IHoverInputProvider v3.0 (Drift Support)
+/// IHoverInputProvider v4.0 (Jump Support)
 /// ------------------------------------------
 /// Interface for providing hovercraft input to the Propulsion system.
 /// Implementations can be player, AI, or network-driven.
@@ -30,4 +30,11 @@ public interface IHoverInputProvider
     /// drift turn threshold — holding drift while going straight has no effect.
     /// </summary>
     bool Drift { get; }
+
+    /// <summary>
+    /// True while jump is held (Cross / X).
+    /// Charge accumulates in Propulsion while this is true and the craft is grounded.
+    /// Impulse fires on release. Air jump fires immediately on press while airborne.
+    /// </summary>
+    bool Jump { get; }
 }

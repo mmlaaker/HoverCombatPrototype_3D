@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v3.0
+/// HoverController_Foundation v4.0 (Gravity)
 /// --------------------------------
 /// Responsibilities:
 ///   • Per-point spring-damper hover lift
@@ -10,6 +10,7 @@ using UnityEngine;
 ///   • Torque-based pitch/roll damping
 ///   • Flip recovery   — rights the craft when tilt exceeds threshold (torque-based)
 ///   • Ground unstick  — velocity impulse when craft is pinned against a ground-layer surface
+///   • Extra gravity   — persistent downforce and air gravity tuning knobs
 ///
 /// Physics contract: zero direct writes to rb.angularVelocity or rb.rotation.
 /// rb.linearVelocity is written once, additively, only in the ground unstick path.
@@ -17,6 +18,12 @@ using UnityEngine;
 ///
 /// External disable hook: SetRecoveryEnabled(bool) suppresses both flip recovery
 /// and ground unstick. Use for EMP, special abilities, or scripted events.
+///
+/// v4.0 changes:
+///   • extraGravityMultiplier and extraAirGravity moved here from Propulsion.
+///     These are persistent physical character tuning knobs for the hover craft,
+///     not player-driven propulsion actions. Foundation owns all forces that define
+///     how the craft sits and falls — gravity tuning belongs in that category.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class HoverController_Foundation : MonoBehaviour
@@ -104,6 +111,30 @@ public class HoverController_Foundation : MonoBehaviour
     [SerializeField] private float unstickImpulseStrength = 4f;
 
     // -------------------------------------------------------------------------
+    // 🌎 Gravity
+    // -------------------------------------------------------------------------
+    [Header("🌎 Gravity")]
+    [Tooltip("Multiplier added on top of Unity gravity (Acceleration mode). " +
+             "Increases overall downforce at all times. 0 = no extra.")]
+    [Range(0f, 5f)]
+    [SerializeField] private float extraGravityMultiplier = 0f;
+
+    [Tooltip("Additional downward acceleration (m/s²) applied only while airborne. " +
+             "Reduces floatiness after jumps and off ramps without affecting grounded feel.")]
+    [Range(0f, 30f)]
+    [SerializeField] private float extraAirGravity = 0f;
+
+    // -------------------------------------------------------------------------
+    // 🌍 Ground Interaction
+    // -------------------------------------------------------------------------
+    [Header("🌍 Ground Interaction")]
+    [Tooltip("Layers treated as ground for hover detection.")]
+    [SerializeField] private LayerMask groundLayers = ~0;
+
+    [Tooltip("Draws hover rays in the scene view.")]
+    [SerializeField] private bool drawDebugRays = true;
+
+    // -------------------------------------------------------------------------
     // 📡 Collision Tracking
     // -------------------------------------------------------------------------
     /// <summary>
@@ -134,17 +165,6 @@ public class HoverController_Foundation : MonoBehaviour
         isContactingGround  = false;
         groundContactNormal = Vector3.zero;
     }
-
-
-    // -------------------------------------------------------------------------
-    // 🌍 Ground Interaction
-    // -------------------------------------------------------------------------
-    [Header("🌍 Ground Interaction")]
-    [Tooltip("Layers treated as ground for hover detection.")]
-    [SerializeField] private LayerMask groundLayers = ~0;
-
-    [Tooltip("Draws hover rays in the scene view.")]
-    [SerializeField] private bool drawDebugRays = true;
 
     // -------------------------------------------------------------------------
     // Runtime state
@@ -184,6 +204,8 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
+    // Unity lifecycle
+    // -------------------------------------------------------------------------
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -221,6 +243,7 @@ public class HoverController_Foundation : MonoBehaviour
     private void FixedUpdate()
     {
         ApplyHoverForces();
+        ApplyExtraGravity();
         ApplyLevelingTorque();
         ApplyPitchRollDamping();
         HandleRecovery();
@@ -273,6 +296,25 @@ public class HoverController_Foundation : MonoBehaviour
             IsHoverGrounded     = true;
             AverageGroundNormal = (normalSum / groundedCount).normalized;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // 🌎 Extra Gravity
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// extraGravityMultiplier applies at all times — increases the effective weight
+    /// of the craft and helps it sit more firmly on the hover springs.
+    /// extraAirGravity applies only while airborne — pulls the craft back down faster
+    /// after jumps and off ramps without affecting grounded stability.
+    /// Both are tuning knobs for the physical character of the hover, not player input.
+    /// </summary>
+    private void ApplyExtraGravity()
+    {
+        if (extraGravityMultiplier > 0f)
+            rb.AddForce(Physics.gravity * extraGravityMultiplier, ForceMode.Acceleration);
+
+        if (!IsHoverGrounded && extraAirGravity > 0f)
+            rb.AddForce(Vector3.down * extraAirGravity, ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -341,21 +383,14 @@ public class HoverController_Foundation : MonoBehaviour
         bool  isSlow    = rb.linearVelocity.sqrMagnitude < unstickSpeedThreshold * unstickSpeedThreshold;
 
         // --- Righting authorization ---
-        // rightingAuthorized is set when an unstick impulse fires.
-        // It clears when the craft is no longer flipped, or when it re-establishes
-        // hover contact (springs engaged = successfully righted and landed).
         if (!isFlipped || IsHoverGrounded)
             rightingAuthorized = false;
 
         // --- Righting torque ---
-        // Only runs when explicitly authorized by a prior unstick impulse.
-        // This prevents torque from firing during any airborne tumble — it's
-        // only active as a direct consequence of the craft being launched off the ground.
         if (rightingAuthorized && flipRecoveryTorque > 0f)
         {
             Vector3 torqueAxis = Vector3.Cross(transform.up, Vector3.up);
 
-            // Break 180° degeneracy with a forward pitch bias.
             if (torqueAxis.sqrMagnitude < 0.001f)
                 torqueAxis = transform.forward * 0.1f;
 
@@ -363,8 +398,6 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         // --- Unstick impulse ---
-        // Precondition: in ground contact and slow. Timer-gated.
-        // Grace window prevents triggering on hard-but-fast landings still playing out.
         if (!isContactingGround || !isSlow)
         {
             recoveryTimer = 0f;
@@ -385,7 +418,6 @@ public class HoverController_Foundation : MonoBehaviour
         rb.linearVelocity += impulseDir * unstickImpulseStrength;
         unstickFiredFlashTimer = 0.5f;
 
-        // Authorize righting torque for the duration of this launch.
         if (isFlipped)
             rightingAuthorized = true;
 
@@ -411,8 +443,6 @@ public class HoverController_Foundation : MonoBehaviour
         if (!drawDebugRays || !Application.isPlaying)
             return;
 
-        // Tick down the flash timer (OnDrawGizmos runs in editor update, not FixedUpdate,
-        // so we use unscaled delta time to keep it frame-rate independent).
         unstickFiredFlashTimer = Mathf.Max(0f, unstickFiredFlashTimer - Time.deltaTime);
 
         // --- Hover point spheres ---
@@ -438,18 +468,13 @@ public class HoverController_Foundation : MonoBehaviour
         if (isContactingGround && recoveryTimer > 0f)
         {
             float progress  = Mathf.Clamp01(recoveryTimer / Mathf.Max(0.01f, recoveryDelay));
-            // Blend yellow -> orange as timer fills
             Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.4f, 0f), progress);
             Vector3 start   = transform.position + Vector3.up * 0.3f;
             Vector3 end     = start + transform.right * (progress * 2f);
             Gizmos.DrawLine(start, end);
-
-            // Endpoint sphere so it's visible even when progress is small
             Gizmos.DrawWireSphere(end, 0.08f);
 
-            // Label above the craft showing timer value
             UnityEditor.Handles.color = Gizmos.color;
-            // Show which phase the shared timer is currently in
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 1.5f,
                 $"Recovery {recoveryTimer:F2} / {recoveryDelay:F2}s"
@@ -459,8 +484,8 @@ public class HoverController_Foundation : MonoBehaviour
         // --- Fired-impulse flash ---
         if (unstickFiredFlashTimer > 0f)
         {
-            float alpha     = unstickFiredFlashTimer / 0.5f; // fade out over 0.5s
-            Gizmos.color    = new Color(1f, 0f, 1f, alpha);  // magenta
+            float alpha     = unstickFiredFlashTimer / 0.5f;
+            Gizmos.color    = new Color(1f, 0f, 1f, alpha);
             Gizmos.DrawWireSphere(transform.position, 0.6f);
             Gizmos.DrawWireSphere(transform.position, 0.9f);
 
