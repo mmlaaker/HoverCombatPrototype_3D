@@ -5552,8 +5552,8 @@ PrefabInstance:
       value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 1254805148386242258, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-      propertyPath: flipRecoveryDelay
-      value: 1
+      propertyPath: unstickImpulseStrength
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3191944406936877070, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Camera
@@ -5581,7 +5581,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5927693998371741120, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -4.52
+      value: -5
       objectReference: {fileID: 0}
     - target: {fileID: 5927693998371741120, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_LocalRotation.w

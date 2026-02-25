@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v4.0 (Gravity)
+/// HoverController_Foundation v4.2 (Cleanup)
 /// --------------------------------
 /// Responsibilities:
 ///   • Per-point spring-damper hover lift
@@ -9,21 +9,37 @@ using UnityEngine;
 ///   • Torque-based ground-normal leveling
 ///   • Torque-based pitch/roll damping
 ///   • Flip recovery   — rights the craft when tilt exceeds threshold (torque-based)
-///   • Ground unstick  — velocity impulse when craft is pinned against a ground-layer surface
+///   • Ground unstick  — sustained upward AddForce when craft is pinned upright
 ///   • Extra gravity   — persistent downforce and air gravity tuning knobs
 ///
-/// Physics contract: zero direct writes to rb.angularVelocity or rb.rotation.
-/// rb.linearVelocity is written once, additively, only in the ground unstick path.
-/// That exception is intentional and documented at the call site.
+/// Physics contract: zero direct writes to rb.angularVelocity, rb.rotation,
+/// or rb.linearVelocity. All motion expressed as AddForce / AddTorque.
 ///
-/// External disable hook: SetRecoveryEnabled(bool) suppresses both flip recovery
-/// and ground unstick. Use for EMP, special abilities, or scripted events.
+/// Recovery is split into two independent paths with separate delays:
+///   • Upright stuck  — isContactingGround AND NOT isFlipped. Speed not gated.
+///                      Fires a sustained upward AddForce window. Near-instant delay.
+///   • Flipped        — isContactingGround AND isFlipped AND isSlow.
+///                      Fires righting torque. Longer delay for consequence feel.
 ///
-/// v4.0 changes:
-///   • extraGravityMultiplier and extraAirGravity moved here from Propulsion.
-///     These are persistent physical character tuning knobs for the hover craft,
-///     not player-driven propulsion actions. Foundation owns all forces that define
-///     how the craft sits and falls — gravity tuning belongs in that category.
+/// External disable hook: SetRecoveryEnabled(bool) suppresses both paths.
+/// Use for EMP effects, scripted events, or ability interactions.
+///
+/// v4.2 changes:
+///   • unstickSpeedThreshold renamed to flipRecoverySpeedThreshold — clarifies
+///     it only gates the flip path. Tooltip updated to match.
+///   • unstickLiftDuration added as inspector field — exposes the lift window
+///     duration that was previously hardcoded at 0.15f in ApplyUnstickForce.
+///     Allows per-vehicle tuning without touching code.
+///
+/// v4.1 changes:
+///   • Recovery split into two independent paths (upright stuck vs flipped).
+///   • Separate inspector delays: unstickRecoveryDelay / flipRecoveryDelay.
+///   • unstickImpulseStrength renamed to unstickLiftForce — now drives sustained
+///     AddForce rather than a single-frame linearVelocity addition.
+///   • unstickSpeedThreshold retained for flipped path only — removed from upright path.
+///   • rightingAuthorized is now set by the flipped timer directly, not as a
+///     side effect of the unstick impulse.
+///   • rb.linearVelocity write removed entirely. Physics contract now fully clean.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class HoverController_Foundation : MonoBehaviour
@@ -78,23 +94,45 @@ public class HoverController_Foundation : MonoBehaviour
     [SerializeField] private float pitchRollDamping = 8f;
 
     // -------------------------------------------------------------------------
-    // 🔄 Flip Recovery + 📌 Ground Unstick  (shared timer)
+    // 📌 Ground Unstick  (upright only)
     // -------------------------------------------------------------------------
-    // Both systems share a single recoveryTimer and a single recoveryDelay threshold.
-    // Righting torque and the unstick impulse fire together when the timer is reached.
-    // The torque is continuous — it keeps applying after the impulse fires — so no
-    // artificial sequencing delay is needed between the two.
-    [Header("🔄 Flip Recovery + 📌 Ground Unstick")]
-    [Tooltip("Tilt angle from upright (degrees) that activates the recovery sequence. " +
+    // Fires when the craft is contacting ground AND is not flipped.
+    // Speed is not gated — unstick must work regardless of landing velocity.
+    // A sustained upward AddForce window lifts the craft free without a visible punch.
+    [Header("📌 Ground Unstick")]
+    [Tooltip("Seconds of ground contact while upright before unstick lift fires. " +
+             "Near-instant recommended — this is a physics correction, not a gameplay consequence. " +
+             "Recommended: 0.1–0.3.")]
+    [Min(0f)]
+    [SerializeField] private float unstickRecoveryDelay = 0.2f;
+
+    [Tooltip("Upward force magnitude (m/s²) applied during the unstick window. " +
+             "Uses ForceMode.Acceleration — mass-independent. " +
+             "Front-loaded and tapering. Recommended: 40–80.")]
+    [Min(0f)]
+    [SerializeField] private float unstickLiftForce = 25f;
+
+    [Tooltip("Duration (seconds) of the sustained lift window. " +
+             "Force tapers from full to zero over this time. " +
+             "Longer = gentler and more visible. Shorter = snappier. Recommended: 0.1–0.25.")]
+    [Min(0.01f)]
+    [SerializeField] private float unstickLiftDuration = 0.15f;
+
+    // -------------------------------------------------------------------------
+    // 🔄 Flip Recovery  (flipped only)
+    // -------------------------------------------------------------------------
+    // Fires when the craft is contacting ground AND is flipped AND is slow.
+    // Longer delay is intentional — a flipped vehicle should feel like a consequence.
+    [Header("🔄 Flip Recovery")]
+    [Tooltip("Tilt angle from upright (degrees) that classifies the craft as flipped. " +
              "90° = sideways, 180° = fully inverted. Recommended: 70–100.")]
     [Range(10f, 180f)]
     [SerializeField] private float flipRecoveryAngleThreshold = 80f;
 
-    [Tooltip("Seconds of ground contact while stuck or flipped before recovery fires. " +
-             "Both righting torque and the unstick impulse trigger at this threshold simultaneously. " +
-             "Grace window prevents twitchy response on hard impacts. Recommended: 0.5–1.0.")]
+    [Tooltip("Seconds of ground contact while flipped and slow before righting torque fires. " +
+             "Longer values give the flip weight and consequence. Recommended: 0.75–1.5.")]
     [Min(0f)]
-    [SerializeField] private float recoveryDelay = 0.75f;
+    [SerializeField] private float flipRecoveryDelay = 1.0f;
 
     [Tooltip("Proportional torque strength driving the craft back to upright. " +
              "Needs to be stronger than levelingTorqueStrength to overcome extreme angles. " +
@@ -102,13 +140,10 @@ public class HoverController_Foundation : MonoBehaviour
     [Range(0f, 80f)]
     [SerializeField] private float flipRecoveryTorque = 28f;
 
-    [Tooltip("Speed (m/s) below which unstick will fire. Guards against triggering during active movement.")]
+    [Tooltip("Speed (m/s) below which flip recovery will fire. " +
+             "Guards against triggering while the craft is still tumbling. Recommended: 0.5.")]
     [Min(0f)]
-    [SerializeField] private float unstickSpeedThreshold = 0.5f;
-
-    [Tooltip("Speed (m/s) added along the contact normal on unstick.")]
-    [Min(0f)]
-    [SerializeField] private float unstickImpulseStrength = 4f;
+    [SerializeField] private float flipRecoverySpeedThreshold = 0.5f;
 
     // -------------------------------------------------------------------------
     // 🌎 Gravity
@@ -171,12 +206,15 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private Rigidbody rb;
 
-    private float   recoveryTimer;           // shared by flip recovery and ground unstick
+    private float   unstickTimer;            // counts up while upright and contacting ground
+    private float   flipTimer;               // counts up while flipped, slow, and contacting ground
     private bool    isContactingGround;      // written by OnCollisionStay/Exit
     private Vector3 groundContactNormal;
     private float   unstickFiredFlashTimer;  // drives the fired-impulse gizmo
-    private bool    rightingAuthorized;      // true after unstick fires; cleared when craft rights or lands
+    private bool    rightingAuthorized;      // true after flip timer threshold; cleared when craft rights
     private bool    recoveryEnabled = true;
+    private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
+    private Vector3 unstickForceDir;         // direction cached at trigger time, held for duration
 
     /// <summary>True when at least one hover point has a ground hit this frame.</summary>
     public bool IsHoverGrounded { get; private set; }
@@ -198,7 +236,8 @@ public class HoverController_Foundation : MonoBehaviour
         recoveryEnabled = enabled;
         if (!enabled)
         {
-            recoveryTimer      = 0f;
+            unstickTimer       = 0f;
+            flipTimer          = 0f;
             rightingAuthorized = false;
         }
     }
@@ -247,6 +286,7 @@ public class HoverController_Foundation : MonoBehaviour
         ApplyLevelingTorque();
         ApplyPitchRollDamping();
         HandleRecovery();
+        ApplyUnstickForce();
     }
 
     // -------------------------------------------------------------------------
@@ -349,29 +389,27 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // 🔄 Flip Recovery + 📌 Ground Unstick
+    // 🔄 Flip Recovery + 📌 Ground Unstick  (split paths)
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Two systems with independent preconditions:
+    /// Two fully independent recovery paths:
     ///
-    ///   Unstick impulse  — fires once after recoveryDelay seconds of isContactingGround
-    ///                      && isSlow. Resets timer after firing. Sets rightingAuthorized
-    ///                      if the craft is flipped at the moment of impulse.
+    ///   Upright unstick — isContactingGround AND NOT isFlipped.
+    ///                     Speed not gated — must recover regardless of landing velocity.
+    ///                     After unstickRecoveryDelay, begins a sustained upward AddForce
+    ///                     window (ApplyUnstickForce). Near-instant delay recommended.
     ///
-    ///   Righting torque  — only runs while rightingAuthorized is true. This flag is set
-    ///                      exclusively by the unstick impulse, so torque is a direct
-    ///                      consequence of being launched — not a general airborne corrector.
-    ///                      Clears when the craft rights itself or hover springs re-engage.
+    ///   Flip recovery   — isContactingGround AND isFlipped AND isSlow.
+    ///                     After flipRecoveryDelay, sets rightingAuthorized which gates
+    ///                     the righting torque applied each FixedUpdate until the craft
+    ///                     rights itself or hover springs re-engage.
+    ///                     Longer delay gives the flip consequence feel.
     ///
-    /// This prevents torque from firing during any unrelated airborne tumble. It only
-    /// activates when the craft was specifically launched by the unstick system.
+    /// rightingAuthorized is now set directly by the flip timer — no longer a
+    /// side effect of the unstick path. The two systems are fully decoupled.
     ///
     /// 180° degeneracy: Cross(transform.up, Vector3.up) is zero when perfectly inverted.
     /// A forward pitch bias breaks the symmetry.
-    ///
-    /// Unstick uses rb.linearVelocity addition rather than AddForce — an impulse force
-    /// large enough to overcome static friction and spring compression simultaneously
-    /// would fail across multiple frames. The addition is additive, not a hard set.
     /// </summary>
     private void HandleRecovery()
     {
@@ -380,13 +418,12 @@ public class HoverController_Foundation : MonoBehaviour
 
         float tiltAngle = Vector3.Angle(transform.up, Vector3.up);
         bool  isFlipped = tiltAngle >= flipRecoveryAngleThreshold;
-        bool  isSlow    = rb.linearVelocity.sqrMagnitude < unstickSpeedThreshold * unstickSpeedThreshold;
+        bool  isSlow    = rb.linearVelocity.sqrMagnitude < flipRecoverySpeedThreshold * flipRecoverySpeedThreshold;
 
-        // --- Righting authorization ---
+        // --- Righting torque (runs every frame while authorized) ---
         if (!isFlipped || IsHoverGrounded)
             rightingAuthorized = false;
 
-        // --- Righting torque ---
         if (rightingAuthorized && flipRecoveryTorque > 0f)
         {
             Vector3 torqueAxis = Vector3.Cross(transform.up, Vector3.up);
@@ -397,32 +434,76 @@ public class HoverController_Foundation : MonoBehaviour
             rb.AddTorque(torqueAxis.normalized * flipRecoveryTorque, ForceMode.Acceleration);
         }
 
-        // --- Unstick impulse ---
-        if (!isContactingGround || !isSlow)
+        // --- Upright unstick path ---
+        // Gate: contacting ground AND upright. Speed intentionally not gated.
+        if (isContactingGround && !isFlipped)
         {
-            recoveryTimer = 0f;
-            return;
+            unstickTimer += Time.fixedDeltaTime;
+
+            if (unstickTimer >= unstickRecoveryDelay)
+            {
+                unstickTimer = 0f;
+
+                unstickForceDir = groundContactNormal.sqrMagnitude > 0.01f
+                    ? groundContactNormal
+                    : Vector3.up;
+
+                unstickForceTimer      = unstickLiftDuration;
+                unstickFiredFlashTimer = 0.5f;
+
+                if (drawDebugRays)
+                    Debug.DrawRay(transform.position, unstickForceDir * 2f, Color.cyan);
+            }
+        }
+        else
+        {
+            unstickTimer = 0f;
         }
 
-        recoveryTimer += Time.fixedDeltaTime;
+        // --- Flip recovery path ---
+        // Gate: contacting ground AND flipped AND slow.
+        if (isContactingGround && isFlipped && isSlow)
+        {
+            flipTimer += Time.fixedDeltaTime;
 
-        if (recoveryTimer < recoveryDelay)
+            if (flipTimer >= flipRecoveryDelay)
+            {
+                flipTimer          = 0f;
+                rightingAuthorized = true;
+
+                unstickFiredFlashTimer = 0.5f;
+
+                if (drawDebugRays)
+                    Debug.DrawRay(transform.position, Vector3.up * 2f, Color.magenta);
+            }
+        }
+        else
+        {
+            flipTimer = 0f;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 📌 Sustained Unstick Lift
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Applies the unstick lift force over a short window each FixedUpdate.
+    /// unstickForceTimer is set by HandleRecovery when the upright stuck condition is met.
+    /// Force is front-loaded — strongest on the first frame, tapering to zero.
+    /// This reads as a gentle invisible lift rather than a visible punch.
+    /// ForceMode.Acceleration keeps the behavior mass-independent across all vehicles.
+    /// </summary>
+    private void ApplyUnstickForce()
+    {
+        if (unstickForceTimer <= 0f)
             return;
 
-        recoveryTimer = 0f;
+        float progress       = unstickForceTimer / Mathf.Max(0.01f, unstickLiftDuration);
+        float forceMagnitude = unstickLiftForce * progress;
 
-        Vector3 impulseDir = groundContactNormal.sqrMagnitude > 0.01f
-            ? groundContactNormal
-            : AverageGroundNormal;
+        rb.AddForce(unstickForceDir * forceMagnitude, ForceMode.Acceleration);
 
-        rb.linearVelocity += impulseDir * unstickImpulseStrength;
-        unstickFiredFlashTimer = 0.5f;
-
-        if (isFlipped)
-            rightingAuthorized = true;
-
-        if (drawDebugRays)
-            Debug.DrawRay(transform.position, impulseDir * 2f, Color.cyan);
+        unstickForceTimer = Mathf.Max(0f, unstickForceTimer - Time.fixedDeltaTime);
     }
 
 #if UNITY_EDITOR
@@ -430,13 +511,14 @@ public class HoverController_Foundation : MonoBehaviour
     // 🎨 Unstick Debug Gizmos
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Draws live unstick state in the Scene view during play mode.
+    /// Draws live recovery state in the Scene view during play mode.
     /// All gizmos are suppressed when drawDebugRays is false.
     ///
     ///   Hover point spheres — green: hover ray hitting ground / red: no hit
     ///   Cyan line           — groundContactNormal direction when isContactingGround
-    ///   Yellow line + label — recoveryTimer progress toward recoveryDelay
-    ///   Magenta sphere      — fired-impulse flash, visible for 0.5s after impulse
+    ///   Yellow bar + label  — unstickTimer progress toward unstickRecoveryDelay (upright)
+    ///   Orange bar + label  — flipTimer progress toward flipRecoveryDelay (flipped)
+    ///   Magenta sphere      — recovery fired flash, visible for 0.5s
     /// </summary>
     private void OnDrawGizmos()
     {
@@ -464,11 +546,11 @@ public class HoverController_Foundation : MonoBehaviour
             Gizmos.DrawWireSphere(transform.position + groundContactNormal * 1.5f, 0.1f);
         }
 
-        // --- Recovery timer progress bar ---
-        if (isContactingGround && recoveryTimer > 0f)
+        // --- Upright unstick timer bar (yellow) ---
+        if (isContactingGround && unstickTimer > 0f)
         {
-            float progress  = Mathf.Clamp01(recoveryTimer / Mathf.Max(0.01f, recoveryDelay));
-            Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.4f, 0f), progress);
+            float progress  = Mathf.Clamp01(unstickTimer / Mathf.Max(0.01f, unstickRecoveryDelay));
+            Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.8f, 0f), progress);
             Vector3 start   = transform.position + Vector3.up * 0.3f;
             Vector3 end     = start + transform.right * (progress * 2f);
             Gizmos.DrawLine(start, end);
@@ -477,7 +559,24 @@ public class HoverController_Foundation : MonoBehaviour
             UnityEditor.Handles.color = Gizmos.color;
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 1.5f,
-                $"Recovery {recoveryTimer:F2} / {recoveryDelay:F2}s"
+                $"Unstick {unstickTimer:F2} / {unstickRecoveryDelay:F2}s"
+            );
+        }
+
+        // --- Flip recovery timer bar (orange) ---
+        if (isContactingGround && flipTimer > 0f)
+        {
+            float progress  = Mathf.Clamp01(flipTimer / Mathf.Max(0.01f, flipRecoveryDelay));
+            Gizmos.color    = Color.Lerp(new Color(1f, 0.4f, 0f), Color.red, progress);
+            Vector3 start   = transform.position + Vector3.up * 0.6f;
+            Vector3 end     = start + transform.right * (progress * 2f);
+            Gizmos.DrawLine(start, end);
+            Gizmos.DrawWireSphere(end, 0.08f);
+
+            UnityEditor.Handles.color = Gizmos.color;
+            UnityEditor.Handles.Label(
+                transform.position + Vector3.up * 2.0f,
+                $"Flip {flipTimer:F2} / {flipRecoveryDelay:F2}s"
             );
         }
 

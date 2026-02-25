@@ -719,11 +719,13 @@ MonoBehaviour:
   slopeLiftMultiplier: 1.15
   levelingTorqueStrength: 12
   pitchRollDamping: 8
+  unstickRecoveryDelay: 0.2
+  unstickLiftForce: 60
+  unstickLiftDuration: 0.15
   flipRecoveryAngleThreshold: 80
-  recoveryDelay: 0.5
-  flipRecoveryTorque: 28
-  unstickSpeedThreshold: 0.5
-  unstickImpulseStrength: 15
+  flipRecoveryDelay: 1
+  flipRecoveryTorque: 60
+  flipRecoverySpeedThreshold: 0.5
   extraGravityMultiplier: 3
   extraAirGravity: 3
   groundLayers:
