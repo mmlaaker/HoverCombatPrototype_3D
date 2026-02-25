@@ -711,10 +711,10 @@ MonoBehaviour:
   - {fileID: 7227002333060208497}
   - {fileID: 2380519266511721574}
   - {fileID: 8468858880958529594}
-  hoverHeight: 3
+  hoverHeight: 4
   liftStrength: 10000
   liftDamping: 1500
-  sensorRange: 5
+  sensorRange: 6
   enableSlopeLiftCompensation: 1
   slopeLiftMultiplier: 1.15
   levelingTorqueStrength: 12
@@ -742,11 +742,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20d6ae1d2bf55ef4a82f194547b51e6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Propulsion
-  maxForwardAccel: 25
-  maxReverseAccel: 15
-  topSpeed: 50
-  speedAssistStrength: 15
-  speedAssistMaxAccel: 40
+  maxForwardAccel: 30
+  maxReverseAccel: 20
+  topSpeed: 60
+  speedAssistStrength: 5
+  speedAssistMaxAccel: 20
   yawAccel: 10
   yawDamping: 6
   airTurnMultiplier: 0.5
@@ -756,7 +756,7 @@ MonoBehaviour:
   boostBlendSeconds: 0.35
   boostEnergyPerSecond: 20
   enableJump: 1
-  jumpImpulseMin: 20
+  jumpImpulseMin: 15
   jumpImpulseMax: 40
   jumpMaxChargeTime: 2
   jumpGroundedLockout: 0.2
@@ -765,7 +765,7 @@ MonoBehaviour:
   airJumpImpulse: 7
   softCapStrength: 40
   lateralDamp: 4
-  driftLateralDamp: 0
+  driftLateralDamp: 0.5
   driftYawMultiplier: 1.4
   driftTurnThreshold: 0.4
   driftBlendSeconds: 0.15
