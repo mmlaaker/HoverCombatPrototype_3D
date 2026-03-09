@@ -137,7 +137,7 @@ public class HoverController_Foundation : MonoBehaviour
     [Tooltip("Proportional torque strength driving the craft back to upright. " +
              "Needs to be stronger than levelingTorqueStrength to overcome extreme angles. " +
              "Recommended: 20–40.")]
-    [Range(0f, 80f)]
+    [Range(0f, 250f)]
     [SerializeField] private float flipRecoveryTorque = 28f;
 
     [Tooltip("Speed (m/s) below which flip recovery will fire. " +
