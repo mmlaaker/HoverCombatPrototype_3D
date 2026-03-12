@@ -5394,6 +5394,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 81354351223922551, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.375
+      objectReference: {fileID: 0}
+    - target: {fileID: 81354351223922551, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 3.6
+      objectReference: {fileID: 0}
     - target: {fileID: 877744525593113483, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Layer
       value: 6
@@ -5545,6 +5553,14 @@ PrefabInstance:
     - target: {fileID: 4246840766707924649, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Layer
       value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 4561353639520871918, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.375
+      objectReference: {fileID: 0}
+    - target: {fileID: 4561353639520871918, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 3.6
       objectReference: {fileID: 0}
     - target: {fileID: 4725997358399993205, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: EmissionModule.m_Bursts.Array.data[0].cycleCount

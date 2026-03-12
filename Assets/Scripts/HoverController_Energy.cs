@@ -2,8 +2,12 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Energy v1.0
+/// HoverController_Energy v1.1
 /// ----------------------------
+/// v1.1 changes:
+///   • TryConsume comment expanded to explicitly document the design intent behind
+///     failed calls suppressing regen. The behavior is unchanged — the rationale
+///     is now clearly stated so it won't be "fixed" accidentally.
 /// Responsibilities:
 ///   • Maintains the shared energy pool for all hover abilities (boost, jump, shield, EMP).
 ///   • Regenerates energy when no ability is actively consuming.
@@ -148,12 +152,16 @@ public class HoverController_Energy : MonoBehaviour
     /// Instantaneous abilities (jump) call this once on activation.
     ///
     /// Any successful or failed call this frame suppresses regen for regenDelay seconds.
-    /// This prevents regen ticking during rapid failed attempts at the floor.
+    /// This is intentional design: if you're trying to spend energy you don't have,
+    /// you're still "demanding" from the pool, and regen is held back as a consequence.
+    /// A player who mashes boost at zero energy prolongs their own recovery — panic
+    /// spending is punished. Do not change this to suppress only on success without
+    /// a deliberate design decision to do so.
     /// </summary>
     public bool TryConsume(float amount)
     {
         // Mark that consumption was attempted this frame regardless of outcome.
-        // This resets the regen lockout timer.
+        // Resets the regen lockout timer — see summary above for design rationale.
         consumedThisFrame = true;
 
         if (IsEmpFrozen)

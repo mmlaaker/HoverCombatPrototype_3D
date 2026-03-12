@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Weapons v1.5
+/// HoverController_Weapons v1.6
 /// ----------------------------
 /// Responsibilities:
 ///   • Manages a list of weapon slots, each referencing a shared WeaponDefinition asset.
@@ -27,6 +27,17 @@ using UnityEngine;
 ///     same assets — change damage or fire rate once and every vehicle updates.
 ///   • Vehicle-specific scene references (muzzlePoints, particleEmitters) live in
 ///     WeaponSlot, not in WeaponDefinition.
+///
+/// v1.6 changes:
+///   • Input error message updated to match GetComponent standard across all scripts.
+///   • Committed missile lock state now broadcasts OnMissileLockStateChanged explicitly
+///     before resetting to Idle. Previously Committed was never surfaced to subscribers.
+///   • Unreachable Committed switch case removed (state is entered and reset in the
+///     same frame inside the Locked case — it can never be entered via the switch).
+///   • ScanForLockTarget now gated to Idle/Scanning states only — no OverlapSphere
+///     cost when already Locked or during non-missile weapon use.
+///   • Physics.OverlapSphere replaced with Physics.OverlapSphereNonAlloc using a
+///     pre-allocated Collider[16] buffer. Zero heap allocation per scan call.
 ///
 /// v1.5 changes:
 ///   • WeaponDefinition promoted to ScriptableObject (own file: WeaponDefinition.cs).
@@ -201,6 +212,11 @@ public class HoverController_Weapons : MonoBehaviour
     private float lockTimer;
     private MissileLockState prevLockState;
 
+    // Pre-allocated buffer for missile lock scans. OverlapSphereNonAlloc writes
+    // into this array — no heap allocation per frame. Size 16 is generous for a
+    // game with a small vehicle roster; increase if lock targets exceed this count.
+    private readonly Collider[] _lockScanBuffer = new Collider[16];
+
     // =========================================================================
     // Unity lifecycle
     // =========================================================================
@@ -212,7 +228,8 @@ public class HoverController_Weapons : MonoBehaviour
         aim    = GetComponent<HoverController_Aim>(); // optional — no error if absent
 
         if (input == null)
-            Debug.LogError("[HoverController_Weapons] No IHoverInputProvider found.", this);
+            Debug.LogError("[HoverController_Weapons] No IHoverInputProvider found on this GameObject. " +
+                           "Attach PlayerHoverInput or an AI implementation.", this);
         if (energy == null)
             Debug.LogError("[HoverController_Weapons] No HoverController_Energy found.", this);
 
@@ -404,6 +421,19 @@ public class HoverController_Weapons : MonoBehaviour
 
     /// <summary>
     /// Missile: dumbfire or lock-on depending on useMissileLock.
+    ///
+    /// Lock state transitions:
+    ///   Idle      → Scanning  : FireHeld begins while a target is in cone.
+    ///   Scanning  → Locked    : Lock timer reaches lockAcquireTime.
+    ///   Scanning  → Idle      : FireHeld released or target leaves cone.
+    ///   Locked    → Committed : FirePressed while a ready slot has ammo.
+    ///   Locked    → Idle      : FireHeld released.
+    ///
+    /// Committed is a one-frame broadcast state — the event fires, missile launches,
+    /// and state resets to Idle in the same Update tick. It is never entered via the
+    /// switch because the transition and reset happen together in the Locked case.
+    /// OnMissileLockStateChanged fires for Committed explicitly before the reset
+    /// so subscribers (UI, audio) reliably receive the "missile away" signal.
     /// </summary>
     private void TickMissile(WeaponSlot slot)
     {
@@ -416,7 +446,11 @@ public class HoverController_Weapons : MonoBehaviour
             return;
         }
 
-        bool targetInCone = ScanForLockTarget(def);
+        // Only scan for a target when actively looking — avoids OverlapSphere cost
+        // every frame just because a missile weapon is equipped but not being used.
+        bool targetInCone = (CurrentLockState == MissileLockState.Idle ||
+                             CurrentLockState == MissileLockState.Scanning)
+                            && ScanForLockTarget(def);
 
         switch (CurrentLockState)
         {
@@ -444,14 +478,16 @@ public class HoverController_Weapons : MonoBehaviour
                 if (!input.FireHeld) { ResetLockState(); break; }
                 if (input.FirePressed && slot.IsReady && slot.HasAmmo)
                 {
+                    // Transition to Committed, fire the event explicitly, then fire
+                    // and reset — all in the same frame. Committed is intentionally a
+                    // one-frame pulse: subscribers get the signal, but there's no
+                    // separate tick needed for it.
                     TransitionLockState(MissileLockState.Committed);
+                    OnMissileLockStateChanged?.Invoke(MissileLockState.Committed);
+                    prevLockState = MissileLockState.Committed;
                     FireAllMuzzles(slot);
                     ResetLockState();
                 }
-                break;
-
-            case MissileLockState.Committed:
-                ResetLockState();
                 break;
         }
 
@@ -569,13 +605,16 @@ public class HoverController_Weapons : MonoBehaviour
         Vector3 scanOrigin = transform.position + transform.forward * (def.lockRange * 0.5f);
         float   scanRadius = def.lockRange * Mathf.Tan(def.lockConeAngle * Mathf.Deg2Rad);
 
-        Collider[] hits = Physics.OverlapSphere(scanOrigin, scanRadius, lockTargetLayers);
+        // NonAlloc: writes into the pre-allocated buffer, returns hit count.
+        // Zero heap allocation per call.
+        int hitCount = Physics.OverlapSphereNonAlloc(scanOrigin, scanRadius, _lockScanBuffer, lockTargetLayers);
 
         Transform bestTarget = null;
         float     bestAngle  = def.lockConeAngle + 1f;
 
-        foreach (var hit in hits)
+        for (int i = 0; i < hitCount; i++)
         {
+            var hit = _lockScanBuffer[i];
             if (hit.transform.root == transform.root) continue;
             Vector3 toTarget = hit.transform.position - transform.position;
             if (toTarget.magnitude > def.lockRange) continue;

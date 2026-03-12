@@ -48,7 +48,7 @@ public class WeaponDefinition : ScriptableObject
     [Header("⚔️ Combat")]
     [Tooltip("Damage applied per hit.\n" +
              "For Instantiated weapons: passed to the projectile via IProjectileDamageCarrier.\n" +
-             "For ParticleSystem weapons: read directly by the MachineGunParticleCollision script " +
+             "For ParticleSystem weapons: read directly by the ParticleWeaponCollision script " +
              "on the emitter GameObject.")]
     [Min(0f)]
     public float damage = 25f;

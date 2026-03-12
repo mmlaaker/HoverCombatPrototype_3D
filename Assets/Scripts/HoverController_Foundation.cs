@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v4.2 (Cleanup)
+/// HoverController_Foundation v4.3
 /// --------------------------------
 /// Responsibilities:
 ///   • Per-point spring-damper hover lift
@@ -23,6 +23,11 @@ using UnityEngine;
 ///
 /// External disable hook: SetRecoveryEnabled(bool) suppresses both paths.
 /// Use for EMP effects, scripted events, or ability interactions.
+///
+/// v4.3 changes:
+///   • unstickFiredFlashTimer decrement moved from OnDrawGizmos into a new Update()
+///     method. OnDrawGizmos is called on the editor's schedule (not game framerate)
+///     and should never mutate state. Timer now ticks reliably at game framerate.
 ///
 /// v4.2 changes:
 ///   • unstickSpeedThreshold renamed to flipRecoverySpeedThreshold — clarifies
@@ -289,6 +294,15 @@ public class HoverController_Foundation : MonoBehaviour
         ApplyUnstickForce();
     }
 
+    private void Update()
+    {
+        // Tick the debug flash timer in Update so it runs at game framerate,
+        // not at editor-gizmo-draw rate (which is unpredictable and can be
+        // called multiple times per frame or suppressed entirely).
+        if (unstickFiredFlashTimer > 0f)
+            unstickFiredFlashTimer = Mathf.Max(0f, unstickFiredFlashTimer - Time.deltaTime);
+    }
+
     // -------------------------------------------------------------------------
     // 🧠 Per-Point Spring-Damper Lift
     // -------------------------------------------------------------------------
@@ -525,7 +539,7 @@ public class HoverController_Foundation : MonoBehaviour
         if (!drawDebugRays || !Application.isPlaying)
             return;
 
-        unstickFiredFlashTimer = Mathf.Max(0f, unstickFiredFlashTimer - Time.deltaTime);
+        // unstickFiredFlashTimer is ticked in Update — read-only here.
 
         // --- Hover point spheres ---
         if (hoverPoints != null)

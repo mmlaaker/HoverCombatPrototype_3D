@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v4.4 (Cleanup)
+/// HoverController_Propulsion v4.5
 /// -------------------------------------------------
 /// Responsibilities:
 ///   • Unified drive: grounded only — throttle + assist suppressed airborne unless boosting
@@ -18,6 +18,12 @@ using UnityEngine;
 ///
 /// Drift state modifies two physics values (lateralDamp, yawAccel) and one
 /// visual transform (meshRoot local Z rotation). No new forces are introduced.
+///
+/// v4.5 changes:
+///   • inputProvider serialized field removed. Input acquired via GetComponent<IHoverInputProvider>()
+///     in Awake — consistent with Weapons and Aim. Attach PlayerHoverInput or any AI
+///     implementation to the same GameObject; no inspector wiring required.
+///   • FireGroundedJump comment expanded to explain why charge resets on energy denial.
 ///
 /// v4.4 changes (no behavior change):
 ///   • IsHoverGrounded cached once per FixedUpdate as a local and passed to all methods.
@@ -291,9 +297,10 @@ public class HoverController_Propulsion : MonoBehaviour
     // -------------------------------------------------------------------------
     // 🕹 Input
     // -------------------------------------------------------------------------
-    [Header("🕹 Input")]
-    [Tooltip("MonoBehaviour implementing IHoverInputProvider (player, AI, network...).")]
-    [SerializeField] private MonoBehaviour inputProvider;
+    // Acquired via GetComponent<IHoverInputProvider>() in Awake.
+    // Attach PlayerHoverInput (or any AIHoverInput implementation) to this same
+    // GameObject. No inspector wiring needed — swapping the component changes
+    // who drives the vehicle without touching any other script.
 
     // -------------------------------------------------------------------------
     // 🧭 Debug
@@ -318,12 +325,12 @@ public class HoverController_Propulsion : MonoBehaviour
         foundation = GetComponent<HoverController_Foundation>();
         energy     = GetComponent<HoverController_Energy>();
 
-        input = inputProvider as IHoverInputProvider;
+        input = GetComponent<IHoverInputProvider>();
         if (input == null)
         {
             Debug.LogError(
-                $"[Propulsion] '{name}': inputProvider is null or does not implement " +
-                $"IHoverInputProvider. Vehicle will not respond to input.",
+                $"[Propulsion] '{name}': No IHoverInputProvider found on this GameObject. " +
+                $"Attach PlayerHoverInput or an AI implementation. Vehicle will not respond to input.",
                 this
             );
             enabled = false;
@@ -488,7 +495,9 @@ public class HoverController_Propulsion : MonoBehaviour
 
     /// <summary>
     /// Fires the grounded jump. Charge maps linearly from min to max impulse.
-    /// Charge resets regardless of energy outcome.
+    /// Charge resets regardless of energy outcome — intentional design.
+    /// You cannot hold a charged jump if you didn't have the energy to execute it;
+    /// the release motion happened and the charge is spent whether the jump fires or not.
     /// Lockout timer starts on successful fire only.
     /// </summary>
     private void FireGroundedJump()
@@ -496,7 +505,10 @@ public class HoverController_Propulsion : MonoBehaviour
         float chargeT = Mathf.Clamp01(jumpChargeTimer / jumpMaxChargeTime);
         float impulse = Mathf.Lerp(jumpImpulseMin, jumpImpulseMax, chargeT);
 
-        jumpChargeTimer = 0f; // always reset, even if energy denies
+        // Reset charge unconditionally — the player released the button.
+        // If energy denies the jump, the charge is still gone: no energy = no jump,
+        // even if you held the button for a full charge.
+        jumpChargeTimer = 0f;
 
         if (!energy.TryConsume(jumpGroundedEnergyCost))
             return;

@@ -2,7 +2,7 @@
 /// IDamageable
 /// -----------
 /// Implement on any GameObject that can receive damage.
-/// MachineGunParticleCollision and projectile hit handlers call TakeDamage
+/// ParticleWeaponCollision and projectile hit handlers call TakeDamage
 /// via GetComponentInParent — place this on the vehicle root or the component
 /// that owns the health pool.
 /// </summary>

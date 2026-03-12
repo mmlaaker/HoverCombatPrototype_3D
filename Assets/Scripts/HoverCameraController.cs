@@ -3,7 +3,21 @@ using Unity.Cinemachine;
 using Unity.Cinemachine.TargetTracking;
 
 /// <summary>
-/// HoverCameraController v1.0
+/// HoverCameraController v1.1
+/// ------------------------------------------------
+/// v1.1 changes:
+///   • Drive cam damping values now cached from Inspector in Awake (_drivePositionDamping,
+///     _driveRotationDamping). SetDriveCamActive restores these cached values instead of
+///     hardcoded floats — designer-authored damping on VCam_Drive is no longer overwritten
+///     every time the player exits strafe mode.
+///   • Redundant BindingMode assignment removed from SetStrafeCamActive. BindingMode is
+///     set once in Awake and never changes; setting it on every strafe entry was noise.
+///   • strafeZoomDistance removed. Strafe pull-in distance is now baked directly into
+///     VCam_Strafe's Follow Offset in the Inspector — no runtime modification needed.
+///     See setup notes for recommended offset value.
+///   • strafeModeBlendTime removed. At prototype scale the difference from the
+///     CinemachineBrain default is imperceptible. Reintroduce if dynamic blend
+///     control becomes necessary.
 /// ------------------------------------------------
 /// Manages all camera behavior for the hover vehicle using two Cinemachine
 /// Virtual Cameras blended by a CinemachineBrain on the main camera.
@@ -39,16 +53,17 @@ using Unity.Cinemachine.TargetTracking;
 ///
 ///   VCam_Strafe settings:
 ///      • Add component: CinemachineFollow (Body)
-///        - Follow Offset: (0, 2.5, -6)    ← tighter than drive
-///        - Damping: same as drive
+///        - Follow Offset: (0, 2.5, -4.5)  ← tighter than drive; zoom is baked here,
+///                                            not driven at runtime. Adjust Z to taste.
+///        - Damping: zero (zeroed by script on strafe entry; Inspector value irrelevant)
 ///      • Add component: CinemachineRotationComposer (Aim, same as drive)
-///      • Lens: FOV reduce by 5-8 degrees vs drive cam
+///      • Lens: FOV reduce by 5-8 degrees vs drive cam (baked in Inspector)
+///             Fine-tune with the strafeFovReduction field on this component.
 ///      • Priority: 10
 ///
 ///   3. Assign both VCams to this component in the Inspector.
 ///   4. Assign the vehicle Transform as vehicleTarget.
-///   5. Assign inputProvider (same MonoBehaviour as Propulsion uses).
-///   6. Assign propulsion reference for driftLerp access.
+///   5. Assign propulsion reference for driftLerp access.
 ///
 /// Priority management:
 ///   Both VCams sit at priority 10. The active one is bumped to 11.
@@ -115,18 +130,11 @@ public class HoverCameraController : MonoBehaviour
     // ── Strafe Mode: Zoom ─────────────────────────────────────────────────
 
     [Header("Strafe Mode — Zoom")]
-    [Tooltip("Follow distance reduction when entering strafe mode (metres). " +
-             "Subtracted from VCam_Strafe's follow offset Z.")]
-    [SerializeField] private float strafeZoomDistance = 1.5f;
-
-    [Tooltip("FOV reduction (degrees) in strafe mode for subtle zoom feel.")]
+    [Tooltip("FOV reduction (degrees) in strafe mode for subtle zoom feel. " +
+             "The strafe VCam's follow offset (pull-in distance) should be set " +
+             "directly on VCam_Strafe in the Inspector — no runtime override needed.")]
     [Range(0f, 15f)]
     [SerializeField] private float strafeFovReduction = 5f;
-
-    [Tooltip("Blend time (seconds) for strafe mode entry/exit. " +
-             "Overrides CinemachineBrain default for this specific transition.")]
-    [Range(0.05f, 0.5f)]
-    [SerializeField] private float strafeModeBlendTime = 0.18f;
 
     // ── Private State ─────────────────────────────────────────────────────
 
@@ -155,6 +163,12 @@ public class HoverCameraController : MonoBehaviour
     // Base FOV values read at startup
     private float _driveFov;
     private float _strafeFov;
+
+    // Drive cam damping values read from Inspector at startup.
+    // Restored by SetDriveCamActive so designer-authored damping is never
+    // overwritten by hardcoded values on strafe exit.
+    private Vector3 _drivePositionDamping;
+    private Vector3 _driveRotationDamping;
 
     // ── Unity Lifecycle ───────────────────────────────────────────────────
 
@@ -213,6 +227,12 @@ public class HoverCameraController : MonoBehaviour
         _strafeBaseOffset = _strafeTransposer.FollowOffset;
         _driveFov         = vcamDrive.Lens.FieldOfView;
         _strafeFov        = Mathf.Max(20f, _driveFov - strafeFovReduction);
+
+        // Cache drive cam damping from Inspector — restored on every strafe exit
+        // so SetDriveCamActive never overwrites designer-authored values.
+        var cachedDriveSettings  = _driveTransposer.TrackerSettings;
+        _drivePositionDamping    = cachedDriveSettings.PositionDamping;
+        _driveRotationDamping    = cachedDriveSettings.RotationDamping;
 
         // Drive cam: LockToTargetWithWorldUp — follows yaw only, ignores pitch and roll.
         // Correct for a chase cam where the vehicle tilts but the camera stays level.
@@ -358,10 +378,10 @@ public class HoverCameraController : MonoBehaviour
         vcamDrive.Priority  = 11;
         vcamStrafe.Priority = 10;
 
-        // Restore drive damping to loose chase feel when returning from strafe.
+        // Restore Inspector-authored damping — strafe mode zeroed it out.
         var s = _driveTransposer.TrackerSettings;
-        s.PositionDamping = new Vector3(0.1f, 0.2f, 0.1f);
-        s.RotationDamping = Vector3.zero;
+        s.PositionDamping = _drivePositionDamping;
+        s.RotationDamping = _driveRotationDamping;
         _driveTransposer.TrackerSettings = s;
     }
 
@@ -376,10 +396,8 @@ public class HoverCameraController : MonoBehaviour
         _shoulderOffset     = 0f;
 
         // Zero all damping — no lag, no float. Snaps instantly to vehicle heading.
-        // LockToTargetNoRoll: follows yaw AND pitch, ignores roll only.
-        // This is what lets the camera physically tilt with the vehicle nose.
+        // BindingMode (LockToTargetNoRoll) is set once in Awake and never changes.
         var s = _strafeTransposer.TrackerSettings;
-        s.BindingMode     = BindingMode.LockToTargetNoRoll;
         s.PositionDamping = Vector3.zero;
         s.RotationDamping = Vector3.zero;
         _strafeTransposer.TrackerSettings = s;

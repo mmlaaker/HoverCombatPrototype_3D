@@ -10602,66 +10602,6 @@ MonoBehaviour:
     Time: 0
     Smoothing: 0
     IgnoreY: 0
---- !u!1 &7405317532559880461
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 791231726143097423}
-  - component: {fileID: 5947783657900354236}
-  m_Layer: 6
-  m_Name: CameraController
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &791231726143097423
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7405317532559880461}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 3064200685584003947}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5947783657900354236
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7405317532559880461}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fffa4fcb18b7d8c488987fecf883c54c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::HoverCameraController
-  vcamDrive: {fileID: 5247650669254573615}
-  vcamStrafe: {fileID: 3280332011778038191}
-  vehicleTarget: {fileID: 5927693998371741120}
-  inputProvider: {fileID: 5761321178091812356}
-  propulsion: {fileID: 4964355425596500860}
-  pitchSensitivity: 0.7
-  minPitch: -2
-  maxPitch: 40
-  neutralPitch: 25
-  pitchRecenterSpeed: 2
-  shoulderShiftAmount: 1.8
-  shoulderLookAheadAmount: 2.5
-  shoulderShiftLerpSpeed: 8
-  strafeZoomDistance: 1.5
-  strafeFovReduction: 5
-  strafeModeBlendTime: 0.18
 --- !u!1 &7894608167141707692
 GameObject:
   m_ObjectHideFlags: 0
@@ -15540,6 +15480,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3064200685584003947}
+  - component: {fileID: 8117794995601602338}
   m_Layer: 6
   m_Name: Camera
   m_TagString: Untagged
@@ -15560,9 +15501,36 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 791231726143097423}
   - {fileID: 2096558219934102082}
   - {fileID: 3491960792251741337}
   - {fileID: 1503798771953180643}
   m_Father: {fileID: 5927693998371741120}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8117794995601602338
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8930254675372870425}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fffa4fcb18b7d8c488987fecf883c54c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverCameraController
+  vcamDrive: {fileID: 5247650669254573615}
+  vcamStrafe: {fileID: 3280332011778038191}
+  vehicleTarget: {fileID: 5927693998371741120}
+  inputProvider: {fileID: 5761321178091812356}
+  propulsion: {fileID: 4964355425596500860}
+  pitchSensitivity: 0.7
+  minPitch: -2
+  maxPitch: 40
+  neutralPitch: 25
+  pitchRecenterSpeed: 2
+  shoulderShiftAmount: 1.8
+  shoulderLookAheadAmount: 2.5
+  shoulderShiftLerpSpeed: 8
+  strafeZoomDistance: 1.5
+  strafeFovReduction: 5
+  strafeModeBlendTime: 0.18

@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Aim v1.0
+/// HoverController_Aim v1.1
 /// ------------------------
 /// Responsibilities:
 ///   • Computes an intentional world-space aim rotation each LateUpdate.
@@ -27,8 +27,15 @@ using UnityEngine;
 ///     are left at their last orientation — they don't need updating while inactive.
 ///   • Instantiated-mode weapons (muzzle points) are not affected. Muzzle point
 ///     orientation is the designer's responsibility via transform placement.
+///   • Input is acquired via GetComponent<IHoverInputProvider>() — attach
+///     PlayerHoverInput or any AI implementation to this same GameObject.
+///
+/// v1.1 changes:
+///   • Removed [DefaultExecutionOrder(-10)] — LateUpdate naturally runs after all
+///     Update and FixedUpdate calls, so no explicit ordering is needed.
+///   • inputProvider serialized field removed. Input now acquired via GetComponent
+///     in Awake, consistent with Propulsion and Weapons.
 /// </summary>
-[DefaultExecutionOrder(-10)]
 [RequireComponent(typeof(HoverController_Propulsion))]
 [RequireComponent(typeof(HoverController_Weapons))]
 public class HoverController_Aim : MonoBehaviour
@@ -37,10 +44,8 @@ public class HoverController_Aim : MonoBehaviour
     // Inspector
     // -------------------------------------------------------------------------
 
-    [Header("🕹 Input")]
-    [Tooltip("MonoBehaviour implementing IHoverInputProvider. " +
-             "Must be the same provider assigned to Propulsion and Weapons.")]
-    [SerializeField] private MonoBehaviour inputProvider;
+    // Input acquired via GetComponent<IHoverInputProvider>() in Awake.
+    // Attach PlayerHoverInput or any AIHoverInput to this same GameObject.
 
     [Header("🛠 Debug")]
     [Tooltip("Draw the computed aim direction as a ray in the Scene view.")]
@@ -64,11 +69,11 @@ public class HoverController_Aim : MonoBehaviour
     private void Awake()
     {
         propulsion = GetComponent<HoverController_Propulsion>();
-        input      = inputProvider as IHoverInputProvider;
+        input      = GetComponent<IHoverInputProvider>();
 
         if (input == null)
-            Debug.LogError("[HoverController_Aim] inputProvider is null or missing " +
-                           "IHoverInputProvider. Aim will not function.", this);
+            Debug.LogError("[HoverController_Aim] No IHoverInputProvider found on this GameObject. " +
+                           "Attach PlayerHoverInput or an AI implementation. Aim will not function.", this);
     }
 
     /// <summary>

@@ -48,6 +48,10 @@ public class ParticleWeaponCollision : MonoBehaviour
     {
         int count = ParticlePhysicsExtensions.GetCollisionEvents(ps, other, collisionEvents);
 
+        // NOTE (pooling debt): GetComponentInParent walks the hierarchy on every hit.
+        // At high machine gun emission rates this accumulates. When projectile pooling
+        // is introduced, cache IDamageable and Rigidbody on the pooled object at
+        // retrieval time rather than walking the hierarchy per collision event.
         for (int i = 0; i < count; i++)
         {
             // Apply damage. Walk up the hierarchy — bullets typically hit child colliders.
