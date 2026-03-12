@@ -2,45 +2,87 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// PlayerHoverInput v7.0 (Jump Support)
+/// PlayerHoverInput v9.1 (Left Stick as Vector2)
 /// ------------------------------------------------
-/// Reads throttle, turn, boost, drift, and jump via Unity's New Input System.
+/// Reads all vehicle and camera inputs via Unity's New Input System.
 /// Requires a PlayerInput component with a HoverControls InputActionAsset assigned.
+///
 /// Expected action map: 'Hover' with actions:
-///   • 'Throttle' (float)  — Left Stick Y
-///   • 'Turn'     (float)  — Right Stick X
-///   • 'Boost'    (Button) — Square
-///   • 'Drift'    (Button) — L1
-///   • 'Jump'     (Button) — Cross / X
+///   • 'Throttle'         (Vector2) — Left Stick (FULL STICK — not Y only)
+///   • 'Turn'             (float)   — Right Stick X
+///   • 'CameraLookY'      (float)   — Right Stick Y
+///   • 'Strafe'           (Button)  — L2 / Left Trigger
+///   • 'Boost'            (Button)  — Square
+///   • 'Drift'            (Button)  — L1
+///   • 'Jump'             (Button)  — Cross / X
+///   • 'Fire'             (Button)  — R2 / Left Mouse
+///   • 'CycleWeaponNext'  (Button)  — D-Pad Right / E
+///   • 'CycleWeaponPrev'  (Button)  — D-Pad Left / Q
 ///
-/// Supported devices:
-/// • Keyboard: W/S (throttle) + A/D (turn) + Left Shift (boost) + Left Alt (drift) + Space (jump)
-/// • PS4: Left Stick Y (throttle) + Right Stick X (turn) + Square (boost) + L1 (drift) + Cross (jump)
+/// Input routing notes:
+///   • Throttle is now a Vector2 — Y drives forward/back, X drives StrafeX lateral.
+///     Reading both from the same action prevents Unity's per-axis normalization
+///     from crushing one component when both are deflected simultaneously.
+///   • TurnInput is Right Stick X in both modes — consumers decide context.
+///   • CameraLookY is Right Stick Y — Drive: camera pitch / Strafe: vehicle pitch.
+///   • AimInput is TurnInput + CameraLookY composed as a Vector2 convenience.
+///   • StrafeHeld is a raw hold — no rising edge needed.
 ///
-/// Setup:
-/// 1. Add 'Jump' action (Button) to the Hover action map in HoverControls asset
-/// 2. Bind to Cross [PlayStation Controller]
-/// 3. Bind to Space [Keyboard]
+/// Input Asset changes from v9.0:
+///   • Delete the 'StrafeX' action entirely.
+///   • Change 'Throttle' binding from Left Stick/Y to Left Stick [Gamepad].
+///   • Set Throttle Action Type = Value, Control Type = Vector2.
+///
+/// v9.1 changes:
+///   • Throttle reads full Left Stick Vector2 — X → StrafeX, Y → ThrottleInput.
+///   • Removed StrafeX action and _strafeXAction entirely.
 /// </summary>
 [RequireComponent(typeof(PlayerInput))]
 public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 {
     // ── IHoverInputProvider ──────────────────────────────────────────────
 
-    /// <summary>Forward/reverse input. Range: -1 (reverse) to +1 (forward).</summary>
+    /// <summary>Forward/reverse throttle. Range: -1 to +1.</summary>
     public float ThrottleInput { get; private set; }
 
-    /// <summary>Turn input. Range: -1 (left) to +1 (right).</summary>
+    /// <summary>Right Stick X. Yaw in both modes — consumer selects context.</summary>
     public float TurnInput { get; private set; }
+
+    /// <summary>
+    /// Right Stick Y. Drive Mode: camera pitch. Strafe Mode: vehicle pitch.
+    /// Range: -1 (down) to +1 (up).
+    /// </summary>
+    public float CameraLookY { get; private set; }
+
+    /// <summary>Right Stick as Vector2 (X = TurnInput, Y = CameraLookY).</summary>
+    public Vector2 AimInput { get; private set; }
+
+    /// <summary>True while Left Trigger / L2 is held. Activates Strafe Mode.</summary>
+    public bool StrafeHeld { get; private set; }
+
+    /// <summary>Left Stick X — lateral movement in Strafe Mode. Range: -1 to +1.</summary>
+    public float StrafeX { get; private set; }
 
     /// <summary>True while boost is held.</summary>
     public bool Boost { get; private set; }
 
-    /// <summary>True while drift is held (L1).</summary>
+    /// <summary>True while drift is held.</summary>
     public bool Drift { get; private set; }
 
-    /// <summary>True while jump is held (Cross / X).</summary>
+    /// <summary>True while jump is held.</summary>
     public bool Jump { get; private set; }
+
+    /// <summary>True while fire is held. Drives Minigun wind-up, missile scanning.</summary>
+    public bool FireHeld { get; private set; }
+
+    /// <summary>True on first frame fire is pressed (rising edge).</summary>
+    public bool FirePressed { get; private set; }
+
+    /// <summary>True on first frame D-Pad Right / E pressed (rising edge).</summary>
+    public bool CycleWeaponNext { get; private set; }
+
+    /// <summary>True on first frame D-Pad Left / Q pressed (rising edge).</summary>
+    public bool CycleWeaponPrev { get; private set; }
 
     // ── Serialized ───────────────────────────────────────────────────────
 
@@ -52,9 +94,18 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 
     private InputAction _throttleAction;
     private InputAction _turnAction;
+    private InputAction _cameraLookYAction;
+    private InputAction _strafeAction;
     private InputAction _boostAction;
     private InputAction _driftAction;
     private InputAction _jumpAction;
+    private InputAction _fireAction;
+    private InputAction _cycleWeaponNextAction;
+    private InputAction _cycleWeaponPrevAction;
+
+    private bool _fireHeldLastFrame;
+    private bool _cycleNextHeldLastFrame;
+    private bool _cyclePrevHeldLastFrame;
 
     // ── Unity Lifecycle ──────────────────────────────────────────────────
 
@@ -64,37 +115,64 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
 
         if (playerInput.actions == null)
         {
-            Debug.LogError("[PlayerHoverInput] No InputActionAsset assigned to PlayerInput component. " +
-                           "Assign HoverControls to the PlayerInput Actions field in the Inspector.", this);
+            Debug.LogError("[PlayerHoverInput] No InputActionAsset assigned to PlayerInput.", this);
             enabled = false;
             return;
         }
 
-        _throttleAction = playerInput.actions["Hover/Throttle"];
-        _turnAction     = playerInput.actions["Hover/Turn"];
-        _boostAction    = playerInput.actions["Hover/Boost"];
-        _driftAction    = playerInput.actions["Hover/Drift"];
-        _jumpAction     = playerInput.actions["Hover/Jump"];
+        _throttleAction        = playerInput.actions["Hover/Throttle"];
+        _turnAction            = playerInput.actions["Hover/Turn"];
+        _cameraLookYAction     = playerInput.actions["Hover/CameraLookY"];
+        _strafeAction          = playerInput.actions["Hover/Strafe"];
+        _boostAction           = playerInput.actions["Hover/Boost"];
+        _driftAction           = playerInput.actions["Hover/Drift"];
+        _jumpAction            = playerInput.actions["Hover/Jump"];
+        _fireAction            = playerInput.actions["Hover/Fire"];
+        _cycleWeaponNextAction = playerInput.actions["Hover/CycleWeaponNext"];
+        _cycleWeaponPrevAction = playerInput.actions["Hover/CycleWeaponPrev"];
 
-        if (_throttleAction == null || _turnAction == null || _boostAction == null ||
-            _driftAction    == null || _jumpAction == null)
+        if (_throttleAction == null || _turnAction == null || _cameraLookYAction == null ||
+            _strafeAction == null   || _boostAction == null || _driftAction == null ||
+            _jumpAction == null     || _fireAction == null  ||
+            _cycleWeaponNextAction == null || _cycleWeaponPrevAction == null)
         {
-            Debug.LogError("[PlayerHoverInput] One or more actions not found in InputActionAsset. " +
-                           "Expected action map 'Hover' with actions: " +
-                           "'Throttle' (float), 'Turn' (float), 'Boost' (Button), " +
-                           "'Drift' (Button), 'Jump' (Button).", this);
+            Debug.LogError(
+                "[PlayerHoverInput] One or more actions missing from InputActionAsset. " +
+                "Expected Hover action map with: Throttle, Turn, CameraLookY, Strafe, " +
+                "Boost, Drift, Jump, Fire, CycleWeaponNext, CycleWeaponPrev.", this);
             enabled = false;
-            return;
         }
     }
 
     private void Update()
     {
-        ThrottleInput = ApplyDeadzone(_throttleAction.ReadValue<float>());
+        // Read full Left Stick as Vector2 — avoids Unity per-axis normalization
+        // that crushes one component when both axes are deflected simultaneously.
+        Vector2 leftStick = _throttleAction.ReadValue<Vector2>();
+        ThrottleInput = ApplyDeadzone(leftStick.y);
+        StrafeX       = ApplyDeadzone(leftStick.x);
+
         TurnInput     = ApplyDeadzone(_turnAction.ReadValue<float>());
-        Boost         = _boostAction.ReadValue<float>() > 0.5f;
-        Drift         = _driftAction.ReadValue<float>() > 0.5f;
-        Jump          = _jumpAction.ReadValue<float>()  > 0.5f;
+        CameraLookY   = ApplyDeadzone(_cameraLookYAction.ReadValue<float>());
+        AimInput      = new Vector2(TurnInput, CameraLookY);
+
+        StrafeHeld = _strafeAction.ReadValue<float>() > 0.5f;
+        Boost      = _boostAction.ReadValue<float>()  > 0.5f;
+        Drift      = _driftAction.ReadValue<float>()  > 0.5f;
+        Jump       = _jumpAction.ReadValue<float>()   > 0.5f;
+
+        bool fireRaw = _fireAction.ReadValue<float>() > 0.5f;
+        FireHeld     = fireRaw;
+        FirePressed  = fireRaw && !_fireHeldLastFrame;
+        _fireHeldLastFrame = fireRaw;
+
+        bool cycleNextRaw       = _cycleWeaponNextAction.ReadValue<float>() > 0.5f;
+        CycleWeaponNext         = cycleNextRaw && !_cycleNextHeldLastFrame;
+        _cycleNextHeldLastFrame = cycleNextRaw;
+
+        bool cyclePrevRaw       = _cycleWeaponPrevAction.ReadValue<float>() > 0.5f;
+        CycleWeaponPrev         = cyclePrevRaw && !_cyclePrevHeldLastFrame;
+        _cyclePrevHeldLastFrame = cyclePrevRaw;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

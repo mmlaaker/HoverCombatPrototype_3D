@@ -17,12 +17,21 @@
                 },
                 {
                     "name": "Turn",
-                    "type": "Button",
+                    "type": "Value",
                     "id": "d1ca6f37-52ae-4d98-94c8-e4ae5f41a0ad",
-                    "expectedControlType": "",
+                    "expectedControlType": "Vector2",
                     "processors": "",
                     "interactions": "",
-                    "initialStateCheck": false
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "CameraLookY",
+                    "type": "Value",
+                    "id": "6b84a706-0073-4283-a15b-ab9475367682",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
                 },
                 {
                     "name": "Drift",
@@ -50,28 +59,53 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "Fire",
+                    "type": "Button",
+                    "id": "425c9c33-7dff-41a8-bb5f-b6f325af8960",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CycleWeaponNext",
+                    "type": "Button",
+                    "id": "71c1ceab-16b1-474a-a765-926bd1297d06",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CycleWeaponPrev",
+                    "type": "Button",
+                    "id": "1d70afbc-f587-445b-96e3-087d16662ef7",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Strafe",
+                    "type": "Button",
+                    "id": "11a14ef5-1513-4d87-b205-e437aafe51f0",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
                 {
                     "name": "",
                     "id": "0efcd083-04da-4607-933b-5147c0cec163",
-                    "path": "<Gamepad>/leftStick/y",
+                    "path": "<Gamepad>/leftStick",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
                     "action": "Throttle",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "d997c89d-b603-4fc2-b937-35a7f3bc2163",
-                    "path": "<Keyboard>/leftShift",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Boost",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -83,17 +117,6 @@
                     "processors": "",
                     "groups": "",
                     "action": "Boost",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "d44a5552-0fac-4112-b86a-58dd416a3d7b",
-                    "path": "<Keyboard>/leftAlt",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Drift",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -121,6 +144,17 @@
                 },
                 {
                     "name": "",
+                    "id": "06751e2a-5908-4036-9e32-ff4d55a64de2",
+                    "path": "<Gamepad>/rightStick/y",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CameraLookY",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
                     "id": "c8a64607-4e39-4844-9d5c-8a570a6bfb8e",
                     "path": "<Gamepad>/buttonSouth",
                     "interactions": "",
@@ -132,12 +166,45 @@
                 },
                 {
                     "name": "",
-                    "id": "a5666692-f93c-4ed6-8ae6-1fd22a27fe7d",
-                    "path": "<Keyboard>/space",
+                    "id": "5ba41663-07c1-4730-8fcf-5b3efb492b1a",
+                    "path": "<Gamepad>/rightTrigger",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Jump",
+                    "action": "Fire",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a6d353f8-1d40-43e2-9f4c-612a5f456912",
+                    "path": "<Gamepad>/dpad/right",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CycleWeaponNext",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "c0aa5ea0-e1b3-41ea-af66-86ac53d2e0f8",
+                    "path": "<Gamepad>/dpad/left",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CycleWeaponPrev",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "70d14718-992f-471d-97d9-510c19f03bea",
+                    "path": "<Gamepad>/leftTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Strafe",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

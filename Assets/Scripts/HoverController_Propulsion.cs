@@ -230,6 +230,64 @@ public class HoverController_Propulsion : MonoBehaviour
 
     private float driftLerp; // 0..1, managed by ApplyDriftBlend
 
+    /// <summary>
+    /// Current drift blend value (0 = no drift, 1 = full drift).
+    /// Read by HoverCameraController for shoulder shift magnitude.
+    /// </summary>
+    public float DriftLerp => driftLerp;
+
+    // -------------------------------------------------------------------------
+    // 🎯 Strafe Mode
+    // -------------------------------------------------------------------------
+    [Header("🎯 Strafe Mode")]
+    [Tooltip("Enable strafe/aim mode (Left Trigger).")]
+    [SerializeField] private bool enableStrafe = true;
+
+    [Tooltip("Maximum speed (m/s) the vehicle can sustain or build to while in strafe mode. " +
+             "Entry speed above this bleeds off naturally via the soft cap. " +
+             "Cannot be re-built above this threshold in strafe.")]
+    [Min(1f)]
+    [SerializeField] private float strafeTopSpeed = 20f;
+
+    [Tooltip("Acceleration (m/s²) for omni-directional strafe movement on the ground plane. " +
+             "Lower than normal forward accel — strafe is maneuvering, not charging.")]
+    [Min(0f)]
+    [SerializeField] private float strafeAccel = 15f;
+
+    [Tooltip("Maximum pitch angle (degrees) the vehicle nose can tilt up or down in strafe mode. " +
+             "Applied via torque — Foundation's leveling works against this, creating natural resistance.")]
+    [Range(5f, 45f)]
+    [SerializeField] private float strafePitchLimit = 15f;
+
+    [Tooltip("Torque strength driving the vehicle toward the target pitch angle in strafe mode. " +
+             "Keep this LOW — Foundation's levelingTorqueStrength fights it, so values above 5 " +
+             "will oscillate. Recommended: 2–5.")]
+    [Range(0.5f, 15f)]
+    [SerializeField] private float strafePitchTorque = 3f;
+
+    [Tooltip("Damping counter-torque applied to the pitch angular velocity in strafe mode. " +
+             "Critical for preventing oscillation. Pair with strafePitchTorque. Recommended: 4–8.")]
+    [Range(0f, 20f)]
+    [SerializeField] private float strafePitchDamping = 6f;
+
+    [Tooltip("Time (seconds) to blend strafe movement in when entering strafe mode.")]
+    [Min(0.05f)]
+    [SerializeField] private float strafeModeBlendSeconds = 0.2f;
+
+    private float _strafeModeBlend; // 0..1, blends strafe movement authority in/out
+
+    /// <summary>
+    /// Maximum pitch angle (degrees) the vehicle nose can tilt in strafe mode.
+    /// Read by HoverController_Aim to keep weapon aim range consistent with vehicle pitch range.
+    /// </summary>
+    public float StrafePitchLimit => strafePitchLimit;
+
+    /// <summary>
+    /// Current strafe mode blend weight (0 = drive mode, 1 = full strafe).
+    /// Read by HoverController_Aim to scale aim pitch in sync with strafe entry/exit.
+    /// </summary>
+    public float StrafeModeBlend => _strafeModeBlend;
+
     // -------------------------------------------------------------------------
     // 🕹 Input
     // -------------------------------------------------------------------------
@@ -291,10 +349,13 @@ public class HoverController_Propulsion : MonoBehaviour
 
         ApplyBoostBlend();
         ApplyDriftBlend();
+        ApplyStrafeModeBlend();
         ApplyDrive(grounded, effectiveTopSpeed, effectiveForwardAccel);
+        ApplyStrafe(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyTurning(grounded);
         ApplyDrag(grounded);
         ApplySoftSpeedCap(grounded, effectiveTopSpeed);
+        ApplyStrafePitch();
         HandleJump(grounded);
     }
 
@@ -505,18 +566,29 @@ public class HoverController_Propulsion : MonoBehaviour
 
         rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
 
-        float targetSpeed = throttle * effectiveTopSpeed;
-        float currentFwd  = Vector3.Dot(rb.linearVelocity, transform.forward);
-        float error       = targetSpeed - currentFwd;
-        float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
+        // Speed assist is suppressed in strafe mode — it assumes the vehicle wants
+        // to maintain speed along forward, which conflicts with omni-directional
+        // intent where the player may be deliberately crossing their own momentum.
+        if (_strafeModeBlend < 1f)
+        {
+            float targetSpeed = throttle * effectiveTopSpeed;
+            float currentFwd  = Vector3.Dot(rb.linearVelocity, transform.forward);
+            float error       = targetSpeed - currentFwd;
+            float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
+            assistAccel *= (1f - _strafeModeBlend);
 
-        if (!grounded && assistAccel < 0f)
-            assistAccel = 0f;
+            if (!grounded && assistAccel < 0f)
+                assistAccel = 0f;
 
-        rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
+            rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
 
-        if (drawDebug)
-            Debug.DrawRay(transform.position, transform.forward * (rawAccel + assistAccel), Color.yellow);
+            if (drawDebug)
+                Debug.DrawRay(transform.position, transform.forward * (rawAccel + assistAccel), Color.yellow);
+        }
+        else if (drawDebug)
+        {
+            Debug.DrawRay(transform.position, transform.forward * rawAccel, Color.yellow);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -550,14 +622,18 @@ public class HoverController_Propulsion : MonoBehaviour
         if (!grounded)
             return;
 
-        // Effective lateral damp inlined — lerps between normal and drift damp value.
+        // Omni-directional drag — applied symmetrically to both lateral (X) and
+        // forward (Z) axes so deceleration feels consistent in all directions.
+        // lateralDamp is now effectively an omni-damp value; rename in Inspector
+        // if desired. Drift state reduces it via driftLateralDamp on both axes.
         float effectiveDamp = Mathf.Lerp(lateralDamp, driftLateralDamp, driftLerp);
 
         if (effectiveDamp <= 0f)
             return;
 
         Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
-        rb.AddForce(transform.right * (-localVel.x * effectiveDamp), ForceMode.Acceleration);
+        rb.AddForce(transform.right   * (-localVel.x * effectiveDamp), ForceMode.Acceleration);
+        rb.AddForce(transform.forward * (-localVel.z * effectiveDamp), ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -577,6 +653,116 @@ public class HoverController_Propulsion : MonoBehaviour
             targetRot,
             bankLerpSpeed * Time.deltaTime
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // 🎯 Strafe Mode Blend
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Smoothly blends strafe mode authority in and out on trigger hold/release.
+    /// _strafeModeBlend is the weight applied to strafe-specific forces.
+    /// Drive forces are attenuated by (1 - _strafeModeBlend) to prevent
+    /// double-force during the blend transition.
+    /// </summary>
+    private void ApplyStrafeModeBlend()
+    {
+        if (!enableStrafe)
+        {
+            _strafeModeBlend = 0f;
+            return;
+        }
+
+        float target = input.StrafeHeld ? 1f : 0f;
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, strafeModeBlendSeconds);
+        _strafeModeBlend = Mathf.MoveTowards(_strafeModeBlend, target, step);
+    }
+
+    // -------------------------------------------------------------------------
+    // 🎯 Omni-Directional Lateral Movement (both modes)
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Left Stick X drives lateral movement in both drive and strafe mode.
+    /// Left Stick Y (ThrottleInput) handles forward/back in both modes via ApplyDrive.
+    ///
+    /// In drive mode, ApplyDrag's lateral damp partially resists sideways movement
+    /// so the vehicle still feels directional. In strafe mode, lateral damp is
+    /// suppressed so movement is fully free.
+    ///
+    /// The per-axis speed cap only kicks in when a single local axis exceeds
+    /// strafeTopSpeed — forward and lateral are capped independently so entry
+    /// momentum doesn't strangle lateral acceleration.
+    /// </summary>
+    private void ApplyStrafe(bool grounded, float effectiveTopSpeed, float effectiveLateralAccel)
+    {
+        if (!grounded)
+            return;
+
+        float stickX = Mathf.Clamp(input.StrafeX, -1f, 1f);
+
+        if (Mathf.Abs(stickX) < 0.001f)
+            return;
+
+        // Lateral accel and top speed scale with boost the same way forward does.
+        // effectiveLateralAccel = strafeAccel * boostAccelMultiplier during boost.
+        // effectiveLateralTopSpeed = strafeTopSpeed * boostSpeedMultiplier during boost.
+        float effectiveLateralAccelScaled = strafeAccel * (effectiveLateralAccel / maxForwardAccel);
+        float effectiveLateralTopSpeed    = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
+
+        rb.AddForce(transform.right * (stickX * effectiveLateralAccelScaled), ForceMode.Acceleration);
+
+        // Per-axis lateral speed cap — only resists if lateral velocity alone
+        // exceeds the boost-scaled lateral top speed.
+        Vector3 localVel     = transform.InverseTransformDirection(rb.linearVelocity);
+        float   localLateral = localVel.x;
+
+        if (Mathf.Abs(localLateral) > effectiveLateralTopSpeed)
+        {
+            float excess = Mathf.Abs(localLateral) - effectiveLateralTopSpeed;
+            rb.AddForce(-transform.right * (Mathf.Sign(localLateral) * excess * softCapStrength),
+                        ForceMode.Acceleration);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 🎯 Strafe Pitch — nose tilt up/down via right stick Y
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// In strafe mode, right stick Y (CameraLookY) tilts the vehicle nose
+    /// up or down within strafePitchLimit. This is Interpretation A from the
+    /// design discussion — vehicle body IS the turret. Weapons fire along forward.
+    ///
+    /// Implementation: proportional torque drives toward target pitch; a separate
+    /// damping term kills angular velocity on the pitch axis to prevent oscillation.
+    /// Foundation's leveling torque naturally snaps back to level on stick release.
+    ///
+    /// Tuning note: strafePitchTorque must stay LOW relative to Foundation's
+    /// levelingTorqueStrength — they're competing forces. strafePitchDamping
+    /// is the primary oscillation killer. Start with torque=3, damping=6.
+    /// </summary>
+    private void ApplyStrafePitch()
+    {
+        if (_strafeModeBlend <= 0f)
+            return;
+
+        float aimY = input.CameraLookY;
+
+        // Small deadzone to prevent jitter at stick center
+        if (Mathf.Abs(aimY) < 0.1f)
+            aimY = 0f;
+
+        // Target pitch: stick up (+1) = nose up = negative local X euler
+        float targetPitch  = -aimY * strafePitchLimit;
+        float currentPitch = NormalizeAngle(transform.localEulerAngles.x);
+        float pitchError   = targetPitch - currentPitch;
+
+        // Proportional drive toward target pitch
+        float driveTorque = pitchError * strafePitchTorque * _strafeModeBlend;
+
+        // Damping: counter-torque opposing current pitch angular velocity
+        float localPitchRate = transform.InverseTransformDirection(rb.angularVelocity).x;
+        float dampTorque     = -localPitchRate * strafePitchDamping * _strafeModeBlend;
+
+        rb.AddRelativeTorque(Vector3.right * (driveTorque + dampTorque), ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -604,5 +790,19 @@ public class HoverController_Propulsion : MonoBehaviour
         float   excess       = speed - effectiveTopSpeed;
         Vector3 counterForce = -horiz.normalized * (excess * softCapStrength);
         rb.AddForce(counterForce, ForceMode.Acceleration);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Normalizes a Unity euler angle from 0..360 to -180..180.
+    /// Required for strafe pitch error calculation — Unity returns 350 for -10 degrees.
+    /// </summary>
+    private static float NormalizeAngle(float angle)
+    {
+        if (angle > 180f) angle -= 360f;
+        return angle;
     }
 }
