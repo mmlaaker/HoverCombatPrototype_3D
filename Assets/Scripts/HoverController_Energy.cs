@@ -2,8 +2,18 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Energy v1.1
+/// HoverController_Energy v1.2
 /// ----------------------------
+/// v1.2 changes:
+///   • consumedThisFrame (bool) and timeSinceLastConsume (float) replaced with a single
+///     lastConsumeTime timestamp (Time.unscaledTime). TickRegen now derives
+///     timeSinceLastConsume by subtracting lastConsumeTime from the current time.
+///     Root cause fixed: consumedThisFrame was reset at the start of Update, but
+///     TryConsume is called from FixedUpdate (propulsion). If Update ran after
+///     FixedUpdate in the same frame, the flag was already cleared before TickRegen
+///     could read it — regen was never suppressed during boost, exactly canceling drain.
+///     A timestamp is immune to Update/FixedUpdate ordering.
+///
 /// v1.1 changes:
 ///   • TryConsume comment expanded to explicitly document the design intent behind
 ///     failed calls suppressing regen. The behavior is unchanged — the rationale
@@ -98,17 +108,14 @@ public class HoverController_Energy : MonoBehaviour
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Seconds since last TryConsume call. When this exceeds regenDelay, regen resumes.
-    /// Reset to 0 every frame that TryConsume is called. Tracked in Update so it
-    /// accumulates at wall-clock speed regardless of fixed timestep.
+    /// The unscaled time at which TryConsume was last successfully or unsuccessfully called.
+    /// Used to compute timeSinceLastConsume in TickRegen.
+    /// Using Time.unscaledTime rather than a per-Update-frame boolean eliminates the
+    /// Update/FixedUpdate ordering problem: a per-frame bool reset at the start of Update
+    /// would be cleared before TickRegen reads it if FixedUpdate runs in between.
+    /// This timestamp is immune to that race — it holds its value until the next consume call.
     /// </summary>
-    private float timeSinceLastConsume;
-
-    /// <summary>
-    /// Whether a TryConsume call was made this Update frame.
-    /// Set at the start of each Update, written by TryConsume, read by regen logic.
-    /// </summary>
-    private bool consumedThisFrame;
+    private float lastConsumeTime = float.NegativeInfinity;
 
     /// <summary>True after pool hits zero; cleared when pool rises above zero.</summary>
     private bool isDepleted;
@@ -127,9 +134,6 @@ public class HoverController_Energy : MonoBehaviour
 
     private void Update()
     {
-        // Reset per-frame consume flag. TryConsume sets this if called this frame.
-        consumedThisFrame = false;
-
         TickEmpFreeze();
         TickRegen();
         TickDepletionState();
@@ -160,9 +164,9 @@ public class HoverController_Energy : MonoBehaviour
     /// </summary>
     public bool TryConsume(float amount)
     {
-        // Mark that consumption was attempted this frame regardless of outcome.
-        // Resets the regen lockout timer — see summary above for design rationale.
-        consumedThisFrame = true;
+        // Record the time of this consume attempt regardless of outcome.
+        // Resets the regen lockout — see class summary for design rationale.
+        lastConsumeTime = Time.unscaledTime;
 
         if (IsEmpFrozen)
             return false;
@@ -226,18 +230,9 @@ public class HoverController_Energy : MonoBehaviour
     {
         bool wasRegenerating = IsRegenerating;
 
-        if (consumedThisFrame)
-        {
-            timeSinceLastConsume = 0f;
-            IsRegenerating = false;
-        }
-        else
-        {
-            timeSinceLastConsume += Time.deltaTime;
-        }
-
-        bool lockoutExpired  = timeSinceLastConsume >= regenDelay;
-        bool canRegen        = !consumedThisFrame && lockoutExpired && !IsEmpFrozen && Energy < maxEnergy;
+        float timeSinceLastConsume = Time.unscaledTime - lastConsumeTime;
+        bool  recentlyConsumed     = timeSinceLastConsume < regenDelay;
+        bool  canRegen             = !recentlyConsumed && !IsEmpFrozen && Energy < maxEnergy;
 
         IsRegenerating = canRegen;
 
