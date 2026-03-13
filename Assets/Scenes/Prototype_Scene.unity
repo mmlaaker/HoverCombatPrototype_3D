@@ -706,11 +706,6 @@ ParticleSystem:
   m_CorrespondingSourceObject: {fileID: 4725997358399993205, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
   m_PrefabInstance: {fileID: 605988080}
   m_PrefabAsset: {fileID: 0}
---- !u!20 &330585545 stripped
-Camera:
-  m_CorrespondingSourceObject: {fileID: 4978544463994653959, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-  m_PrefabInstance: {fileID: 605988080}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &392276825
 GameObject:
   m_ObjectHideFlags: 0
@@ -5430,10 +5425,6 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 6
       objectReference: {fileID: 0}
-    - target: {fileID: 3191944406936877070, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-      propertyPath: m_Camera
-      value: 
-      objectReference: {fileID: 330585545}
     - target: {fileID: 3648148868214267439, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Layer
       value: 6
@@ -5674,6 +5665,10 @@ PrefabInstance:
       propertyPath: meshRoot
       value: 
       objectReference: {fileID: 543450652900925662}
+    - target: {fileID: 4964355425596500860, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: softCapStrength
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 4978026027279532553, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Layer
       value: 6

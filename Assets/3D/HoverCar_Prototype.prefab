@@ -10211,10 +10211,10 @@ MonoBehaviour:
   - {fileID: 7227002333060208497}
   - {fileID: 2380519266511721574}
   - {fileID: 8468858880958529594}
-  hoverHeight: 4
+  hoverHeight: 5
   liftStrength: 10000
   liftDamping: 1500
-  sensorRange: 6
+  sensorRange: 7
   enableSlopeLiftCompensation: 1
   slopeLiftMultiplier: 1.15
   levelingTorqueStrength: 12
@@ -10247,14 +10247,14 @@ MonoBehaviour:
   maxForwardAccel: 40
   maxReverseAccel: 20
   topSpeed: 60
-  speedAssistStrength: 5
-  speedAssistMaxAccel: 20
+  speedAssistStrength: 10
+  speedAssistMaxAccel: 40
   yawAccel: 7
   yawDamping: 6
   airTurnMultiplier: 0.5
   enableBoost: 1
   boostAccelMultiplier: 1.75
-  boostSpeedMultiplier: 1.5
+  boostSpeedMultiplier: 1.75
   boostBlendSeconds: 0.35
   boostEnergyPerSecond: 20
   enableJump: 1
@@ -10265,14 +10265,16 @@ MonoBehaviour:
   jumpGroundedEnergyCost: 25
   jumpAirEnergyCost: 25
   airJumpImpulse: 7
-  softCapStrength: 40
   lateralDamp: 1
+  forwardDamp: 1
   driftLateralDamp: 0
+  driftForwardDamp: 2
   driftYawMultiplier: 1.4
   driftTurnThreshold: 0.4
   driftBlendSeconds: 0.15
   meshRoot: {fileID: 0}
   maxBankAngle: 20
+  passiveBankAngle: 4
   bankLerpSpeed: 8
   enableStrafe: 1
   strafeTopSpeed: 40
@@ -10281,7 +10283,7 @@ MonoBehaviour:
   strafePitchTorque: 1
   strafePitchDamping: 1
   strafeModeBlendSeconds: 0.2
-  inputProvider: {fileID: 5761321178091812356}
+  strafeLateralCapStrength: 40
   drawDebug: 0
 --- !u!114 &3396267810379779740
 MonoBehaviour:
@@ -10338,7 +10340,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ffa31ddac45e24a4aba3b5d2be4a041f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Aim
-  inputProvider: {fileID: 5761321178091812356}
   drawDebug: 1
 --- !u!114 &5761321178091812356
 MonoBehaviour:
@@ -10382,7 +10383,7 @@ MonoBehaviour:
   m_DefaultControlScheme: 
   m_DefaultActionMap: Hover
   m_SplitScreenIndex: -1
-  m_Camera: {fileID: 0}
+  m_Camera: {fileID: 4978544463994653959}
 --- !u!1 &4978026027279532553
 GameObject:
   m_ObjectHideFlags: 0
@@ -15523,14 +15524,12 @@ MonoBehaviour:
   vehicleTarget: {fileID: 5927693998371741120}
   inputProvider: {fileID: 5761321178091812356}
   propulsion: {fileID: 4964355425596500860}
-  pitchSensitivity: 0.7
-  minPitch: -2
-  maxPitch: 40
+  pitchSensitivity: 0.8
+  minPitch: 10
+  maxPitch: 45
   neutralPitch: 25
   pitchRecenterSpeed: 2
-  shoulderShiftAmount: 1.8
-  shoulderLookAheadAmount: 2.5
+  shoulderShiftAmount: -2
+  shoulderLookAheadAmount: 2
   shoulderShiftLerpSpeed: 8
-  strafeZoomDistance: 1.5
   strafeFovReduction: 5
-  strafeModeBlendTime: 0.18
