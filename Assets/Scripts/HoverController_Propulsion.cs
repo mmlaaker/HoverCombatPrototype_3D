@@ -1,7 +1,24 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v4.7
+/// HoverController_Propulsion v4.9
+///
+/// v4.9 changes:
+///   • ApplyDrag restored to grounded-only for both axes. Airborne drag was
+///     bleeding exit velocity with nothing to counteract it, violating the design
+///     intent that the craft maintains its exit speed in the air.
+///   • Speed assist servo deadband added (0.5 m/s). Servo is suppressed when speed
+///     error is below threshold, breaking the drag/servo oscillation cycle that was
+///     causing subtle jitter at steady state. Tune up if jitter persists.
+///   • Net result: no meaningful velocity change on grounded<->airborne transition.
+///     Only boost meaningfully affects speed in the air.
+///
+/// v4.8 changes:
+///   • ApplyDrag: both lateral and forward drag now always active regardless of grounded
+///     state. The hover vehicle is always airborne — "grounded" means close enough to the
+///     surface to push off it, not that drag physics change. Drive suppression already
+///     handles the inability to accelerate airborne; drag should be consistent in both
+///     states so there is no net force change on liftoff or landing.
 ///
 /// v4.7 changes:
 ///   • Soft top-speed cap removed entirely (softCapStrength field, ApplySoftSpeedCap method,
@@ -30,6 +47,8 @@ using UnityEngine;
 ///   • Unified drive: grounded only — throttle + assist suppressed airborne unless boosting
 ///   • Yaw torque + torque-based yaw damping
 ///   • Independent lateral and forward drag via force (grounded only)
+///   • Airborne: exit velocity cached on liftoff; assist servo capped to prevent
+///     acceleration above exit speed; drag suppressed so velocity carries cleanly
 ///   • Drift state: reduces lateral damp, boosts yaw, banks mesh root visually
 ///   • Boost blend — energy-gated via HoverController_Energy.TryConsume
 ///   • Jump — charge-based impulse, one air jump token, energy-gated
@@ -71,6 +90,13 @@ public class HoverController_Propulsion : MonoBehaviour
     [Tooltip("Maximum acceleration the assist can contribute (m/s²).")]
     [Range(0f, 200f)]
     [SerializeField] private float speedAssistMaxAccel = 60f;
+
+    [Tooltip("Speed error threshold (m/s) below which the assist servo is suppressed. " +
+             "Prevents the servo and drag from fighting each other at steady state, " +
+             "which causes subtle jitter. Raise if jitter persists, lower if top speed " +
+             "feel becomes sluggish. 0.5 is imperceptible at normal play speeds.")]
+    [Range(0f, 5f)]
+    [SerializeField] private float speedAssistDeadband = 0.5f;
 
     // -------------------------------------------------------------------------
     // 🔄 Turning
@@ -174,6 +200,14 @@ public class HoverController_Propulsion : MonoBehaviour
     /// Granted on airborne->grounded transition. Consumed on air jump fire.
     /// </summary>
     private bool airJumpAvailable;
+
+    /// <summary>
+    /// Forward speed cached on the frame the craft becomes airborne.
+    /// Used to cap the speed assist servo airborne — prevents the servo
+    /// from pushing speed above exit velocity while still allowing it to
+    /// act as a brake if somehow over top speed.
+    /// </summary>
+    private float _airborneExitSpeed;
 
     /// <summary>
     /// Whether the craft was grounded last FixedUpdate.
@@ -386,10 +420,16 @@ public class HoverController_Propulsion : MonoBehaviour
         ApplyBoostBlend();
         ApplyDriftBlend();
         ApplyStrafeModeBlend();
+
+        // Cache forward speed on the frame we leave the ground.
+        // Used by ApplyDrive to prevent the assist servo from pushing
+        // speed above exit velocity while airborne.
+        if (!grounded && wasGroundedLastFrame)
+            _airborneExitSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
         ApplyDrive(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyStrafe(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyTurning(grounded);
-        ApplyDrag(grounded);
+        ApplyDrag();
         ApplyStrafePitch();
         HandleJump(grounded);
     }
@@ -612,18 +652,31 @@ public class HoverController_Propulsion : MonoBehaviour
         if (_strafeModeBlend < 1f)
         {
             float targetSpeed = throttle * effectiveTopSpeed;
+
+            // Airborne: cap the assist target to exit velocity so the servo cannot
+            // push speed above what the craft had when it left the ground.
+            // The servo can still brake if over top speed, but cannot accelerate.
+            if (!grounded)
+                targetSpeed = Mathf.Min(targetSpeed, _airborneExitSpeed);
+
             float currentFwd  = Vector3.Dot(rb.linearVelocity, transform.forward);
             float error       = targetSpeed - currentFwd;
-            float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
-            assistAccel *= (1f - _strafeModeBlend);
 
-            if (!grounded && assistAccel < 0f)
-                assistAccel = 0f;
-
-            rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
+            // Deadband: suppress the servo when error is small enough that the
+            // correction is indistinguishable from the drag/servo oscillation it
+            // causes. Without this, drag bleeds speed slightly every tick, servo
+            // corrects, drag bleeds again — a guaranteed oscillation cycle at any
+            // proportional gain. Tune this value up if jitter persists, down if
+            // top speed feel becomes sluggish. 0.5 m/s is imperceptible at this scale.
+            if (Mathf.Abs(error) >= speedAssistDeadband)
+            {
+                float assistAccel = Mathf.Clamp(error * speedAssistStrength, -speedAssistMaxAccel, speedAssistMaxAccel);
+                assistAccel *= (1f - _strafeModeBlend);
+                rb.AddForce(transform.forward * assistAccel, ForceMode.Acceleration);
+            }
 
             if (drawDebug)
-                Debug.DrawRay(transform.position, transform.forward * (rawAccel + assistAccel), Color.yellow);
+                Debug.DrawRay(transform.position, transform.forward * rawAccel, Color.yellow);
         }
         else if (drawDebug)
         {
@@ -655,35 +708,39 @@ public class HoverController_Propulsion : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // Drag — independent lateral and forward resistance (grounded only)
+    // Drag — grounded only, both axes
     // -------------------------------------------------------------------------
     /// <summary>
     /// Applies independent drag forces on the lateral (X) and forward (Z) axes.
+    /// Grounded only — airborne velocity carries cleanly as inertia.
+    ///
+    /// The craft maintains its exit speed airborne because drag is suppressed
+    /// and the assist servo is capped to exit velocity, so no net force acts
+    /// on forward speed until landing. Only boost meaningfully changes speed
+    /// in the air.
     ///
     /// Lateral drag: shapes strafe acceleration feel and heading tracking.
-    ///   Tune lateralDamp without worrying about coasting behavior.
+    ///   Tune independently of forwardDamp.
     ///
     /// Forward drag: shapes coasting bleed-off at zero throttle.
-    ///   Applies even when the speed-assist servo is inactive (zero throttle).
-    ///   Tune forwardDamp without affecting strafe feel or fighting the servo.
+    ///   Applies even when the speed-assist servo is inactive.
     ///
     /// Drift state reduces both independently via driftLateralDamp and
     /// driftForwardDamp — lateral goes to near-zero for the slide feel,
     /// forward typically stays close to its normal value.
     /// </summary>
-    private void ApplyDrag(bool grounded)
+    private void ApplyDrag()
     {
-        if (!grounded)
+        if (!foundation.IsHoverGrounded)
             return;
-
-        float effectiveLateralDamp = Mathf.Lerp(lateralDamp, driftLateralDamp, driftLerp);
-        float effectiveForwardDamp = Mathf.Lerp(forwardDamp, driftForwardDamp, driftLerp);
 
         Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
 
+        float effectiveLateralDamp = Mathf.Lerp(lateralDamp, driftLateralDamp, driftLerp);
         if (effectiveLateralDamp > 0f)
             rb.AddForce(transform.right   * (-localVel.x * effectiveLateralDamp), ForceMode.Acceleration);
 
+        float effectiveForwardDamp = Mathf.Lerp(forwardDamp, driftForwardDamp, driftLerp);
         if (effectiveForwardDamp > 0f)
             rb.AddForce(transform.forward * (-localVel.z * effectiveForwardDamp), ForceMode.Acceleration);
     }

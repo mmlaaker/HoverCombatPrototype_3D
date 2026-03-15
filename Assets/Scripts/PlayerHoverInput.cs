@@ -12,7 +12,7 @@ using UnityEngine.InputSystem;
 ///   • 'Turn'             (float)   — Right Stick X
 ///   • 'CameraLookY'      (float)   — Right Stick Y
 ///   • 'Strafe'           (Button)  — L2 / Left Trigger
-///   • 'Boost'            (Button)  — Square
+///   • 'Boost'            (Button)  — L3
 ///   • 'Drift'            (Button)  — L1
 ///   • 'Jump'             (Button)  — Cross / X
 ///   • 'Fire'             (Button)  — R2 / Left Mouse

@@ -10244,11 +10244,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20d6ae1d2bf55ef4a82f194547b51e6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Propulsion
-  maxForwardAccel: 40
-  maxReverseAccel: 20
-  topSpeed: 60
-  speedAssistStrength: 10
-  speedAssistMaxAccel: 40
+  maxForwardAccel: 70
+  maxReverseAccel: 35
+  topSpeed: 70
+  speedAssistStrength: 0
+  speedAssistMaxAccel: 0
+  speedAssistDeadband: 0.5
   yawAccel: 7
   yawDamping: 6
   airTurnMultiplier: 0.5
@@ -10264,21 +10265,21 @@ MonoBehaviour:
   jumpGroundedLockout: 0.2
   jumpGroundedEnergyCost: 25
   jumpAirEnergyCost: 25
-  airJumpImpulse: 7
+  airJumpImpulse: 25
   lateralDamp: 1
   forwardDamp: 1
   driftLateralDamp: 0
-  driftForwardDamp: 2
-  driftYawMultiplier: 1.4
-  driftTurnThreshold: 0.4
+  driftForwardDamp: 1
+  driftYawMultiplier: 1.5
+  driftTurnThreshold: 0.5
   driftBlendSeconds: 0.15
   meshRoot: {fileID: 0}
   maxBankAngle: 20
-  passiveBankAngle: 4
+  passiveBankAngle: 5
   bankLerpSpeed: 8
   enableStrafe: 1
-  strafeTopSpeed: 40
-  strafeAccel: 20
+  strafeTopSpeed: 45
+  strafeAccel: 35
   strafePitchLimit: 20
   strafePitchTorque: 1
   strafePitchDamping: 1
