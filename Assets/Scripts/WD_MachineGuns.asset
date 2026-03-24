@@ -20,7 +20,7 @@ MonoBehaviour:
   maxAmmo: 0
   startingAmmo: 0
   fireRate: 0.01
-  impactForce: 2000
+  impactForce: 200
   useWindUp: 0
   windUpDuration: 1.5
   windUpCurve:
