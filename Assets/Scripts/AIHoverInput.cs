@@ -1,27 +1,37 @@
 using UnityEngine;
 
 /// <summary>
-/// AIHoverInput v1.0
+/// AIHoverInput v2.0
 /// -----------------
 /// AI implementation of IHoverInputProvider. Drives the hover vehicle controller
 /// using the same interface as PlayerHoverInput — no changes to any other system required.
 ///
 /// Attach this to an AI vehicle prefab in place of PlayerHoverInput.
 ///
+/// v2.0 changes:
+///   * Dynamic target selection — finds the nearest living enemy via VehicleHealth
+///     instead of a single hardcoded playerTransform reference. AI vehicles now
+///     fight each other in multi-vehicle matches, not just the player.
+///   * Target rescan runs every targetRescanInterval seconds to avoid FindObjectsByType
+///     every frame. Cached target is validated each tick (null/dead check).
+///   * Flee now picks a waypoint in the safest direction within the roam area
+///     instead of driving straight backward from the threat — avoids wall-pinning.
+///   * turnResponsiveness scaling simplified — no framerate compensation needed.
+///
 /// Behavior states:
 ///   Roam  — Default. Picks random waypoints within a bounding area and cruises toward them.
-///            Fires at the player if within range and within firing arc.
+///            Fires at the nearest enemy if within range and within firing arc.
 ///   Flee  — Triggered by incoming damage or health dropping below fleeHealthThreshold.
-///            Drives directly away from the player with boost active.
+///            Picks a waypoint away from the threat and boosts toward it.
 ///            Returns to Roam after fleeDuration seconds if health is above threshold.
 ///   Dead  — All outputs zeroed. Entered when VehicleHealth reports death.
 ///            Vehicle coasts to a stop naturally via propulsion drag.
 ///
 /// Not yet implemented (deferred):
-///   • Strafe mode (StrafeHeld, StrafeX always false/0)
-///   • Drift
-///   • Jump
-///   • Weapon cycling
+///   * Strafe mode (StrafeHeld, StrafeX always false/0)
+///   * Drift
+///   * Jump
+///   * Weapon cycling
 /// </summary>
 [RequireComponent(typeof(VehicleHealth))]
 public class AIHoverInput : MonoBehaviour, IHoverInputProvider
@@ -44,11 +54,13 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     public bool    CycleWeaponPrev  { get; private set; } // always false — deferred
 
     // -------------------------------------------------------------------------
-    // 🎯 Target
+    // 🎯 Target Selection
     // -------------------------------------------------------------------------
-    [Header("🎯 Target")]
-    [Tooltip("Assign the player vehicle's Transform here.")]
-    [SerializeField] private Transform playerTransform;
+    [Header("🎯 Target Selection")]
+    [Tooltip("How often (seconds) to rescan for the nearest enemy. " +
+             "Avoids FindObjectsByType every frame. Recommended: 0.5–1.0.")]
+    [Min(0.1f)]
+    [SerializeField] private float targetRescanInterval = 0.5f;
 
     // -------------------------------------------------------------------------
     // 🗺 Roam
@@ -74,7 +86,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     // 🔫 Firing
     // -------------------------------------------------------------------------
     [Header("🔫 Firing")]
-    [Tooltip("Distance (m) within which the AI will fire at the player.")]
+    [Tooltip("Distance (m) within which the AI will fire at the current target.")]
     [Min(1f)]
     [SerializeField] private float fireRange = 30f;
 
@@ -116,6 +128,12 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     private float         _waypointTimer;
     private float         _fleeTimer;
 
+    /// <summary>Current combat target. Dynamically selected, may be null.</summary>
+    private VehicleHealth _currentTarget;
+
+    /// <summary>Countdown until next target rescan.</summary>
+    private float _rescanTimer;
+
     // -------------------------------------------------------------------------
     // Unity lifecycle
     // -------------------------------------------------------------------------
@@ -125,17 +143,12 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         _health.OnDamaged += HandleDamaged;
         _health.OnDeath   += HandleDeath;
 
-        if (playerTransform == null)
-            Debug.LogWarning(
-                $"[AIHoverInput] '{name}': playerTransform is not assigned. " +
-                "AI will roam but cannot react to the player.", this);
-
         PickNewWaypoint();
+        _rescanTimer = 0f; // scan immediately on first frame
     }
 
     private void OnDestroy()
     {
-        // Unsubscribe defensively in case the object is destroyed before health fires
         if (_health != null)
         {
             _health.OnDamaged -= HandleDamaged;
@@ -145,6 +158,8 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
 
     private void Update()
     {
+        TickTargetSelection();
+
         switch (_state)
         {
             case AIState.Roam: UpdateRoam(); break;
@@ -152,6 +167,56 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
             case AIState.Dead: ZeroAllOutputs(); break;
         }
     }
+
+    // -------------------------------------------------------------------------
+    // 🎯 Target Selection
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Periodically rescans all living VehicleHealth instances to find the nearest
+    /// enemy. Between rescans, validates the cached target is still alive.
+    /// FindObjectsByType is gated behind a timer so it doesn't run every frame.
+    /// </summary>
+    private void TickTargetSelection()
+    {
+        // Quick validation: clear dead/destroyed targets immediately
+        if (_currentTarget != null && !_currentTarget.IsAlive)
+            _currentTarget = null;
+
+        _rescanTimer -= Time.deltaTime;
+        if (_rescanTimer > 0f)
+            return;
+
+        _rescanTimer = targetRescanInterval;
+
+        var allVehicles = FindObjectsByType<VehicleHealth>(FindObjectsSortMode.None);
+        VehicleHealth bestTarget = null;
+        float bestDistSq = float.MaxValue;
+
+        foreach (var vehicle in allVehicles)
+        {
+            // Skip self
+            if (vehicle == _health)
+                continue;
+
+            // Skip dead vehicles
+            if (!vehicle.IsAlive)
+                continue;
+
+            float distSq = (vehicle.transform.position - transform.position).sqrMagnitude;
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                bestTarget = vehicle;
+            }
+        }
+
+        _currentTarget = bestTarget;
+    }
+
+    /// <summary>
+    /// Returns the current target's transform, or null if no target.
+    /// </summary>
+    private Transform TargetTransform => _currentTarget != null ? _currentTarget.transform : null;
 
     // -------------------------------------------------------------------------
     // State: Roam
@@ -187,12 +252,17 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
             return;
         }
 
-        if (playerTransform != null)
+        // Pick a flee waypoint away from the threat, clamped to the roam area.
+        // If no target, just roam to the current waypoint.
+        if (TargetTransform != null)
         {
-            // Drive away from player — invert the player direction
-            Vector3 fleeTarget = transform.position +
-                                 (transform.position - playerTransform.position).normalized * 20f;
-            SteerToward(fleeTarget);
+            // Only re-pick if we've arrived at (or are close to) the current flee waypoint
+            Vector3 toWaypoint = _currentWaypoint - transform.position;
+            toWaypoint.y = 0f;
+            if (toWaypoint.magnitude < waypointArrivalDistance)
+                PickFleeWaypoint(TargetTransform.position);
+
+            SteerToward(_currentWaypoint);
         }
 
         ThrottleInput = 1f;
@@ -206,6 +276,10 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     /// <summary>
     /// Computes TurnInput by measuring how far the target is from dead ahead.
     /// Uses signed cross product on the horizontal plane — no Atan2 needed.
+    /// The cross product naturally produces values in [-1, 1] for targets within
+    /// 90 degrees. turnResponsiveness scales the result for tighter or lazier
+    /// tracking. No framerate compensation needed — Propulsion applies the
+    /// torque in FixedUpdate with its own timestep.
     /// </summary>
     private void SteerToward(Vector3 worldTarget)
     {
@@ -220,8 +294,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
 
         // Signed angle: positive = target is to the right, negative = left
         float cross = Vector3.Cross(forward, toTarget).y;
-        TurnInput = Mathf.Clamp(cross * turnResponsiveness / Time.deltaTime * Time.fixedDeltaTime,
-                                -1f, 1f);
+        TurnInput = Mathf.Clamp(cross * turnResponsiveness, -1f, 1f);
     }
 
     // -------------------------------------------------------------------------
@@ -229,13 +302,13 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     // -------------------------------------------------------------------------
     private void UpdateFiring()
     {
-        if (playerTransform == null) { FireHeld = false; return; }
+        if (TargetTransform == null) { FireHeld = false; return; }
 
-        float dist = Vector3.Distance(transform.position, playerTransform.position);
+        float dist = Vector3.Distance(transform.position, TargetTransform.position);
         if (dist > fireRange)   { FireHeld = false; return; }
 
-        Vector3 toPlayer = (playerTransform.position - transform.position).normalized;
-        float   dot      = Vector3.Dot(transform.forward, toPlayer);
+        Vector3 toTarget = (TargetTransform.position - transform.position).normalized;
+        float   dot      = Vector3.Dot(transform.forward, toTarget);
 
         FireHeld = dot >= fireArcDot;
     }
@@ -248,6 +321,36 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         Vector2 randCircle = Random.insideUnitCircle * roamRadius;
         _currentWaypoint   = roamCenter + new Vector3(randCircle.x, 0f, randCircle.y);
         _waypointTimer     = 0f;
+    }
+
+    /// <summary>
+    /// Picks a flee waypoint in the direction away from the threat, clamped to
+    /// the roam area. Adds some randomness to prevent predictable straight-line
+    /// retreat that pins the AI against walls.
+    /// </summary>
+    private void PickFleeWaypoint(Vector3 threatPosition)
+    {
+        Vector3 awayDir = (transform.position - threatPosition);
+        awayDir.y = 0f;
+
+        if (awayDir.sqrMagnitude < 0.01f)
+            awayDir = transform.forward; // degenerate case: on top of threat
+        else
+            awayDir.Normalize();
+
+        // Add random spread (up to 45 degrees each side) to avoid predictable lines
+        float randomAngle = Random.Range(-45f, 45f);
+        awayDir = Quaternion.Euler(0f, randomAngle, 0f) * awayDir;
+
+        // Place waypoint at roam radius distance, then clamp to roam area
+        Vector3 candidate = transform.position + awayDir * roamRadius * 0.7f;
+        Vector3 offset    = candidate - roamCenter;
+        offset.y = 0f;
+        if (offset.magnitude > roamRadius)
+            candidate = roamCenter + offset.normalized * roamRadius;
+
+        _currentWaypoint = candidate;
+        _waypointTimer   = 0f;
     }
 
     private void AdvanceWaypointTimer()
@@ -264,9 +367,12 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     {
         if (_state == AIState.Dead) return;
 
-        // Enter flee on any damage hit, or if health is critically low
         _state     = AIState.Flee;
         _fleeTimer = fleeDuration;
+
+        // Immediately pick a flee waypoint so we don't drive toward the threat
+        if (TargetTransform != null)
+            PickFleeWaypoint(TargetTransform.position);
     }
 
     private void HandleDeath()
@@ -314,19 +420,24 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         Gizmos.DrawSphere(_currentWaypoint, 0.5f);
         Gizmos.DrawLine(transform.position, _currentWaypoint);
 
-        // State label
+        // State label + current target
+        string targetName = _currentTarget != null ? _currentTarget.name : "none";
         UnityEditor.Handles.color = Color.white;
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 3f,
-            $"AI: {_state}  HP: {(_health != null ? _health.HealthNormalized * 100f : 0f):F0}%"
+            $"AI: {_state}  HP: {(_health != null ? _health.HealthNormalized * 100f : 0f):F0}%  Target: {targetName}"
         );
 
-        // Fire range
-        if (playerTransform != null)
+        // Line to current target
+        if (_currentTarget != null)
         {
-            Gizmos.color = FireHeld ? Color.red : new Color(1f, 0f, 0f, 0.2f);
-            Gizmos.DrawWireSphere(transform.position, fireRange);
+            Gizmos.color = FireHeld ? Color.red : new Color(1f, 0.5f, 0f, 0.4f);
+            Gizmos.DrawLine(transform.position, _currentTarget.transform.position);
         }
+
+        // Fire range
+        Gizmos.color = FireHeld ? Color.red : new Color(1f, 0f, 0f, 0.2f);
+        Gizmos.DrawWireSphere(transform.position, fireRange);
     }
 #endif
 }

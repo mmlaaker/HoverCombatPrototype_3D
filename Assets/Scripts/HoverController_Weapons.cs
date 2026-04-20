@@ -161,6 +161,11 @@ public class HoverController_Weapons : MonoBehaviour
     [Tooltip("Draw muzzle points, emitter origins, and missile lock cone in the Scene view.")]
     [SerializeField] private bool drawDebug = true;
 
+    [Tooltip("Optional global debug toggle. When assigned, overrides drawDebug.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+
     // =========================================================================
     // 📢 Events
     // =========================================================================
@@ -532,7 +537,7 @@ public class HoverController_Weapons : MonoBehaviour
 
             PlayParticleEmitters(slot);
 
-            if (drawDebug)
+            if (ShouldDrawDebug)
                 foreach (var e in slot.particleEmitters)
                     if (e != null) Debug.DrawRay(e.transform.position, e.transform.forward * 3f, Color.yellow, 0.2f);
         }
@@ -557,7 +562,7 @@ public class HoverController_Weapons : MonoBehaviour
                 if (muzzle == null) continue;
                 var proj = Instantiate(def.projectilePrefab, muzzle.position, muzzle.rotation);
                 proj.GetComponent<IProjectileDamageCarrier>()?.SetDamage(def.damage);
-                if (drawDebug) Debug.DrawRay(muzzle.position, muzzle.forward * 3f, Color.red, 0.2f);
+                if (ShouldDrawDebug) Debug.DrawRay(muzzle.position, muzzle.forward * 3f, Color.red, 0.2f);
             }
         }
 

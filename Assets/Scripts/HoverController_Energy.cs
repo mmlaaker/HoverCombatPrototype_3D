@@ -88,6 +88,13 @@ public class HoverController_Energy : MonoBehaviour
     public event Action OnEmpFreezeLifted;
 
     // -------------------------------------------------------------------------
+    // 🛠 Debug
+    // -------------------------------------------------------------------------
+    [Header("🛠 Debug")]
+    [Tooltip("Optional global debug toggle. When assigned, controls gizmo visibility.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    // -------------------------------------------------------------------------
     // Public read-only state
     // -------------------------------------------------------------------------
 
@@ -266,6 +273,9 @@ public class HoverController_Energy : MonoBehaviour
     private void OnDrawGizmos()
     {
         if (!Application.isPlaying)
+            return;
+
+        if (debugSettings != null && !debugSettings.enableDebugGizmos)
             return;
 
         // Energy bar above the craft — green full, red empty, blue while frozen.

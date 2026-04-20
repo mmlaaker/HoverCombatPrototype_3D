@@ -66,6 +66,10 @@ public class VehicleHealth : MonoBehaviour, IDamageable
     // Runtime state
     // -------------------------------------------------------------------------
 
+    [Header("🛠 Debug")]
+    [Tooltip("Optional global debug toggle. When assigned, controls gizmo visibility.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
     private bool  _isInvulnerable;
     private float _invulnerableTimer;
 
@@ -152,6 +156,8 @@ public class VehicleHealth : MonoBehaviour, IDamageable
     private void OnDrawGizmos()
     {
         if (!Application.isPlaying) return;
+
+        if (debugSettings != null && !debugSettings.enableDebugGizmos) return;
 
         float normalized = HealthNormalized;
         Gizmos.color = Color.Lerp(Color.red, Color.green, normalized);

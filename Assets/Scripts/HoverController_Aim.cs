@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Aim v1.1
+/// HoverController_Aim v1.2
 /// ------------------------
 /// Responsibilities:
 ///   • Computes an intentional world-space aim rotation each LateUpdate.
@@ -11,8 +11,8 @@ using UnityEngine;
 ///
 /// Aim rotation is constructed from two components only:
 ///   • Yaw  — taken from the vehicle's world Y euler. Weapons always aim with heading.
-///   • Pitch — derived from CameraLookY input, scaled by Propulsion.StrafePitchLimit
-///             and blended by Propulsion.StrafeModeBlend. Zero in drive mode.
+///   • Pitch — FPS-style free aim. Right Stick Y accumulates as continuous aim angle,
+///             clamped to [-StrafePitchLimit, +StrafePitchLimit]. Resets to 0 on strafe exit.
 ///
 /// What it deliberately ignores:
 ///   • Vehicle X (pitch) from terrain reaction — Foundation's leveling corrections
@@ -30,6 +30,20 @@ using UnityEngine;
 ///   • Input is acquired via GetComponent<IHoverInputProvider>() — attach
 ///     PlayerHoverInput or any AI implementation to this same GameObject.
 ///
+/// v1.3 changes:
+///   • Pitch now reads actual vehicle pitch (from Rigidbody orientation) instead of
+///     maintaining an independent accumulated angle. Eliminates divergence between
+///     where the vehicle body points and where bullets go — the vehicle IS the turret.
+///   • Removed aimSensitivity and currentPitch accumulator — no longer needed.
+///     Propulsion.ApplyStrafePitch drives the physics pitch; Aim just reads the result.
+///
+/// v1.2 changes:
+///   • Pitch now FPS-style free aim instead of spring-loaded.
+///   • Right Stick Y input accumulates as continuous angle change (degrees/frame).
+///   • Aim angle is clamped to [-StrafePitchLimit, +StrafePitchLimit].
+///   • Aim resets to 0 (forward) when exiting strafe mode for clean re-entry.
+///   • New parameter: aimSensitivity (degrees per unit stick input per second).
+///
 /// v1.1 changes:
 ///   • Removed [DefaultExecutionOrder(-10)] — LateUpdate naturally runs after all
 ///     Update and FixedUpdate calls, so no explicit ordering is needed.
@@ -44,18 +58,19 @@ public class HoverController_Aim : MonoBehaviour
     // Inspector
     // -------------------------------------------------------------------------
 
-    // Input acquired via GetComponent<IHoverInputProvider>() in Awake.
-    // Attach PlayerHoverInput or any AIHoverInput to this same GameObject.
-
     [Header("🛠 Debug")]
     [Tooltip("Draw the computed aim direction as a ray in the Scene view.")]
     [SerializeField] private bool drawDebug = true;
+
+    [Tooltip("Optional global debug toggle. When assigned, overrides drawDebug.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
 
     // -------------------------------------------------------------------------
     // Private
     // -------------------------------------------------------------------------
 
-    private IHoverInputProvider    input;
     private HoverController_Propulsion propulsion;
 
     // The vfxMount of the currently active weapon slot. Null if no active slot
@@ -69,27 +84,21 @@ public class HoverController_Aim : MonoBehaviour
     private void Awake()
     {
         propulsion = GetComponent<HoverController_Propulsion>();
-        input      = GetComponent<IHoverInputProvider>();
-
-        if (input == null)
-            Debug.LogError("[HoverController_Aim] No IHoverInputProvider found on this GameObject. " +
-                           "Attach PlayerHoverInput or an AI implementation. Aim will not function.", this);
     }
 
     /// <summary>
     /// LateUpdate: runs after Propulsion FixedUpdate has applied pitch torque.
-    /// Guarantees aim rotation is computed against the vehicle's settled orientation
-    /// for this frame rather than fighting physics mid-step.
+    /// Reads the vehicle's actual settled orientation — no independent state.
     /// </summary>
     private void LateUpdate()
     {
-        if (input == null || propulsion == null || activeMount == null)
+        if (propulsion == null || activeMount == null)
             return;
 
         Quaternion aimRotation = ComputeAimRotation();
         activeMount.rotation   = aimRotation;
 
-        if (drawDebug)
+        if (ShouldDrawDebug)
             Debug.DrawRay(activeMount.position, aimRotation * Vector3.forward * 5f, Color.cyan);
     }
 
@@ -98,29 +107,28 @@ public class HoverController_Aim : MonoBehaviour
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Constructs a world-space aim rotation from vehicle yaw and intentional pitch only.
+    /// Constructs a world-space aim rotation from the vehicle's actual orientation.
     ///
-    /// Yaw: vehicle's current world Y euler angle. Always applied — weapons aim with heading.
-    ///
-    /// Pitch: CameraLookY input mapped to [-StrafePitchLimit, +StrafePitchLimit],
-    ///        scaled by StrafeModeBlend so pitch authority fades in/out with strafe mode.
-    ///        Stick up (+1) = nose up = negative pitch in Unity convention.
-    ///        Zero in drive mode (StrafeModeBlend == 0).
-    ///
-    /// Roll: always zero. Never intentional, never communicated to weapons.
+    /// Yaw:   vehicle's current world Y euler. Weapons always aim with heading.
+    /// Pitch: vehicle's current world X euler — the actual physics pitch driven by
+    ///        Propulsion.ApplyStrafePitch and Foundation leveling. No independent
+    ///        accumulation — eliminates divergence between body and bullet direction.
+    /// Roll:  always zero. Never intentional, never communicated to weapons.
     /// </summary>
     private Quaternion ComputeAimRotation()
     {
+        float pitch = NormalizeAngle(transform.eulerAngles.x);
         float yaw   = transform.eulerAngles.y;
-
-        float aimY  = input.CameraLookY;
-        if (Mathf.Abs(aimY) < 0.1f) aimY = 0f; // small deadzone, matches Propulsion
-
-        float pitch = -aimY
-                      * propulsion.StrafePitchLimit
-                      * propulsion.StrafeModeBlend;
-
         return Quaternion.Euler(pitch, yaw, 0f);
+    }
+
+    /// <summary>
+    /// Normalizes a Unity euler angle from 0..360 to -180..180.
+    /// </summary>
+    private static float NormalizeAngle(float angle)
+    {
+        if (angle > 180f) angle -= 360f;
+        return angle;
     }
 
     // -------------------------------------------------------------------------

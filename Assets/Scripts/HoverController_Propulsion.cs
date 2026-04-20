@@ -286,6 +286,17 @@ public class HoverController_Propulsion : MonoBehaviour
     public float DriftLerp => driftLerp;
 
     // -------------------------------------------------------------------------
+    // 📢 Events
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fired when a jump is denied due to insufficient energy.
+    /// Allows HUD/audio to communicate the failure to the player.
+    /// Parameter: true = grounded jump denied, false = air jump denied.
+    /// </summary>
+    public event System.Action<bool> OnJumpDenied;
+
+    // -------------------------------------------------------------------------
     // 🎯 Strafe Mode
     // -------------------------------------------------------------------------
     [Header("🎯 Strafe Mode")]
@@ -357,6 +368,11 @@ public class HoverController_Propulsion : MonoBehaviour
     // -------------------------------------------------------------------------
     [Header("🧭 Debug")]
     [SerializeField] private bool drawDebug = false;
+
+    [Tooltip("Optional global debug toggle. When assigned, overrides drawDebug.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
 
     // -------------------------------------------------------------------------
     // Runtime
@@ -560,14 +576,17 @@ public class HoverController_Propulsion : MonoBehaviour
         jumpChargeTimer = 0f;
 
         if (!energy.TryConsume(jumpGroundedEnergyCost))
+        {
+            OnJumpDenied?.Invoke(true);
             return;
+        }
 
         // ForceMode.VelocityChange: adds m/s directly, ignoring mass.
         // Guarantees identical jump height across all vehicle Rigidbody masses.
         rb.AddForce(Vector3.up * impulse, ForceMode.VelocityChange);
         jumpLockoutTimer = jumpGroundedLockout;
 
-        if (drawDebug)
+        if (ShouldDrawDebug)
             Debug.DrawRay(transform.position, Vector3.up * impulse * 0.5f, Color.cyan, 0.5f);
     }
 
@@ -578,7 +597,10 @@ public class HoverController_Propulsion : MonoBehaviour
     private void FireAirJump()
     {
         if (!energy.TryConsume(jumpAirEnergyCost))
+        {
+            OnJumpDenied?.Invoke(false);
             return;
+        }
 
         airJumpAvailable = false;
 
@@ -586,7 +608,7 @@ public class HoverController_Propulsion : MonoBehaviour
         // Guarantees identical air jump height across all vehicle Rigidbody masses.
         rb.AddForce(Vector3.up * airJumpImpulse, ForceMode.VelocityChange);
 
-        if (drawDebug)
+        if (ShouldDrawDebug)
             Debug.DrawRay(transform.position, Vector3.up * airJumpImpulse * 0.5f, Color.magenta, 0.5f);
     }
 
@@ -650,7 +672,7 @@ public class HoverController_Propulsion : MonoBehaviour
 
         rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
 
-        if (drawDebug)
+        if (ShouldDrawDebug)
             Debug.DrawRay(transform.position, transform.forward * rawAccel, Color.yellow);
     }
 
@@ -705,13 +727,17 @@ public class HoverController_Propulsion : MonoBehaviour
         if (effectiveLateralDamp > 0f)
             rb.AddForce(transform.right * (-localVel.x * effectiveLateralDamp), ForceMode.Acceleration);
 
-        // Forward drag — only when throttle is released.
-        // Drive is suppressed at the same threshold, so these never overlap.
-        if (Mathf.Abs(input.ThrottleInput) < 0.001f)
+        // Forward drag — fades in as throttle approaches zero.
+        // Full drag at throttle == 0, zero drag at throttle >= 0.15.
+        // Prevents the binary snap between "full drag" and "zero drag" that
+        // feels twitchy on worn sticks or light inputs.
+        float throttleMag = Mathf.Abs(input.ThrottleInput);
+        float dragWeight  = 1f - Mathf.Clamp01(throttleMag / 0.15f);
+        if (dragWeight > 0f)
         {
             float effectiveForwardDamp = Mathf.Lerp(forwardDamp, driftForwardDamp, driftLerp);
             if (effectiveForwardDamp > 0f)
-                rb.AddForce(transform.forward * (-localVel.z * effectiveForwardDamp), ForceMode.Acceleration);
+                rb.AddForce(transform.forward * (-localVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
         }
     }
 
@@ -772,12 +798,12 @@ public class HoverController_Propulsion : MonoBehaviour
     // 🎯 Omni-Directional Lateral Movement (both modes)
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Left Stick X drives lateral movement in both drive and strafe mode.
+    /// Left Stick X drives lateral movement only while strafe mode is active.
     /// Left Stick Y (ThrottleInput) handles forward/back in both modes via ApplyDrive.
     ///
-    /// In drive mode, ApplyDrag's lateral damp partially resists sideways movement
-    /// so the vehicle still feels directional. In strafe mode, lateral damp is
-    /// suppressed so movement is fully free.
+    /// Lateral force scales with _strafeModeBlend so entry/exit is smooth.
+    /// In drive mode (blend == 0), lateral movement is fully suppressed —
+    /// steering is yaw-only. Lateral damp in ApplyDrag handles residual slide.
     ///
     /// The per-axis speed cap only kicks in when a single local axis exceeds
     /// strafeTopSpeed — forward and lateral are capped independently so entry
@@ -785,7 +811,7 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyStrafe(bool grounded, float effectiveTopSpeed, float effectiveLateralAccel)
     {
-        if (!grounded)
+        if (!grounded || _strafeModeBlend <= 0f)
             return;
 
         float stickX = Mathf.Clamp(input.StrafeX, -1f, 1f);
@@ -799,7 +825,7 @@ public class HoverController_Propulsion : MonoBehaviour
         float effectiveLateralAccelScaled = strafeAccel * (effectiveLateralAccel / maxForwardAccel);
         float effectiveLateralTopSpeed    = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
 
-        rb.AddForce(transform.right * (stickX * effectiveLateralAccelScaled), ForceMode.Acceleration);
+        rb.AddForce(transform.right * (stickX * effectiveLateralAccelScaled * _strafeModeBlend), ForceMode.Acceleration);
 
         // Per-axis lateral speed cap — only resists if lateral velocity alone
         // exceeds the boost-scaled lateral top speed.

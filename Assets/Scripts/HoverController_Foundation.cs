@@ -174,6 +174,12 @@ public class HoverController_Foundation : MonoBehaviour
     [Tooltip("Draws hover rays in the scene view.")]
     [SerializeField] private bool drawDebugRays = true;
 
+    [Tooltip("Optional global debug toggle. When assigned, overrides drawDebugRays. " +
+             "Create via Assets > Create > Hover > Debug Settings.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebugRays;
+
     // -------------------------------------------------------------------------
     // 📡 Collision Tracking
     // -------------------------------------------------------------------------
@@ -189,12 +195,14 @@ public class HoverController_Foundation : MonoBehaviour
 
         isContactingGround = true;
 
-        Vector3 normalSum = Vector3.zero;
-        foreach (ContactPoint cp in collision.contacts)
-            normalSum += cp.normal;
-
-        if (collision.contactCount > 0)
-            groundContactNormal = (normalSum / collision.contactCount).normalized;
+        int count = collision.GetContacts(_contactBuffer);
+        if (count > 0)
+        {
+            Vector3 normalSum = Vector3.zero;
+            for (int i = 0; i < count; i++)
+                normalSum += _contactBuffer[i].normal;
+            groundContactNormal = (normalSum / count).normalized;
+        }
     }
 
     private void OnCollisionExit(Collision collision)
@@ -210,6 +218,10 @@ public class HoverController_Foundation : MonoBehaviour
     // Runtime state
     // -------------------------------------------------------------------------
     private Rigidbody rb;
+
+    // Pre-allocated buffer for OnCollisionStay contact point reads.
+    // Avoids per-call ContactPoint[] allocation on every physics tick.
+    private readonly System.Collections.Generic.List<ContactPoint> _contactBuffer = new(8);
 
     private float   unstickTimer;            // counts up while upright and contacting ground
     private float   flipTimer;               // counts up while flipped, slow, and contacting ground
@@ -320,7 +332,7 @@ public class HoverController_Foundation : MonoBehaviour
 
             if (!Physics.Raycast(point.position, rayDir, out RaycastHit hit, sensorRange, groundLayers))
             {
-                if (drawDebugRays)
+                if (ShouldDrawDebug)
                     Debug.DrawRay(point.position, rayDir * sensorRange, Color.red);
                 continue;
             }
@@ -341,7 +353,7 @@ public class HoverController_Foundation : MonoBehaviour
             normalSum    += hit.normal;
             groundedCount++;
 
-            if (drawDebugRays)
+            if (ShouldDrawDebug)
                 Debug.DrawRay(point.position, rayDir * hit.distance, Color.green);
         }
 
@@ -465,7 +477,7 @@ public class HoverController_Foundation : MonoBehaviour
                 unstickForceTimer      = unstickLiftDuration;
                 unstickFiredFlashTimer = 0.5f;
 
-                if (drawDebugRays)
+                if (ShouldDrawDebug)
                     Debug.DrawRay(transform.position, unstickForceDir * 2f, Color.cyan);
             }
         }
@@ -487,7 +499,7 @@ public class HoverController_Foundation : MonoBehaviour
 
                 unstickFiredFlashTimer = 0.5f;
 
-                if (drawDebugRays)
+                if (ShouldDrawDebug)
                     Debug.DrawRay(transform.position, Vector3.up * 2f, Color.magenta);
             }
         }
@@ -526,7 +538,7 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     /// <summary>
     /// Draws live recovery state in the Scene view during play mode.
-    /// All gizmos are suppressed when drawDebugRays is false.
+    /// All gizmos are suppressed when ShouldDrawDebug is false.
     ///
     ///   Hover point spheres — green: hover ray hitting ground / red: no hit
     ///   Cyan line           — groundContactNormal direction when isContactingGround
@@ -536,7 +548,7 @@ public class HoverController_Foundation : MonoBehaviour
     /// </summary>
     private void OnDrawGizmos()
     {
-        if (!drawDebugRays || !Application.isPlaying)
+        if (!ShouldDrawDebug || !Application.isPlaying)
             return;
 
         // unstickFiredFlashTimer is ticked in Update — read-only here.
