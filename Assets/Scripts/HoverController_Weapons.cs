@@ -535,6 +535,13 @@ public class HoverController_Weapons : MonoBehaviour
                 return;
             }
 
+            // Non-Automatic weapons (SingleShot, Missile, Mine) need a stop-then-play
+            // to restart the burst from scratch. Without this, the isPlaying guard in
+            // PlayParticleEmitters skips Play() while particles from the previous burst
+            // are still alive — blocking subsequent shots.
+            if (def.type != WeaponType.Automatic)
+                StopParticleEmitters(slot);
+
             PlayParticleEmitters(slot);
 
             if (ShouldDrawDebug)
