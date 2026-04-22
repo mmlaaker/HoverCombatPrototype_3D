@@ -558,6 +558,10 @@ MonoBehaviour:
   boostSpeedMultiplier: 1.75
   boostBlendSeconds: 0.35
   boostEnergyPerSecond: 20
+  dodgeForce: 500
+  dodgeDuration: 0.15
+  dodgeEnergyCost: 15
+  dodgeCooldown: 0.2
   enableJump: 1
   jumpImpulseMin: 15
   jumpImpulseMax: 40

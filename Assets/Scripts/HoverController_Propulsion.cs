@@ -135,6 +135,34 @@ public class HoverController_Propulsion : MonoBehaviour
     private float boostLerp; // 0..1, managed by ApplyBoostBlend
 
     // -------------------------------------------------------------------------
+    // 💨 Dodge (Strafe Mode)
+    // -------------------------------------------------------------------------
+    [Header("💨 Dodge (Strafe Mode)")]
+    [Tooltip("Peak acceleration (m/s²) applied during the dodge burst. " +
+             "Front-loaded and tapering — strongest at trigger, fades to zero. " +
+             "ForceMode.Acceleration — mass-independent.")]
+    [Min(0f)]
+    [SerializeField] private float dodgeForce = 120f;
+
+    [Tooltip("Duration (seconds) of the dodge burst. Force tapers from full to zero " +
+             "over this window. Shorter = snappier. Longer = more jet-like. Recommended: 0.15–0.35.")]
+    [Min(0.01f)]
+    [SerializeField] private float dodgeDuration = 0.25f;
+
+    [Tooltip("Flat energy cost per dodge burst.")]
+    [Min(0f)]
+    [SerializeField] private float dodgeEnergyCost = 20f;
+
+    [Tooltip("Seconds between dodge bursts. Prevents spam.")]
+    [Min(0f)]
+    [SerializeField] private float dodgeCooldown = 0.5f;
+
+    private float   dodgeCooldownTimer;
+    private float   dodgeForceTimer;   // counts down while dodge force is being applied
+    private Vector3 dodgeForceDir;     // world-space direction cached at trigger time
+    private bool    boostHeldLastFrame; // for rising-edge detection on boost button
+
+    // -------------------------------------------------------------------------
     // 🦘 Jump
     // -------------------------------------------------------------------------
     [Header("🦘 Jump")]
@@ -435,6 +463,8 @@ public class HoverController_Propulsion : MonoBehaviour
         ApplyDrag();
         ApplyStrafePitch();
         HandleJump(grounded);
+        HandleDodge(grounded);
+        ApplyDodgeForce();
     }
 
     private void Update()
@@ -459,18 +489,102 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyBoostBlend()
     {
-        // In drive mode, require meaningful throttle so stick drift from a
-        // sideways push doesn't waste energy. In strafe mode, lateral movement
-        // also benefits from boost so any stick input qualifies.
-        bool hasInput      = _strafeModeBlend > 0f
-                             || Mathf.Abs(input.ThrottleInput) >= 0.15f;
-        bool wantsBoost    = enableBoost && input.Boost && hasInput;
+        // Drive mode: forward OR backward throttle enables continuous boost.
+        // Strafe mode: only forward-dominant stick enables continuous boost —
+        // lateral/back directions route to dodge burst instead.
+        // "Forward-dominant" means forward exceeds lateral magnitude, preventing
+        // stick bleed from a sideways push from triggering continuous boost.
+        bool inStrafe    = _strafeModeBlend > 0f;
+        bool hasThrottle = inStrafe
+            ? (input.ThrottleInput >= 0.15f && input.ThrottleInput > Mathf.Abs(input.StrafeX))
+            : Mathf.Abs(input.ThrottleInput) >= 0.15f;
+        bool wantsBoost  = enableBoost && input.Boost && hasThrottle;
         bool energyGranted = wantsBoost &&
                              energy.TryConsume(boostEnergyPerSecond * Time.fixedDeltaTime);
 
         float target = energyGranted ? 1f : 0f;
         float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, boostBlendSeconds);
         boostLerp    = Mathf.MoveTowards(boostLerp, target, step);
+    }
+
+    // -------------------------------------------------------------------------
+    // 💨 Dodge — strafe-mode burst on boost press
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// In strafe mode, pressing boost without forward throttle triggers a dodge:
+    /// a short sustained force window in the stick direction (left, right, or back).
+    ///
+    /// Force is front-loaded and tapers to zero over dodgeDuration — reads as a
+    /// jet burst rather than an instant velocity snap. Same pattern as Foundation's
+    /// unstick lift. ForceMode.Acceleration — mass-independent.
+    ///
+    /// HandleDodge detects the trigger and caches direction + timer.
+    /// ApplyDodgeForce runs every FixedUpdate to apply the tapering force.
+    /// </summary>
+    private void HandleDodge(bool grounded)
+    {
+        if (!enableBoost || _strafeModeBlend <= 0f)
+        {
+            boostHeldLastFrame = input.Boost;
+            return;
+        }
+
+        // Cooldown tick
+        if (dodgeCooldownTimer > 0f)
+            dodgeCooldownTimer = Mathf.Max(0f, dodgeCooldownTimer - Time.fixedDeltaTime);
+
+        bool boostPressed = input.Boost && !boostHeldLastFrame;
+        boostHeldLastFrame = input.Boost;
+
+        if (!boostPressed || dodgeCooldownTimer > 0f)
+            return;
+
+        // Only dodge when stick is NOT in forward-dominant territory.
+        // Mirrors the check in ApplyBoostBlend — forward-dominant means
+        // continuous boost, everything else means dodge.
+        if (input.ThrottleInput >= 0.15f && input.ThrottleInput > Mathf.Abs(input.StrafeX))
+            return;
+
+        // Build dodge direction from stick input — lateral + backward only.
+        float dodgeLat = input.StrafeX;
+        float dodgeFwd = Mathf.Min(input.ThrottleInput, 0f); // clamp out positive
+        Vector3 localDir = new Vector3(dodgeLat, 0f, dodgeFwd);
+
+        if (localDir.sqrMagnitude < 0.01f)
+            return;
+
+        if (!energy.TryConsume(dodgeEnergyCost))
+            return;
+
+        dodgeForceDir   = (transform.right * localDir.x + transform.forward * localDir.z).normalized;
+        dodgeForceTimer = dodgeDuration;
+        dodgeCooldownTimer = dodgeCooldown;
+
+        if (ShouldDrawDebug)
+            Debug.DrawRay(transform.position, dodgeForceDir * 3f, Color.blue, 0.5f);
+    }
+
+    // -------------------------------------------------------------------------
+    // 💨 Sustained Dodge Force
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Applies the dodge force over a short window each FixedUpdate.
+    /// dodgeForceTimer is set by HandleDodge when the trigger condition is met.
+    /// Force is front-loaded — strongest on the first frame, tapering to zero.
+    /// Reads as a jet burst rather than an instant teleport.
+    /// ForceMode.Acceleration keeps the behavior mass-independent.
+    /// </summary>
+    private void ApplyDodgeForce()
+    {
+        if (dodgeForceTimer <= 0f)
+            return;
+
+        float progress  = dodgeForceTimer / Mathf.Max(0.01f, dodgeDuration);
+        float magnitude = dodgeForce * progress;
+
+        rb.AddForce(dodgeForceDir * magnitude, ForceMode.Acceleration);
+
+        dodgeForceTimer = Mathf.Max(0f, dodgeForceTimer - Time.fixedDeltaTime);
     }
 
     // -------------------------------------------------------------------------
@@ -647,13 +761,26 @@ public class HoverController_Propulsion : MonoBehaviour
         if (!grounded && !boosting)
             return;
 
-        float throttle = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
+        float throttle   = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
+        float currentFwd = Vector3.Dot(rb.linearVelocity, transform.forward);
+
+        // ── Over-speed bleed ──
+        // When forward speed exceeds effectiveTopSpeed (e.g. boost fading out
+        // while throttle is still held), apply a proportional counter-force to
+        // bleed speed back to the cap. Without this, drive is suppressed (speed
+        // above cap) AND forward drag is suppressed (throttle held), leaving
+        // no force to bring the vehicle back down to normal top speed.
+        // Only fires in the over-speed regime — no conflict with the drive-drag
+        // mutual exclusion that prevents jitter at normal speeds.
+        if (currentFwd > effectiveTopSpeed)
+        {
+            float excess = currentFwd - effectiveTopSpeed;
+            rb.AddForce(-transform.forward * excess * forwardDamp, ForceMode.Acceleration);
+        }
 
         // No throttle input — forward drag handles deceleration, nothing to do here.
         if (Mathf.Abs(throttle) < 0.001f)
             return;
-
-        float currentFwd = Vector3.Dot(rb.linearVelocity, transform.forward);
 
         float rawAccel = 0f;
         if (grounded)
