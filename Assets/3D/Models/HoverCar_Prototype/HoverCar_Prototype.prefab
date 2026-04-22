@@ -187,7 +187,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 0}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 60.000004
+    FieldOfView: 65
     OrthographicSize: 5
     NearClipPlane: 0.3
     FarClipPlane: 1000
@@ -322,7 +322,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60.000004
+  field of view: 65
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -442,6 +442,7 @@ GameObject:
   - component: {fileID: 2559843217812755066}
   - component: {fileID: 5761321178091812356}
   - component: {fileID: 3191944406936877070}
+  - component: {fileID: 6195698811811710777}
   m_Layer: 0
   m_Name: HoverCar_Prototype
   m_TagString: Untagged
@@ -533,6 +534,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   drawDebugRays: 1
+  debugSettings: {fileID: 0}
 --- !u!114 &4964355425596500860
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -545,12 +547,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20d6ae1d2bf55ef4a82f194547b51e6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Propulsion
-  maxForwardAccel: 70
-  maxReverseAccel: 35
-  topSpeed: 70
-  speedAssistStrength: 0
-  speedAssistMaxAccel: 0
-  speedAssistDeadband: 0.5
+  maxForwardAccel: 50
+  maxReverseAccel: 25
+  topSpeed: 50
   yawAccel: 7
   yawDamping: 6
   airTurnMultiplier: 0.5
@@ -579,14 +578,16 @@ MonoBehaviour:
   passiveBankAngle: 5
   bankLerpSpeed: 8
   enableStrafe: 1
-  strafeTopSpeed: 45
-  strafeAccel: 35
+  strafeTopSpeed: 30
+  strafeAccel: 25
   strafePitchLimit: 20
   strafePitchTorque: 1
   strafePitchDamping: 1
+  strafePitchSensitivity: 90
   strafeModeBlendSeconds: 0.2
   strafeLateralCapStrength: 40
   drawDebug: 0
+  debugSettings: {fileID: 0}
 --- !u!114 &7460556337297359226
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -601,6 +602,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::VehicleHealth
   maxHealth: 100
   startingHealth: 100
+  debugSettings: {fileID: 0}
 --- !u!114 &3396267810379779740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -618,6 +620,7 @@ MonoBehaviour:
   regenRate: 20
   regenDelay: 1
   empFreezeRemaining: 0
+  debugSettings: {fileID: 0}
 --- !u!114 &6056019813642530629
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -644,6 +647,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   drawDebug: 1
+  debugSettings: {fileID: 0}
 --- !u!114 &2559843217812755066
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -657,6 +661,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Aim
   drawDebug: 1
+  debugSettings: {fileID: 0}
 --- !u!114 &5761321178091812356
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -700,6 +705,18 @@ MonoBehaviour:
   m_DefaultActionMap: Hover
   m_SplitScreenIndex: -1
   m_Camera: {fileID: 4978544463994653959}
+--- !u!114 &6195698811811710777
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4246840766707924649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a5290f554f4028419d29c660e03d078, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VehicleLayerAssigner
 --- !u!1 &4978026027279532553
 GameObject:
   m_ObjectHideFlags: 0
@@ -821,8 +838,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6746938393726236437}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.12218326, y: 0.000000006126019, z: -7.5414724e-10, w: 0.9925076}
-  m_LocalPosition: {x: 0, y: 2.5, z: -6}
+  m_LocalRotation: {x: 0.19611613, y: 0.000000032672958, z: -0.0000000065345915, w: 0.9805807}
+  m_LocalPosition: {x: 0, y: 3.5, z: -6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -852,7 +869,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 0}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 54
+    FieldOfView: 50
     OrthographicSize: 5
     NearClipPlane: 0.3
     FarClipPlane: 1000
@@ -889,7 +906,7 @@ MonoBehaviour:
     AngularDampingMode: 0
     RotationDamping: {x: 1, y: 1, z: 1}
     QuaternionDamping: 1
-  FollowOffset: {x: 0, y: 2.5, z: -6}
+  FollowOffset: {x: 0, y: 3.5, z: -6}
 --- !u!114 &3541528524906933447
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1007,8 +1024,8 @@ MonoBehaviour:
   maxPitch: 45
   neutralPitch: 25
   pitchRecenterSpeed: 2
-  shoulderShiftAmount: -2
-  shoulderLookAheadAmount: 2
+  shoulderShiftAmount: 1.8
+  shoulderLookAheadAmount: 2.5
   shoulderShiftLerpSpeed: 8
   strafeFovReduction: 5
 --- !u!1001 &471204068556280344
@@ -1019,6 +1036,22 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 5797443098344253826}
     m_Modifications:
+    - target: {fileID: 552547213640093039, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 552547213640093039, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 4.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4163335332686182390, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.6
+      objectReference: {fileID: 0}
+    - target: {fileID: 4163335332686182390, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 4.2
+      objectReference: {fileID: 0}
     - target: {fileID: 7711646723984399796, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: m_Name
       value: VFX_MachineGuns

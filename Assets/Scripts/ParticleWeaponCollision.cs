@@ -42,6 +42,26 @@ public class ParticleWeaponCollision : MonoBehaviour
         if (weaponDefinition == null)
             Debug.LogError("[ParticleWeaponCollision] No WeaponDefinition assigned. " +
                            "Damage will be 0 on all hits.", this);
+
+        ConfigureCollisionMask();
+    }
+
+    /// <summary>
+    /// Sets the particle system's Collides With mask to exclude this vehicle's own layer.
+    /// VehicleLayerAssigner (execution order -20) runs before this, so the hierarchy
+    /// is already on the correct layer by the time Awake fires here.
+    /// </summary>
+    private void ConfigureCollisionMask()
+    {
+        if (ps == null) return;
+
+        int ownLayer = gameObject.layer;
+        var collision = ps.collision;
+
+        // Start from current mask, strip out own layer so bullets pass through teammates.
+        int mask = collision.collidesWith;
+        mask &= ~(1 << ownLayer);
+        collision.collidesWith = mask;
     }
 
     private void OnParticleCollision(GameObject other)

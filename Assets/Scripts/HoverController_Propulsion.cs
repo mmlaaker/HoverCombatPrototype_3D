@@ -330,6 +330,11 @@ public class HoverController_Propulsion : MonoBehaviour
     [Range(0f, 20f)]
     [SerializeField] private float strafePitchDamping = 6f;
 
+    [Tooltip("Aim sensitivity in degrees per second at full stick deflection. " +
+             "Controls how fast the pitch angle changes with stick input. Recommended: 60–120.")]
+    [Range(10f, 300f)]
+    [SerializeField] private float strafePitchSensitivity = 90f;
+
     [Tooltip("Time (seconds) to blend strafe movement in when entering strafe mode.")]
     [Min(0.05f)]
     [SerializeField] private float strafeModeBlendSeconds = 0.2f;
@@ -342,6 +347,7 @@ public class HoverController_Propulsion : MonoBehaviour
     [SerializeField] private float strafeLateralCapStrength = 40f;
 
     private float _strafeModeBlend; // 0..1, blends strafe movement authority in/out
+    private float _strafePitchAccum; // accumulated FPS-style pitch angle (degrees)
 
     /// <summary>
     /// Maximum pitch angle (degrees) the vehicle nose can tilt in strafe mode.
@@ -453,7 +459,12 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyBoostBlend()
     {
-        bool wantsBoost    = enableBoost && input.Boost;
+        // In drive mode, require meaningful throttle so stick drift from a
+        // sideways push doesn't waste energy. In strafe mode, lateral movement
+        // also benefits from boost so any stick input qualifies.
+        bool hasInput      = _strafeModeBlend > 0f
+                             || Mathf.Abs(input.ThrottleInput) >= 0.15f;
+        bool wantsBoost    = enableBoost && input.Boost && hasInput;
         bool energyGranted = wantsBoost &&
                              energy.TryConsume(boostEnergyPerSecond * Time.fixedDeltaTime);
 
@@ -848,9 +859,14 @@ public class HoverController_Propulsion : MonoBehaviour
     /// up or down within strafePitchLimit. This is Interpretation A from the
     /// design discussion — vehicle body IS the turret. Weapons fire along forward.
     ///
-    /// Implementation: proportional torque drives toward target pitch; a separate
-    /// damping term kills angular velocity on the pitch axis to prevent oscillation.
-    /// Foundation's leveling torque naturally snaps back to level on stick release.
+    /// FPS-style: stick input accumulates as a continuous pitch angle (like mouse
+    /// look). Releasing the stick holds the current pitch — no rubber-banding.
+    /// The accumulated angle is clamped to [-strafePitchLimit, +strafePitchLimit].
+    /// Resets to 0 on strafe exit so Foundation leveling can take over cleanly.
+    ///
+    /// Implementation: proportional torque drives toward the accumulated target;
+    /// a separate damping term kills angular velocity on the pitch axis to
+    /// prevent oscillation. Foundation's leveling torque is the opposing force.
     ///
     /// Tuning note: strafePitchTorque must stay LOW relative to Foundation's
     /// levelingTorqueStrength — they're competing forces. strafePitchDamping
@@ -859,7 +875,10 @@ public class HoverController_Propulsion : MonoBehaviour
     private void ApplyStrafePitch()
     {
         if (_strafeModeBlend <= 0f)
+        {
+            _strafePitchAccum = 0f;
             return;
+        }
 
         float aimY = input.CameraLookY;
 
@@ -867,12 +886,15 @@ public class HoverController_Propulsion : MonoBehaviour
         if (Mathf.Abs(aimY) < 0.1f)
             aimY = 0f;
 
-        // Target pitch: stick up (+1) = nose up = negative local X euler
-        float targetPitch  = -aimY * strafePitchLimit;
-        float currentPitch = NormalizeAngle(transform.localEulerAngles.x);
-        float pitchError   = targetPitch - currentPitch;
+        // Accumulate stick input as delta — FPS-style.
+        // Stick up (+1) = nose up = negative pitch convention.
+        _strafePitchAccum -= aimY * strafePitchSensitivity * Time.fixedDeltaTime;
+        _strafePitchAccum  = Mathf.Clamp(_strafePitchAccum, -strafePitchLimit, strafePitchLimit);
 
-        // Proportional drive toward target pitch
+        float currentPitch = NormalizeAngle(transform.localEulerAngles.x);
+        float pitchError   = _strafePitchAccum - currentPitch;
+
+        // Proportional drive toward accumulated target pitch
         float driveTorque = pitchError * strafePitchTorque * _strafeModeBlend;
 
         // Damping: counter-torque opposing current pitch angular velocity

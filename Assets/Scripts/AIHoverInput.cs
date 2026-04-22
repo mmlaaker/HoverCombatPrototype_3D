@@ -118,6 +118,36 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     [SerializeField] private float turnResponsiveness = 0.8f;
 
     // -------------------------------------------------------------------------
+    // 🧱 Obstacle Avoidance
+    // -------------------------------------------------------------------------
+    [Header("🧱 Obstacle Avoidance")]
+    [Tooltip("Maximum distance (m) to cast rays ahead for wall detection.")]
+    [Min(1f)]
+    [SerializeField] private float avoidanceRayDistance = 12f;
+
+    [Tooltip("Number of rays in the forward fan. Spread symmetrically across avoidanceFanAngle. " +
+             "Odd numbers recommended so there is always a center ray. Minimum 3.")]
+    [Range(3, 9)]
+    [SerializeField] private int avoidanceRayCount = 5;
+
+    [Tooltip("Half-angle (degrees) of the ray fan. Rays spread from -fanAngle to +fanAngle.")]
+    [Range(10f, 60f)]
+    [SerializeField] private float avoidanceFanAngle = 35f;
+
+    [Tooltip("Layers treated as obstacles. Default: everything.")]
+    [SerializeField] private LayerMask obstacleMask = ~0;
+
+    [Tooltip("When the closest obstacle is at or below this distance, avoidance steering " +
+             "fully overrides waypoint steering and throttle drops to minimum.")]
+    [Min(0.5f)]
+    [SerializeField] private float avoidanceUrgentDistance = 4f;
+
+    [Tooltip("Minimum throttle when obstacle avoidance is at maximum urgency. " +
+             "Keeps the vehicle creeping forward so it can steer out. 0 = full stop allowed.")]
+    [Range(0f, 0.5f)]
+    [SerializeField] private float avoidanceMinThrottle = 0.15f;
+
+    // -------------------------------------------------------------------------
     // Runtime state
     // -------------------------------------------------------------------------
     private enum AIState { Roam, Flee, Dead }
@@ -226,7 +256,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         AdvanceWaypointTimer();
 
         Vector3 toWaypoint = _currentWaypoint - transform.position;
-        toWaypoint.y = 0f; // ignore vertical — let Foundation handle hover height
+        toWaypoint.y = 0f;
 
         if (toWaypoint.magnitude < waypointArrivalDistance)
             PickNewWaypoint();
@@ -234,6 +264,9 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         SteerToward(_currentWaypoint);
         ThrottleInput = 1f;
         Boost         = false;
+
+        // Obstacle avoidance — override steering and throttle when walls are near
+        ApplyObstacleAvoidance();
 
         UpdateFiring();
     }
@@ -268,6 +301,9 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         ThrottleInput = 1f;
         Boost         = true;
         FireHeld      = false; // don't fire while fleeing
+
+        // Obstacle avoidance — even while fleeing, don't drive into walls
+        ApplyObstacleAvoidance();
     }
 
     // -------------------------------------------------------------------------
@@ -295,6 +331,77 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         // Signed angle: positive = target is to the right, negative = left
         float cross = Vector3.Cross(forward, toTarget).y;
         TurnInput = Mathf.Clamp(cross * turnResponsiveness, -1f, 1f);
+    }
+
+    // -------------------------------------------------------------------------
+    // 🧱 Obstacle Avoidance
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Casts a fan of rays forward. When obstacles are detected, blends a
+    /// steering correction into TurnInput and reduces ThrottleInput proportionally
+    /// to the closest hit distance.
+    ///
+    /// Each ray that hits contributes a "steer away" impulse weighted by proximity
+    /// (closer hits dominate). The center ray uses the wall normal to decide
+    /// direction; side rays steer away from their side of the fan.
+    ///
+    /// Called after SteerToward so the waypoint heading is already in TurnInput.
+    /// Avoidance adds on top — at high urgency it fully overrides the waypoint steer.
+    /// </summary>
+    private void ApplyObstacleAvoidance()
+    {
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
+
+        float closestDist   = avoidanceRayDistance;
+        float weightedSteer = 0f;
+        float totalWeight   = 0f;
+
+        for (int i = 0; i < avoidanceRayCount; i++)
+        {
+            float t     = avoidanceRayCount == 1 ? 0.5f : (float)i / (avoidanceRayCount - 1);
+            float angle = Mathf.Lerp(-avoidanceFanAngle, avoidanceFanAngle, t);
+
+            Vector3 dir = Quaternion.Euler(0f, angle, 0f) * transform.forward;
+
+            if (!Physics.Raycast(origin, dir, out RaycastHit hit, avoidanceRayDistance, obstacleMask))
+                continue;
+
+            float proximity = 1f - (hit.distance / avoidanceRayDistance);
+
+            if (hit.distance < closestDist)
+                closestDist = hit.distance;
+
+            // Decide which way to steer away from this hit.
+            // Side rays: steer opposite to the ray's side of the fan.
+            // Center ray (angle near zero): use wall normal to pick the better direction.
+            float steerAway;
+            if (Mathf.Abs(angle) < 1f)
+            {
+                float normalCross = Vector3.Cross(transform.forward, hit.normal).y;
+                steerAway = normalCross >= 0f ? 1f : -1f;
+            }
+            else
+            {
+                steerAway = angle < 0f ? 1f : -1f;
+            }
+
+            weightedSteer += steerAway * proximity;
+            totalWeight   += proximity;
+        }
+
+        // No hits — no avoidance needed
+        if (totalWeight < 0.001f)
+            return;
+
+        // Urgency ramps from 0 (hit at max range) to 1 (hit at urgent distance or closer)
+        float urgency = Mathf.InverseLerp(avoidanceRayDistance, avoidanceUrgentDistance, closestDist);
+
+        // Steering: blend avoidance into existing TurnInput. At full urgency, avoidance dominates.
+        float avoidSteer = Mathf.Clamp(weightedSteer / totalWeight, -1f, 1f);
+        TurnInput = Mathf.Clamp(Mathf.Lerp(TurnInput, avoidSteer, urgency), -1f, 1f);
+
+        // Throttle: reduce proportionally so the AI slows near walls
+        ThrottleInput = Mathf.Lerp(ThrottleInput, avoidanceMinThrottle, urgency);
     }
 
     // -------------------------------------------------------------------------
@@ -438,6 +545,27 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         // Fire range
         Gizmos.color = FireHeld ? Color.red : new Color(1f, 0f, 0f, 0.2f);
         Gizmos.DrawWireSphere(transform.position, fireRange);
+
+        // Obstacle avoidance rays
+        Vector3 rayOrigin = transform.position + Vector3.up * 0.5f;
+        for (int i = 0; i < avoidanceRayCount; i++)
+        {
+            float t     = avoidanceRayCount == 1 ? 0.5f : (float)i / (avoidanceRayCount - 1);
+            float angle = Mathf.Lerp(-avoidanceFanAngle, avoidanceFanAngle, t);
+            Vector3 dir = Quaternion.Euler(0f, angle, 0f) * transform.forward;
+
+            if (Physics.Raycast(rayOrigin, dir, out RaycastHit hit, avoidanceRayDistance, obstacleMask))
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawLine(rayOrigin, hit.point);
+                Gizmos.DrawSphere(hit.point, 0.2f);
+            }
+            else
+            {
+                Gizmos.color = new Color(0f, 1f, 0f, 0.3f);
+                Gizmos.DrawLine(rayOrigin, rayOrigin + dir * avoidanceRayDistance);
+            }
+        }
     }
 #endif
 }
