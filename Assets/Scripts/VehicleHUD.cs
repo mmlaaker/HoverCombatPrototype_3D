@@ -100,6 +100,23 @@ public class VehicleHUD : MonoBehaviour
     [SerializeField] private TextMeshProUGUI ammoText;
 
     // =========================================================================
+    // 🎯 Reticle
+    // =========================================================================
+
+    [Header("🎯 Reticle")]
+    [Tooltip("UI Image used as a crosshair/reticle. Fades in during strafe mode, hidden in drive mode. " +
+             "Place this at the center of the screen on the HUD canvas.")]
+    [SerializeField] private Image reticleImage;
+
+    [Tooltip("Reticle color at full strafe. Alpha is driven by StrafeModeBlend — " +
+             "set the desired visible alpha here (e.g. 0.9).")]
+    [SerializeField] private Color reticleColor = new Color(1f, 1f, 1f, 0.9f);
+
+    [Tooltip("How far ahead (meters) to project the aim point for reticle placement. " +
+             "Larger values make the reticle less sensitive to small pitch changes.")]
+    [SerializeField] private float reticleProjectionDistance = 100f;
+
+    // =========================================================================
     // 🎯 Missile Lock
     // =========================================================================
 
@@ -123,9 +140,10 @@ public class VehicleHUD : MonoBehaviour
     // Runtime references
     // =========================================================================
 
-    private VehicleHealth           _health;
-    private HoverController_Energy  _energy;
-    private HoverController_Weapons _weapons;
+    private VehicleHealth              _health;
+    private HoverController_Energy     _energy;
+    private HoverController_Weapons    _weapons;
+    private HoverController_Propulsion _propulsion;
 
     // Only EMP freeze is tracked locally — it has no per-frame readable equivalent
     // on the energy component that covers the full freeze window reliably.
@@ -145,13 +163,15 @@ public class VehicleHUD : MonoBehaviour
             return;
         }
 
-        _health  = vehicleRoot.GetComponentInChildren<VehicleHealth>();
-        _energy  = vehicleRoot.GetComponentInChildren<HoverController_Energy>();
-        _weapons = vehicleRoot.GetComponentInChildren<HoverController_Weapons>();
+        _health     = vehicleRoot.GetComponentInChildren<VehicleHealth>();
+        _energy     = vehicleRoot.GetComponentInChildren<HoverController_Energy>();
+        _weapons    = vehicleRoot.GetComponentInChildren<HoverController_Weapons>();
+        _propulsion = vehicleRoot.GetComponentInChildren<HoverController_Propulsion>();
 
-        if (_health  == null) Debug.LogWarning("[VehicleHUD] VehicleHealth not found on vehicleRoot.", this);
-        if (_energy  == null) Debug.LogWarning("[VehicleHUD] HoverController_Energy not found on vehicleRoot.", this);
-        if (_weapons == null) Debug.LogWarning("[VehicleHUD] HoverController_Weapons not found on vehicleRoot.", this);
+        if (_health     == null) Debug.LogWarning("[VehicleHUD] VehicleHealth not found on vehicleRoot.", this);
+        if (_energy     == null) Debug.LogWarning("[VehicleHUD] HoverController_Energy not found on vehicleRoot.", this);
+        if (_weapons    == null) Debug.LogWarning("[VehicleHUD] HoverController_Weapons not found on vehicleRoot.", this);
+        if (_propulsion == null) Debug.LogWarning("[VehicleHUD] HoverController_Propulsion not found on vehicleRoot.", this);
     }
 
     private void OnEnable()
@@ -226,6 +246,8 @@ public class VehicleHUD : MonoBehaviour
             SyncEnergy();
 
         _wasRegenerating = isRegen;
+
+        SyncReticle();
     }
 
     // =========================================================================
@@ -323,6 +345,7 @@ public class VehicleHUD : MonoBehaviour
         SyncHealth();
         SyncEnergy();
         SyncWeapon();
+        SyncReticle();
     }
 
     private void SyncHealth()
@@ -369,6 +392,44 @@ public class VehicleHUD : MonoBehaviour
 
         SetText(weaponNameText, slot.definition.displayName);
         SetText(ammoText, slot.currentAmmo == -1 ? "∞" : slot.currentAmmo.ToString());
+    }
+
+    private void SyncReticle()
+    {
+        if (reticleImage == null || _propulsion == null) return;
+
+        float blend = _propulsion.StrafeModeBlend;
+        reticleImage.enabled = blend > 0f;
+        if (blend <= 0f) return;
+
+        // Alpha fade with strafe blend
+        Color c = reticleColor;
+        c.a = reticleColor.a * blend;
+        reticleImage.color = c;
+
+        // Project the aim direction onto screen space.
+        // Uses the same yaw + pitch (no roll) as HoverController_Aim.
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        Transform vt = vehicleRoot.transform;
+        float pitch = vt.eulerAngles.x;
+        if (pitch > 180f) pitch -= 360f;
+        float yaw = vt.eulerAngles.y;
+        Vector3 aimDir = Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward;
+        Vector3 aimWorldPoint = vt.position + aimDir * reticleProjectionDistance;
+
+        Vector3 screenPos = cam.WorldToScreenPoint(aimWorldPoint);
+        if (screenPos.z < 0f) return; // behind camera
+
+        RectTransform reticleRect = reticleImage.rectTransform;
+        RectTransform canvasRect = reticleRect.parent as RectTransform;
+        if (canvasRect != null &&
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect, screenPos, null, out Vector2 localPoint))
+        {
+            reticleRect.localPosition = localPoint;
+        }
     }
 
     private void SetMissileLockGroupVisible(bool visible)
