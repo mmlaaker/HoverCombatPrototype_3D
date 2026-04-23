@@ -455,7 +455,7 @@ public class HoverController_Foundation : MonoBehaviour
             Vector3 torqueAxis = Vector3.Cross(transform.up, Vector3.up);
 
             if (torqueAxis.sqrMagnitude < 0.001f)
-                torqueAxis = transform.forward * 0.1f;
+                torqueAxis = transform.right * 0.1f;
 
             rb.AddTorque(torqueAxis.normalized * flipRecoveryTorque, ForceMode.Acceleration);
         }
