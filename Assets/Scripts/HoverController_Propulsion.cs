@@ -58,6 +58,10 @@ public class HoverController_Propulsion : MonoBehaviour
     [Tooltip("Peak reverse acceleration (m/s²) at full reverse throttle.")]
     [SerializeField] private float maxReverseAccel = 15f;
 
+    [Tooltip("Reverse top speed (m/s). Independent of forward top speed. " +
+             "Tune alongside maxReverseAccel and strafeTopSpeed — they should feel like a matched budget.")]
+    [SerializeField] private float reverseTopSpeed = 20f;
+
     [Tooltip("Forward top speed (m/s) before boost.")]
     [SerializeField] private float topSpeed = 40f;
 
@@ -280,6 +284,12 @@ public class HoverController_Propulsion : MonoBehaviour
     /// Read by HoverCameraController for shoulder shift magnitude.
     /// </summary>
     public float DriftLerp => driftLerp;
+
+    /// <summary>
+    /// Current boost blend value (0 = no boost, 1 = full boost).
+    /// Read by HoverVehicleVFX to modulate particle emission rates.
+    /// </summary>
+    public float BoostLerp => boostLerp;
 
     // -------------------------------------------------------------------------
     // 📢 Events
@@ -737,27 +747,36 @@ public class HoverController_Propulsion : MonoBehaviour
         if (Mathf.Abs(throttle) < 0.001f)
             return;
 
+        // Blend forward cap and accel toward strafe values in strafe mode.
+        // Strafe top speed is boost-scaled the same way ApplyStrafe scales lateral top speed,
+        // so boost still has an effect in strafe mode — just relative to the strafe ceiling.
+        float strafeEffectiveTopSpeed = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
+        float blendedTopSpeed  = Mathf.Lerp(effectiveTopSpeed,     strafeEffectiveTopSpeed, _strafeModeBlend);
+        float blendedFwdAccel  = Mathf.Lerp(effectiveForwardAccel, strafeAccel,             _strafeModeBlend);
+
         float rawAccel = 0f;
         if (grounded)
         {
             if (throttle >= 0f)
             {
                 // Suppress drive if already at or above top speed forward.
-                if (currentFwd < effectiveTopSpeed)
-                    rawAccel = throttle * effectiveForwardAccel;
+                if (currentFwd < blendedTopSpeed)
+                    rawAccel = throttle * blendedFwdAccel;
             }
             else
             {
                 // Suppress reverse drive if already at or below reverse top speed.
-                if (currentFwd > -topSpeed)
+                // reverseTopSpeed is independent of strafe mode — reverse and strafe
+                // share the same speed budget by design, so no additional blending here.
+                if (currentFwd > -reverseTopSpeed)
                     rawAccel = throttle * maxReverseAccel;
             }
         }
         else
         {
             // Airborne with boost — only forward, capped at top speed.
-            if (currentFwd < effectiveTopSpeed)
-                rawAccel = Mathf.Max(throttle, 0f) * effectiveForwardAccel;
+            if (currentFwd < blendedTopSpeed)
+                rawAccel = Mathf.Max(throttle, 0f) * blendedFwdAccel;
         }
 
         if (Mathf.Abs(rawAccel) < 0.001f)
@@ -869,11 +888,18 @@ public class HoverController_Propulsion : MonoBehaviour
         // is irrelevant to the forward top-speed cap.
         float forwardSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
 
-        if (forwardSpeed <= effectiveTopSpeed)
-            return;
-
-        float excess = forwardSpeed - effectiveTopSpeed;
-        rb.AddForce(-transform.forward * excess * forwardDamp, ForceMode.Acceleration);
+        if (forwardSpeed > effectiveTopSpeed)
+        {
+            float excess = forwardSpeed - effectiveTopSpeed;
+            rb.AddForce(-transform.forward * excess * forwardDamp, ForceMode.Acceleration);
+        }
+        else if (forwardSpeed < -reverseTopSpeed)
+        {
+            // Mirror bleed for reverse — catches dodge burst overshoot and any
+            // other impulse that pushes past reverseTopSpeed backward.
+            float excess = -reverseTopSpeed - forwardSpeed;
+            rb.AddForce(transform.forward * excess * forwardDamp, ForceMode.Acceleration);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -914,8 +940,8 @@ public class HoverController_Propulsion : MonoBehaviour
     /// <summary>
     /// Smoothly blends strafe mode authority in and out on trigger hold/release.
     /// _strafeModeBlend is the weight applied to strafe-specific forces.
-    /// Drive forces are attenuated by (1 - _strafeModeBlend) to prevent
-    /// double-force during the blend transition.
+    /// ApplyDrive blends its top speed and accel caps toward strafe values as
+    /// this increases, so forward drive weakens proportionally on strafe entry.
     /// </summary>
     private void ApplyStrafeModeBlend()
     {
