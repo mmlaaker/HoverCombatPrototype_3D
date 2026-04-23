@@ -1,77 +1,46 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v5.1
+/// HoverController_Propulsion v6.0
+///
+/// v6.0 changes:
+///   • Strafe dodge added. In strafe mode, boost button + non-forward stick fires a
+///     tapering force burst (jet dodge) instead of continuous boost. Separate inspector
+///     fields: dodgeForce, dodgeDuration, dodgeEnergyCost, dodgeCooldown.
+///   • Continuous boost now requires meaningful throttle input (>= 0.15 stick deflection).
+///     In drive mode: forward or backward. In strafe mode: forward-dominant only
+///     (forward must exceed lateral magnitude to prevent stick bleed).
+///   • Over-speed bleed extracted to ApplyOverSpeedBleed — proportional counter-force
+///     when forward speed exceeds effectiveTopSpeed (e.g. boost fading while throttle
+///     is held). Suppressed during drift to avoid false triggers from lateral velocity.
+///   • Forward drag forced on during drift regardless of throttle. The drive-drag mutual
+///     exclusion assumes heading == velocity, which breaks during drift. Drift's own
+///     driftForwardDamp controls the damping feel.
 ///
 /// v5.1 changes:
 ///   • Drive and forward drag made mutually exclusive. Throttle held: drive applies,
 ///     forward drag suppressed. Throttle released: drag applies, drive suppressed.
-///     Eliminates the opposing-force oscillation that caused jitter at any speed
-///     between zero and top speed. Lateral drag remains always-on grounded.
 ///   • Top speed enforcement moved into ApplyDrive: drive force suppressed when
-///     forward speed meets or exceeds effectiveTopSpeed. Drag no longer needed to
-///     hold the speed ceiling.
-///
+///     forward speed meets or exceeds effectiveTopSpeed.
 ///
 /// v5.0 changes:
-///   • Speed assist servo removed entirely (speedAssistStrength, speedAssistMaxAccel,
-///     speedAssistDeadband fields, _airborneExitSpeed cache, and all servo logic in
-///     ApplyDrive). Raw drive tuning handles speed feel directly — the servo was
-///     adding complexity and oscillation without providing behavior that couldn't
-///     be achieved through forwardDamp and accel tuning alone.
-///
-/// v4.9 changes:
-///   • ApplyDrag restored to grounded-only for both axes. Airborne drag was
-///     bleeding exit velocity with nothing to counteract it, violating the design
-///     intent that the craft maintains its exit speed in the air.
-///   • Net result: no meaningful velocity change on grounded<->airborne transition.
-///     Only boost meaningfully affects speed in the air.
-///
-/// v4.8 changes:
-///   • ApplyDrag: both lateral and forward drag now always active regardless of grounded
-///     state. The hover vehicle is always airborne — "grounded" means close enough to the
-///     surface to push off it, not that drag physics change. Drive suppression already
-///     handles the inability to accelerate airborne; drag should be consistent in both
-///     states so there is no net force change on liftoff or landing.
-///
-/// v4.7 changes:
-///   • Soft top-speed cap removed entirely (softCapStrength field, ApplySoftSpeedCap method,
-///     and its FixedUpdate call). Weapon knockback must travel freely; the assist servo and
-///     forward drag already manage normal speed convergence. The lateral strafe cap is
-///     retained as strafeLateralCapStrength — an independent field in the Strafe Mode block.
-///   • passiveBankAngle added. ApplyChassisBank now blends a turn-input-proportional passive
-///     lean with the existing drift bank, giving the craft a subtle carving look on any turn
-///     independent of drift state.
-///
-/// v4.6 changes:
-///   • lateralDamp and forwardDamp are now independent serialized fields.
-///   • driftForwardDamp added alongside driftLateralDamp.
-///   • ApplyDrag rewritten with separate effectiveLateralDamp and effectiveForwardDamp locals.
-///
-/// v4.5 changes:
-///   • inputProvider serialized field removed. Input acquired via GetComponent<IHoverInputProvider>().
-///   • FireGroundedJump comment expanded to explain charge reset on energy denial.
-///
-/// v4.4 changes (no behavior change):
-///   • IsHoverGrounded cached once per FixedUpdate.
-///   • effectiveTopSpeed and effectiveForwardAccel cached as locals in FixedUpdate.
-///   • EffectiveLateralDamp() and EffectiveYawMultiplier() inlined at call sites.
+///   • Speed assist servo removed entirely. Raw drive tuning handles speed feel directly.
 /// -------------------------------------------------
 /// Responsibilities:
-///   • Unified drive: grounded only — throttle + assist suppressed airborne unless boosting
+///   • Unified drive: grounded only — throttle suppressed airborne unless boosting
 ///   • Yaw torque + torque-based yaw damping
 ///   • Independent lateral and forward drag via force (grounded only)
-///   • Airborne: exit velocity cached on liftoff; assist servo capped to prevent
-///     acceleration above exit speed; drag suppressed so velocity carries cleanly
+///   • Airborne: drag suppressed so exit velocity carries cleanly as inertia
 ///   • Drift state: reduces lateral damp, boosts yaw, banks mesh root visually
-///   • Boost blend — energy-gated via HoverController_Energy.TryConsume
-///   • Jump — charge-based impulse, one air jump token, energy-gated
+///   • Boost: continuous forward boost (energy-gated) + strafe dodge burst
+///   • Jump: charge-based impulse, one air jump token, energy-gated
+///   • Over-speed bleed: decelerates when above top speed cap (post-boost fade)
 ///
 /// Physics contract: zero direct writes to rb.linearVelocity or rb.angularVelocity.
 /// All motion is expressed as AddForce / AddTorque.
 /// Exception: jump fires rb.AddForce(VelocityChange) — intentional, documented at call site.
 ///
-/// Drift state modifies two physics values (lateralDamp, forwardDamp, yawAccel) and one
+/// Drift state modifies three physics values (lateralDamp, forwardDamp, yawAccel) and one
 /// visual transform (meshRoot local Z rotation). No new forces are introduced.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
@@ -91,7 +60,6 @@ public class HoverController_Propulsion : MonoBehaviour
 
     [Tooltip("Forward top speed (m/s) before boost.")]
     [SerializeField] private float topSpeed = 40f;
-
 
     // -------------------------------------------------------------------------
     // 🔄 Turning
@@ -461,6 +429,7 @@ public class HoverController_Propulsion : MonoBehaviour
         ApplyStrafe(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyTurning(grounded);
         ApplyDrag();
+        ApplyOverSpeedBleed(effectiveTopSpeed);
         ApplyStrafePitch();
         HandleJump(grounded);
         HandleDodge(grounded);
@@ -764,20 +733,6 @@ public class HoverController_Propulsion : MonoBehaviour
         float throttle   = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
         float currentFwd = Vector3.Dot(rb.linearVelocity, transform.forward);
 
-        // ── Over-speed bleed ──
-        // When forward speed exceeds effectiveTopSpeed (e.g. boost fading out
-        // while throttle is still held), apply a proportional counter-force to
-        // bleed speed back to the cap. Without this, drive is suppressed (speed
-        // above cap) AND forward drag is suppressed (throttle held), leaving
-        // no force to bring the vehicle back down to normal top speed.
-        // Only fires in the over-speed regime — no conflict with the drive-drag
-        // mutual exclusion that prevents jitter at normal speeds.
-        if (currentFwd > effectiveTopSpeed)
-        {
-            float excess = currentFwd - effectiveTopSpeed;
-            rb.AddForce(-transform.forward * excess * forwardDamp, ForceMode.Acceleration);
-        }
-
         // No throttle input — forward drag handles deceleration, nothing to do here.
         if (Mathf.Abs(throttle) < 0.001f)
             return;
@@ -869,14 +824,56 @@ public class HoverController_Propulsion : MonoBehaviour
         // Full drag at throttle == 0, zero drag at throttle >= 0.15.
         // Prevents the binary snap between "full drag" and "zero drag" that
         // feels twitchy on worn sticks or light inputs.
+        // Exception: always apply full forward drag during drift. The drive-drag
+        // mutual exclusion assumed heading == velocity, which breaks during drift.
+        // Drive force along the yawing heading with no forward drag to resist
+        // destabilizes the vehicle. Drift's own driftForwardDamp handles the
+        // reduced damping feel.
         float throttleMag = Mathf.Abs(input.ThrottleInput);
-        float dragWeight  = 1f - Mathf.Clamp01(throttleMag / 0.15f);
+        float dragWeight  = driftLerp > 0f
+            ? 1f
+            : 1f - Mathf.Clamp01(throttleMag / 0.15f);
         if (dragWeight > 0f)
         {
             float effectiveForwardDamp = Mathf.Lerp(forwardDamp, driftForwardDamp, driftLerp);
             if (effectiveForwardDamp > 0f)
                 rb.AddForce(transform.forward * (-localVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Over-speed bleed — velocity-aligned deceleration
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// When speed exceeds effectiveTopSpeed (e.g. boost fading while throttle is
+    /// held), the drive-drag mutual exclusion leaves no force to decelerate.
+    /// Drive is suppressed (above cap) and forward drag is suppressed (throttle held).
+    ///
+    /// This method applies a proportional counter-force along the actual world
+    /// velocity direction — NOT along transform.forward. This is critical because
+    /// during drift, heading diverges from velocity. A heading-aligned force would
+    /// push sideways or vertically, destabilizing the vehicle.
+    ///
+    /// Velocity-aligned means it always decelerates in the direction the vehicle
+    /// is actually moving, regardless of heading orientation. Safe during drift,
+    /// safe on slopes, safe at any heading angle.
+    /// </summary>
+    private void ApplyOverSpeedBleed(float effectiveTopSpeed)
+    {
+        // Suppressed during drift — drift has its own damping and the lateral
+        // velocity component inflates total magnitude, causing false triggers.
+        if (driftLerp > 0f)
+            return;
+
+        // Use forward-axis speed only — total magnitude includes lateral which
+        // is irrelevant to the forward top-speed cap.
+        float forwardSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
+
+        if (forwardSpeed <= effectiveTopSpeed)
+            return;
+
+        float excess = forwardSpeed - effectiveTopSpeed;
+        rb.AddForce(-transform.forward * excess * forwardDamp, ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -895,8 +892,9 @@ public class HoverController_Propulsion : MonoBehaviour
         if (meshRoot == null)
             return;
 
-        float turnSign    = Mathf.Sign(input.TurnInput);
-        float turnMag     = Mathf.Abs(Mathf.Clamp(input.TurnInput, -1f, 1f));
+        float turn     = Mathf.Clamp(input.TurnInput, -1f, 1f);
+        float turnSign = Mathf.Sign(turn);
+        float turnMag  = Mathf.Abs(turn);
 
         float passiveAngle = -turnSign * passiveBankAngle * turnMag;
         float driftAngle   = -turnSign * maxBankAngle * driftLerp;
@@ -947,7 +945,7 @@ public class HoverController_Propulsion : MonoBehaviour
     /// strafeTopSpeed — forward and lateral are capped independently so entry
     /// momentum doesn't strangle lateral acceleration.
     /// </summary>
-    private void ApplyStrafe(bool grounded, float effectiveTopSpeed, float effectiveLateralAccel)
+    private void ApplyStrafe(bool grounded, float effectiveTopSpeed, float effectiveForwardAccel)
     {
         if (!grounded || _strafeModeBlend <= 0f)
             return;
@@ -958,12 +956,12 @@ public class HoverController_Propulsion : MonoBehaviour
             return;
 
         // Lateral accel and top speed scale with boost the same way forward does.
-        // effectiveLateralAccel = strafeAccel * boostAccelMultiplier during boost.
-        // effectiveLateralTopSpeed = strafeTopSpeed * boostSpeedMultiplier during boost.
-        float effectiveLateralAccelScaled = strafeAccel * (effectiveLateralAccel / maxForwardAccel);
-        float effectiveLateralTopSpeed    = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
+        // Derives the boost ratio from the forward accel multiplier so strafe
+        // acceleration scales identically with boost without a separate parameter.
+        float lateralAccel             = strafeAccel * (effectiveForwardAccel / maxForwardAccel);
+        float effectiveLateralTopSpeed = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
 
-        rb.AddForce(transform.right * (stickX * effectiveLateralAccelScaled * _strafeModeBlend), ForceMode.Acceleration);
+        rb.AddForce(transform.right * (stickX * lateralAccel * _strafeModeBlend), ForceMode.Acceleration);
 
         // Per-axis lateral speed cap — only resists if lateral velocity alone
         // exceeds the boost-scaled lateral top speed.

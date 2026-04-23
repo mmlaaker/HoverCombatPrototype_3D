@@ -610,8 +610,8 @@ MonoBehaviour:
   driftTurnThreshold: 0.5
   driftBlendSeconds: 0.15
   meshRoot: {fileID: 0}
-  maxBankAngle: 20
-  passiveBankAngle: 5
+  maxBankAngle: 10
+  passiveBankAngle: 2
   bankLerpSpeed: 8
   enableStrafe: 1
   strafeTopSpeed: 30

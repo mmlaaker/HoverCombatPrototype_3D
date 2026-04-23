@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(sed 's/.*m_Name: //')"
+      "Bash(sed 's/.*m_Name: //')",
+      "Bash(git stash:*)"
     ]
   }
 }
