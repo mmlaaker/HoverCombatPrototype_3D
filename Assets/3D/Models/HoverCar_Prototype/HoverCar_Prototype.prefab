@@ -581,6 +581,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Propulsion
   maxForwardAccel: 50
   maxReverseAccel: 25
+  reverseTopSpeed: 20
   topSpeed: 50
   yawAccel: 7
   yawDamping: 6
@@ -590,8 +591,8 @@ MonoBehaviour:
   boostSpeedMultiplier: 1.5
   boostBlendSeconds: 0.35
   boostEnergyPerSecond: 20
-  dodgeForce: 500
-  dodgeDuration: 0.15
+  dodgeForce: 700
+  dodgeDuration: 0.1
   dodgeEnergyCost: 15
   dodgeCooldown: 0.2
   enableJump: 1
@@ -608,10 +609,11 @@ MonoBehaviour:
   driftForwardDamp: 1
   driftYawMultiplier: 1.5
   driftTurnThreshold: 0.5
+  minDriftSpeed: 25
   driftBlendSeconds: 0.15
   meshRoot: {fileID: 0}
-  maxBankAngle: 10
-  passiveBankAngle: 2
+  maxBankAngle: 12
+  passiveBankAngle: 3
   bankLerpSpeed: 8
   enableStrafe: 1
   strafeTopSpeed: 30
