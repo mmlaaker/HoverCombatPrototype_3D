@@ -432,12 +432,17 @@ public class HoverController_Propulsion : MonoBehaviour
         airJumpAvailable     = false;
     }
 
+    // Cached once per FixedUpdate — read by multiple methods below.
+    // Avoids redundant rb.linearVelocity reads and InverseTransformDirection calls.
+    private Vector3 _cachedLocalVel;
+
     private void FixedUpdate()
     {
         // Cache once per tick — read by multiple methods below.
         bool  grounded      = foundation.IsHoverGrounded;
         float effectiveTopSpeed    = topSpeed        * Mathf.Lerp(1f, boostSpeedMultiplier,  boostLerp);
         float effectiveForwardAccel = maxForwardAccel * Mathf.Lerp(1f, boostAccelMultiplier, boostLerp);
+        _cachedLocalVel = transform.InverseTransformDirection(rb.linearVelocity);
 
         ApplyBoostBlend();
         ApplyDriftBlend();
@@ -603,8 +608,7 @@ public class HoverController_Propulsion : MonoBehaviour
         else
         {
             // Not yet drifting — require minimum forward speed to initiate.
-            float forwardSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
-            _isDrifting = baseCondition && forwardSpeed >= minDriftSpeed;
+            _isDrifting = baseCondition && _cachedLocalVel.z >= minDriftSpeed;
         }
 
         float target = _isDrifting ? 1f : 0f;
@@ -765,7 +769,7 @@ public class HoverController_Propulsion : MonoBehaviour
             return;
 
         float throttle   = Mathf.Clamp(input.ThrottleInput, -1f, 1f);
-        float currentFwd = Vector3.Dot(rb.linearVelocity, transform.forward);
+        float currentFwd = _cachedLocalVel.z;
 
         // No throttle input — forward drag handles deceleration, nothing to do here.
         if (Mathf.Abs(throttle) < 0.001f)
@@ -825,14 +829,11 @@ public class HoverController_Propulsion : MonoBehaviour
 
         float inertiaY      = Mathf.Max(0.001f, rb.inertiaTensor.y);
         float desiredYawAcc = turn * yawAccel * turnScale * effectiveYawMult;
-        rb.AddRelativeTorque(Vector3.up * desiredYawAcc * inertiaY, ForceMode.Force);
-
-        if (yawDamping <= 0f)
-            return;
 
         float localYawRate  = transform.InverseTransformDirection(rb.angularVelocity).y;
-        float dampingTorque = -localYawRate * yawDamping * inertiaY;
-        rb.AddRelativeTorque(Vector3.up * dampingTorque, ForceMode.Force);
+        float dampingTorque = yawDamping > 0f ? -localYawRate * yawDamping : 0f;
+
+        rb.AddRelativeTorque(Vector3.up * ((desiredYawAcc + dampingTorque) * inertiaY), ForceMode.Force);
     }
 
     // -------------------------------------------------------------------------
@@ -856,12 +857,10 @@ public class HoverController_Propulsion : MonoBehaviour
         if (!foundation.IsHoverGrounded)
             return;
 
-        Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
-
         // Lateral drag — always active grounded, independent of throttle.
         float effectiveLateralDamp = Mathf.Lerp(lateralDamp, driftLateralDamp, driftLerp);
         if (effectiveLateralDamp > 0f)
-            rb.AddForce(transform.right * (-localVel.x * effectiveLateralDamp), ForceMode.Acceleration);
+            rb.AddForce(transform.right * (-_cachedLocalVel.x * effectiveLateralDamp), ForceMode.Acceleration);
 
         // Forward drag — fades in as throttle approaches zero.
         // Full drag at throttle == 0, zero drag at throttle >= 0.15.
@@ -880,7 +879,7 @@ public class HoverController_Propulsion : MonoBehaviour
         {
             float effectiveForwardDamp = Mathf.Lerp(forwardDamp, driftForwardDamp, driftLerp);
             if (effectiveForwardDamp > 0f)
-                rb.AddForce(transform.forward * (-localVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
+                rb.AddForce(transform.forward * (-_cachedLocalVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
         }
     }
 
@@ -910,7 +909,7 @@ public class HoverController_Propulsion : MonoBehaviour
 
         // Use forward-axis speed only — total magnitude includes lateral which
         // is irrelevant to the forward top-speed cap.
-        float forwardSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
+        float forwardSpeed = _cachedLocalVel.z;
 
         if (forwardSpeed > effectiveTopSpeed)
         {
@@ -1015,8 +1014,7 @@ public class HoverController_Propulsion : MonoBehaviour
 
         // Per-axis lateral speed cap — only resists if lateral velocity alone
         // exceeds the boost-scaled lateral top speed.
-        Vector3 localVel     = transform.InverseTransformDirection(rb.linearVelocity);
-        float   localLateral = localVel.x;
+        float localLateral = _cachedLocalVel.x;
 
         if (Mathf.Abs(localLateral) > effectiveLateralTopSpeed)
         {
@@ -1066,7 +1064,7 @@ public class HoverController_Propulsion : MonoBehaviour
         _strafePitchAccum -= aimY * strafePitchSensitivity * Time.fixedDeltaTime;
         _strafePitchAccum  = Mathf.Clamp(_strafePitchAccum, -strafePitchLimit, strafePitchLimit);
 
-        float currentPitch = NormalizeAngle(transform.localEulerAngles.x);
+        float currentPitch = HoverMath.NormalizeAngle(transform.localEulerAngles.x);
         float pitchError   = _strafePitchAccum - currentPitch;
 
         // Proportional drive toward accumulated target pitch
@@ -1083,13 +1081,4 @@ public class HoverController_Propulsion : MonoBehaviour
     // Helpers
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Normalizes a Unity euler angle from 0..360 to -180..180.
-    /// Required for strafe pitch error calculation — Unity returns 350 for -10 degrees.
-    /// </summary>
-    private static float NormalizeAngle(float angle)
-    {
-        if (angle > 180f) angle -= 360f;
-        return angle;
-    }
 }

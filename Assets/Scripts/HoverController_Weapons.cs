@@ -58,7 +58,6 @@ using UnityEngine;
 /// v1.1 changes:
 ///   • Muzzle points moved into WeaponDefinition (now in WeaponSlot as of v1.5).
 /// </summary>
-[DefaultExecutionOrder(0)]
 [RequireComponent(typeof(HoverController_Energy))]
 public class HoverController_Weapons : MonoBehaviour
 {
@@ -296,10 +295,10 @@ public class HoverController_Weapons : MonoBehaviour
 
     private void TickCooldowns()
     {
-        foreach (var slot in weaponSlots)
+        for (int i = 0, count = weaponSlots.Count; i < count; i++)
         {
-            if (slot == null) continue;
-            if (slot.cooldownRemaining > 0f)
+            var slot = weaponSlots[i];
+            if (slot != null && slot.cooldownRemaining > 0f)
                 slot.cooldownRemaining = Mathf.Max(0f, slot.cooldownRemaining - Time.deltaTime);
         }
     }

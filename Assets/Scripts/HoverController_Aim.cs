@@ -117,19 +117,11 @@ public class HoverController_Aim : MonoBehaviour
     /// </summary>
     private Quaternion ComputeAimRotation()
     {
-        float pitch = NormalizeAngle(transform.eulerAngles.x);
+        float pitch = HoverMath.NormalizeAngle(transform.eulerAngles.x);
         float yaw   = transform.eulerAngles.y;
         return Quaternion.Euler(pitch, yaw, 0f);
     }
 
-    /// <summary>
-    /// Normalizes a Unity euler angle from 0..360 to -180..180.
-    /// </summary>
-    private static float NormalizeAngle(float angle)
-    {
-        if (angle > 180f) angle -= 360f;
-        return angle;
-    }
 
     // -------------------------------------------------------------------------
     // Public API — called by HoverController_Weapons

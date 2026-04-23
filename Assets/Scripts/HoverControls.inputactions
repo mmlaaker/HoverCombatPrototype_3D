@@ -133,6 +133,17 @@
                 },
                 {
                     "name": "",
+                    "id": "718a202d-6a13-4f98-85ce-adfcfe7779ee",
+                    "path": "<Gamepad>/rightShoulder",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Drift",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
                     "id": "82487939-dc57-4c0c-97ad-97b318ac5ab1",
                     "path": "<Gamepad>/rightStick/x",
                     "interactions": "",
