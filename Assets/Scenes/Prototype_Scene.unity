@@ -2222,7 +2222,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1254805148386242258, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: groundLayers.m_Bits
-      value: 4294967295
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1254805148386242258, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: unstickImpulseStrength
@@ -2485,20 +2485,8 @@ PrefabInstance:
       value: 40
       objectReference: {fileID: 0}
     - target: {fileID: 4964355425596500860, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-      propertyPath: maxBankAngle
-      value: 10
-      objectReference: {fileID: 0}
-    - target: {fileID: 4964355425596500860, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-      propertyPath: reverseTopSpeed
-      value: 30
-      objectReference: {fileID: 0}
-    - target: {fileID: 4964355425596500860, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: softCapStrength
       value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 4964355425596500860, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
-      propertyPath: passiveBankAngle
-      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 4978026027279532553, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_Layer

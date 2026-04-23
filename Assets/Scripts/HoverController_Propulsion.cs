@@ -216,11 +216,9 @@ public class HoverController_Propulsion : MonoBehaviour
 
     [Tooltip("Forward/reverse counter-force (m/s²) resisting longitudinal velocity. " +
              "Controls coasting bleed-off when throttle is released. " +
-             "Independent of lateralDamp — tune for how long the craft coasts " +
-             "without affecting strafe feel or fighting the speed-assist servo. " +
-             "The servo is target-aware and only active under throttle input; " +
-             "forwardDamp applies at all times including zero throttle. " +
-             "0 = no forward drag (craft coasts indefinitely until soft cap acts).")]
+             "Independent of lateralDamp — tune for how long the craft coasts. " +
+             "Only applies when throttle is near zero (drive-drag mutual exclusion). " +
+             "0 = no forward drag (craft coasts indefinitely).")]
     [Range(0f, 50f)]
     [SerializeField] private float forwardDamp = 2f;
 
@@ -1076,9 +1074,5 @@ public class HoverController_Propulsion : MonoBehaviour
 
         rb.AddRelativeTorque(Vector3.right * (driveTorque + dampTorque), ForceMode.Acceleration);
     }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
 }

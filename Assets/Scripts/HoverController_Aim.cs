@@ -122,7 +122,6 @@ public class HoverController_Aim : MonoBehaviour
         return Quaternion.Euler(pitch, yaw, 0f);
     }
 
-
     // -------------------------------------------------------------------------
     // Public API — called by HoverController_Weapons
     // -------------------------------------------------------------------------
