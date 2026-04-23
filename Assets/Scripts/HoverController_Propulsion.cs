@@ -252,6 +252,12 @@ public class HoverController_Propulsion : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float driftTurnThreshold = 0.4f;
 
+    [Tooltip("Minimum forward speed (m/s) required to initiate drift. " +
+             "Once drifting, speed is not checked — you own the drift until you release the button. " +
+             "Aligns naturally with strafeTopSpeed: if you've outpaced strafe mode's ceiling, you can drift.")]
+    [Min(0f)]
+    [SerializeField] private float minDriftSpeed = 20f;
+
     [Tooltip("Time (seconds) to blend drift in and out. " +
              "Faster = snappier entry/exit. Recommended: 0.1–0.25.")]
     [Min(0.01f)]
@@ -277,7 +283,8 @@ public class HoverController_Propulsion : MonoBehaviour
     [Range(1f, 20f)]
     [SerializeField] private float bankLerpSpeed = 8f;
 
-    private float driftLerp; // 0..1, managed by ApplyDriftBlend
+    private float driftLerp;   // 0..1, managed by ApplyDriftBlend
+    private bool  _isDrifting; // entry-gate state — true once speed+turn initiated drift
 
     /// <summary>
     /// Current drift blend value (0 = no drift, 1 = full drift).
@@ -573,17 +580,34 @@ public class HoverController_Propulsion : MonoBehaviour
     /// Drift engages when:
     ///   1. Drift button is held.
     ///   2. Turn input exceeds driftTurnThreshold.
-    ///   3. Craft is grounded (no drift airborne — carry is already free in air).
+    ///   3. Craft is grounded.
+    ///   4. Forward speed >= minDriftSpeed at the moment of initiation (entry gate only).
+    ///
+    /// Once initiated, speed is not re-checked — the drift sustains until button release
+    /// or turn input drops below threshold. Scrubbing speed through a corner does not
+    /// eject the player from drift state mid-arc.
     ///
     /// driftLerp drives all drift-state values: lateralDamp, yawAccel, chassis bank.
     /// </summary>
     private void ApplyDriftBlend()
     {
-        bool driftCondition = input.Drift
-                           && Mathf.Abs(input.TurnInput) >= driftTurnThreshold
-                           && foundation.IsHoverGrounded;
+        bool baseCondition = input.Drift
+                          && Mathf.Abs(input.TurnInput) >= driftTurnThreshold
+                          && foundation.IsHoverGrounded;
 
-        float target = driftCondition ? 1f : 0f;
+        if (_isDrifting)
+        {
+            // Already drifting — sustain without re-checking speed.
+            _isDrifting = baseCondition;
+        }
+        else
+        {
+            // Not yet drifting — require minimum forward speed to initiate.
+            float forwardSpeed = Vector3.Dot(rb.linearVelocity, transform.forward);
+            _isDrifting = baseCondition && forwardSpeed >= minDriftSpeed;
+        }
+
+        float target = _isDrifting ? 1f : 0f;
         float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, driftBlendSeconds);
         driftLerp    = Mathf.MoveTowards(driftLerp, target, step);
     }
