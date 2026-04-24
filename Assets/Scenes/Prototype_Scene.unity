@@ -1584,6 +1584,51 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1019462884}
   m_Mesh: {fileID: 4300046, guid: 27275aa30174308449b7adfdef5de29d, type: 3}
+--- !u!1001 &1076790794
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 4246840766707924649, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_Name
+      value: HoverCar_AI
+      objectReference: {fileID: 0}
+    - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8427285393085644911, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
 --- !u!1 &1127220073
 GameObject:
   m_ObjectHideFlags: 0
@@ -2239,42 +2284,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
-    - target: {fileID: 336428695425892802, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 479752319179660640, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 696110556930451447, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: CollisionModule.collidesWith.m_Bits
-      value: 257
-      objectReference: {fileID: 0}
     - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: meshRoot
       value: 
       objectReference: {fileID: 589118149}
-    - target: {fileID: 948721441313247371, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1136673250354913291, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1557957309863273879, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1868115650568284920, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 1898035004022655916, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
     - target: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: 5
@@ -2299,49 +2312,13 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 2150024717798295345, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 2005959038008361045, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: FollowOffset.y
+      value: 3
       objectReference: {fileID: 0}
-    - target: {fileID: 2715742177400560942, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 2832614777100861743, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 3499672457112493751, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 3733952499514579355, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 4904796770235965705, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 5022254769012797897, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: CollisionModule.collidesWith.m_Bits
-      value: 257
-      objectReference: {fileID: 0}
-    - target: {fileID: 5314996475490411465, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 5539312019240586444, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 6047387996070251406, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 2005959038008361045, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: FollowOffset.z
+      value: -5.75
       objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2359,53 +2336,37 @@ PrefabInstance:
       propertyPath: groundLayers.m_Bits
       value: 1
       objectReference: {fileID: 0}
-    - target: {fileID: 6592810914080162756, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 3
       objectReference: {fileID: 0}
-    - target: {fileID: 6639945219564953325, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -5.75
       objectReference: {fileID: 0}
-    - target: {fileID: 6924562624113044731, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9860266
       objectReference: {fileID: 0}
-    - target: {fileID: 6988569960770047032, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0.16658811
       objectReference: {fileID: 0}
-    - target: {fileID: 7687103560043385179, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 9.960214e-18
       objectReference: {fileID: 0}
-    - target: {fileID: 7788531945817886805, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
+    - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -5.271947e-18
+      objectReference: {fileID: 0}
+    - target: {fileID: 7329922606537100077, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: Lens.FieldOfView
+      value: 55
       objectReference: {fileID: 0}
     - target: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_Name
       value: HoverCar_Prototype
-      objectReference: {fileID: 0}
-    - target: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 8662807174392271766, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: CollisionModule.collidesWith.m_Bits
-      value: 257
-      objectReference: {fileID: 0}
-    - target: {fileID: 8836024273677520045, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
-      objectReference: {fileID: 0}
-    - target: {fileID: 8851748333338924824, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: m_Layer
-      value: 7
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3793,6 +3754,10 @@ PrefabInstance:
       propertyPath: reticleColor.a
       value: 0.5019608
       objectReference: {fileID: 0}
+    - target: {fileID: 3221876747599190860, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
+      propertyPath: reticleRaycastMask.m_Bits
+      value: 129
+      objectReference: {fileID: 0}
     - target: {fileID: 4394091751642463459, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
       propertyPath: m_Material
       value: 
@@ -3898,5 +3863,6 @@ SceneRoots:
   - {fileID: 832575519}
   - {fileID: 1854424014}
   - {fileID: 1266020441}
+  - {fileID: 1076790794}
   - {fileID: 4458777512058190225}
   - {fileID: 1276685659}

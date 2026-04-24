@@ -112,9 +112,24 @@ public class VehicleHUD : MonoBehaviour
              "set the desired visible alpha here (e.g. 0.9).")]
     [SerializeField] private Color reticleColor = new Color(1f, 1f, 1f, 0.9f);
 
-    [Tooltip("How far ahead (meters) to project the aim point for reticle placement. " +
-             "Larger values make the reticle less sensitive to small pitch changes.")]
-    [SerializeField] private float reticleProjectionDistance = 100f;
+    [Tooltip("Fallback projection distance (meters) when the aim raycast hits nothing — " +
+             "e.g. aiming at open sky. Also caps the raycast's search distance.")]
+    [SerializeField] private float reticleProjectionDistance = 200f;
+
+    [Tooltip("Layers the aim raycast will consider when picking reticle distance. " +
+             "The owning vehicle's layer is stripped automatically at runtime. " +
+             "Exclude VFX, water, or other non-solid layers you don't want to lock onto.")]
+    [SerializeField] private LayerMask reticleRaycastMask = ~0;
+
+    [Tooltip("How quickly the reticle's projection distance tracks changes. Higher values " +
+             "snap onto new targets faster; lower values smooth out flicker when the ray " +
+             "transitions between near and far surfaces. 15 is a good starting point.")]
+    [SerializeField] private float reticleFollowSpeed = 15f;
+
+    [Tooltip("Canvas-space nudge applied to the reticle after projection. Use this to " +
+             "compensate for a consistent mis-aim — e.g. bullets land slightly low-right " +
+             "of the reticle. Units are canvas pixels: X+ = right, Y+ = up.")]
+    [SerializeField] private Vector2 reticleScreenOffset = Vector2.zero;
 
     // =========================================================================
     // 🎯 Missile Lock
@@ -150,6 +165,11 @@ public class VehicleHUD : MonoBehaviour
     private bool _isEmpFrozen;
     private bool _wasRegenerating;
 
+    // Smoothed reticle projection distance. Tracks the aim raycast hit distance,
+    // lerped by reticleFollowSpeed so the reticle doesn't snap when the ray transitions
+    // between near and far surfaces.
+    private float _reticleDistance;
+
     // =========================================================================
     // Unity lifecycle
     // =========================================================================
@@ -172,6 +192,13 @@ public class VehicleHUD : MonoBehaviour
         if (_energy     == null) Debug.LogWarning("[VehicleHUD] HoverController_Energy not found on vehicleRoot.", this);
         if (_weapons    == null) Debug.LogWarning("[VehicleHUD] HoverController_Weapons not found on vehicleRoot.", this);
         if (_propulsion == null) Debug.LogWarning("[VehicleHUD] HoverController_Propulsion not found on vehicleRoot.", this);
+
+        // Strip the owning vehicle's layer so the aim raycast can't self-hit.
+        // VehicleLayerAssigner runs at execution order -20, so the layer is settled by now.
+        reticleRaycastMask &= ~(1 << vehicleRoot.layer);
+
+        // Initialize smoothed distance to the fallback so the first frame doesn't lerp from 0.
+        _reticleDistance = reticleProjectionDistance;
     }
 
     private void OnEnable()
@@ -417,7 +444,23 @@ public class VehicleHUD : MonoBehaviour
         if (pitch > 180f) pitch -= 360f;
         float yaw = vt.eulerAngles.y;
         Vector3 aimDir = Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward;
-        Vector3 aimWorldPoint = vt.position + aimDir * reticleProjectionDistance;
+
+        // Raycast forward along the aim ray. If it hits something, use that distance so
+        // the reticle lands on the target surface; otherwise fall back to the configured
+        // projection distance. Smoothed to prevent snap when the ray transitions between
+        // near and far surfaces (e.g. target passes out of LOS and the ray reaches sky).
+        float targetDistance = reticleProjectionDistance;
+        if (Physics.Raycast(vt.position, aimDir, out RaycastHit hit,
+                            reticleProjectionDistance, reticleRaycastMask,
+                            QueryTriggerInteraction.Ignore))
+        {
+            targetDistance = hit.distance;
+        }
+
+        _reticleDistance = Mathf.Lerp(_reticleDistance, targetDistance,
+                                      1f - Mathf.Exp(-reticleFollowSpeed * Time.deltaTime));
+
+        Vector3 aimWorldPoint = vt.position + aimDir * _reticleDistance;
 
         Vector3 screenPos = cam.WorldToScreenPoint(aimWorldPoint);
         if (screenPos.z < 0f) return; // behind camera
@@ -428,7 +471,7 @@ public class VehicleHUD : MonoBehaviour
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 canvasRect, screenPos, null, out Vector2 localPoint))
         {
-            reticleRect.localPosition = localPoint;
+            reticleRect.localPosition = localPoint + reticleScreenOffset;
         }
     }
 
