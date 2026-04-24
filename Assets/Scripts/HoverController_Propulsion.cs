@@ -307,6 +307,13 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     public event System.Action<bool> OnJumpDenied;
 
+    /// <summary>
+    /// Fired when a dodge burst is successfully triggered.
+    /// Parameter: local-space direction of the dodge (e.g. x &gt; 0 = right, x &lt; 0 = left).
+    /// Used by HoverVehicleVFX to fire side particle bursts.
+    /// </summary>
+    public event System.Action<Vector3> OnDodge;
+
     // -------------------------------------------------------------------------
     // 🎯 Strafe Mode
     // -------------------------------------------------------------------------
@@ -548,6 +555,8 @@ public class HoverController_Propulsion : MonoBehaviour
         dodgeForceDir   = (transform.right * localDir.x + transform.forward * localDir.z).normalized;
         dodgeForceTimer = dodgeDuration;
         dodgeCooldownTimer = dodgeCooldown;
+
+        OnDodge?.Invoke(localDir);
 
         if (ShouldDrawDebug)
             Debug.DrawRay(transform.position, dodgeForceDir * 3f, Color.blue, 0.5f);

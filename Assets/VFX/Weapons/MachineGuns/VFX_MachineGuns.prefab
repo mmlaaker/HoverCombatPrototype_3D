@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7868771940688594349}
   - component: {fileID: 641245609387872478}
   m_Layer: 0
-  m_Name: MachineGunsLeft
+  m_Name: MachineGun_L
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -28,7 +28,7 @@ Transform:
   m_GameObject: {fileID: 794787285485777235}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -1, y: 0, z: 3.8}
+  m_LocalPosition: {x: -1, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -4863,7 +4863,7 @@ GameObject:
   - component: {fileID: 6036362688676093017}
   - component: {fileID: 8958215382633468940}
   m_Layer: 0
-  m_Name: MachineGunsRight
+  m_Name: MachineGun_R
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4878,7 +4878,7 @@ Transform:
   m_GameObject: {fileID: 3759056033014844471}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 1, y: 0, z: 3.8}
+  m_LocalPosition: {x: 1, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
