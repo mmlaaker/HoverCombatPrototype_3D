@@ -1596,6 +1596,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: HoverCar_AI
       objectReference: {fileID: 0}
+    - target: {fileID: 4246840766707924649, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_LocalPosition.x
       value: 5
@@ -1622,7 +1626,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8427285393085644911, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_Enabled
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -2284,6 +2288,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 696110556930451447, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
     - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: meshRoot
       value: 
@@ -2312,13 +2320,29 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 2005959038008361045, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: FollowOffset.y
-      value: 3
+    - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9999914
       objectReference: {fileID: 0}
-    - target: {fileID: 2005959038008361045, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: FollowOffset.z
-      value: -5.75
+    - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.0041452195
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: -0.475
       objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2338,35 +2362,71 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 3
+      value: 3.5
       objectReference: {fileID: 0}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -5.75
+      value: -6
       objectReference: {fileID: 0}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.9860266
+      value: 0.9805807
       objectReference: {fileID: 0}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.16658811
+      value: 0.19611613
       objectReference: {fileID: 0}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 9.960214e-18
+      value: -0.000000014611793
       objectReference: {fileID: 0}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -5.271947e-18
+      value: 0.0000000029223584
       objectReference: {fileID: 0}
     - target: {fileID: 7329922606537100077, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: Lens.FieldOfView
       value: 55
       objectReference: {fileID: 0}
+    - target: {fileID: 7762352581548736760, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: aimMode
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7762352581548736760, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: aimRaycastMask.m_Bits
+      value: 129
+      objectReference: {fileID: 0}
     - target: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_Name
       value: HoverCar_Prototype
+      objectReference: {fileID: 0}
+    - target: {fileID: 8606985423328327532, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.9999914
+      objectReference: {fileID: 0}
+    - target: {fileID: 8606985423328327532, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8606985423328327532, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.004145126
+      objectReference: {fileID: 0}
+    - target: {fileID: 8606985423328327532, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8606985423328327532, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8606985423328327532, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0.475
+      objectReference: {fileID: 0}
+    - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
