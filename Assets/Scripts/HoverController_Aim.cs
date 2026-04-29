@@ -1,54 +1,32 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Aim v1.2
-/// ------------------------
-/// Responsibilities:
-///   • Computes an intentional world-space aim rotation each LateUpdate.
-///   • Applies that rotation to the active weapon slot's vfxMount transform,
-///     keeping particle emitters aimed correctly regardless of terrain-induced
-///     vehicle pitch or roll.
+/// HoverController_Aim v1.0
 ///
-/// Aim rotation is constructed from two components only:
-///   • Yaw  — taken from the vehicle's world Y euler. Weapons always aim with heading.
-///   • Pitch — FPS-style free aim. Right Stick Y accumulates as continuous aim angle,
-///             clamped to [-StrafePitchLimit, +StrafePitchLimit]. Resets to 0 on strafe exit.
+/// Computes an intentional world-space aim rotation each LateUpdate and applies it
+/// to the active weapon slot's vfxMount transform. Keeps particle emitters aimed
+/// correctly regardless of terrain-induced pitch or roll.
+///
+/// Aim rotation is built from two components only:
+///   Yaw:   the vehicle's actual world Y. Weapons aim with heading.
+///   Pitch: the vehicle's actual world X. The physics pitch driven by
+///          Propulsion.ApplyStrafePitch and Foundation leveling. No independent
+///          accumulation; the vehicle IS the turret.
 ///
 /// What it deliberately ignores:
-///   • Vehicle X (pitch) from terrain reaction — Foundation's leveling corrections
-///     should not affect bullet direction.
-///   • Vehicle Z (roll) — never intentional, never communicated to weapons.
+///   Vehicle pitch from terrain reaction. Foundation's leveling corrections must
+///   not affect bullet direction.
+///   Vehicle roll. Never intentional, never communicated to weapons.
 ///
-/// Design contract:
-///   • Owns no physics. Rotation is applied to vfxMount only — a visual/VFX node.
-///   • HoverController_Weapons notifies this module when the active slot changes
-///     via NotifySlotChanged(WeaponSlot). Aim module caches the active vfxMount.
-///   • Only the active slot's vfxMount is updated per frame. Inactive mounts
-///     are left at their last orientation — they don't need updating while inactive.
-///   • Instantiated-mode weapons (muzzle points) are not affected. Muzzle point
-///     orientation is the designer's responsibility via transform placement.
-///   • Input is acquired via GetComponent<IHoverInputProvider>() — attach
-///     PlayerHoverInput or any AI implementation to this same GameObject.
-///
-/// v1.3 changes:
-///   • Pitch now reads actual vehicle pitch (from Rigidbody orientation) instead of
-///     maintaining an independent accumulated angle. Eliminates divergence between
-///     where the vehicle body points and where bullets go — the vehicle IS the turret.
-///   • Removed aimSensitivity and currentPitch accumulator — no longer needed.
-///     Propulsion.ApplyStrafePitch drives the physics pitch; Aim just reads the result.
-///
-/// v1.2 changes:
-///   • Pitch now FPS-style free aim instead of spring-loaded.
-///   • Right Stick Y input accumulates as continuous angle change (degrees/frame).
-///   • Aim angle is clamped to [-StrafePitchLimit, +StrafePitchLimit].
-///   • Aim resets to 0 (forward) when exiting strafe mode for clean re-entry.
-///   • New parameter: aimSensitivity (degrees per unit stick input per second).
-///
-/// v1.1 changes:
-///   • Removed [DefaultExecutionOrder(-10)] — LateUpdate naturally runs after all
-///     Update and FixedUpdate calls, so no explicit ordering is needed.
-///   • inputProvider serialized field removed. Input now acquired via GetComponent
-///     in Awake, consistent with Propulsion and Weapons.
+/// Contracts:
+///   Owns no physics. Rotation is applied to vfxMount only, a visual node.
+///   HoverController_Weapons notifies this module on slot change via
+///   NotifySlotChanged(WeaponSlot). Aim caches the new vfxMount.
+///   Only the active slot's vfxMount is updated per frame.
+///   Instantiated-mode weapons are not affected. Muzzle point orientation is the
+///   designer's responsibility via transform placement.
+///   LateUpdate naturally runs after all Update and FixedUpdate calls; no
+///   DefaultExecutionOrder needed.
 /// </summary>
 [RequireComponent(typeof(HoverController_Propulsion))]
 [RequireComponent(typeof(HoverController_Weapons))]
@@ -62,7 +40,7 @@ public class HoverController_Aim : MonoBehaviour
     [Tooltip("Draw the computed aim direction as a ray in the Scene view.")]
     [SerializeField] private bool drawDebug = true;
 
-    [Tooltip("Optional global debug toggle. When assigned, overrides drawDebug.")]
+    [Tooltip("Optional global debug toggle. When assigned, overrides Draw Debug.")]
     [SerializeField] private HoverDebugSettings debugSettings;
 
     private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
@@ -73,8 +51,8 @@ public class HoverController_Aim : MonoBehaviour
 
     private HoverController_Propulsion propulsion;
 
-    // The vfxMount of the currently active weapon slot. Null if no active slot
-    // or active slot is Instantiated mode with no vfxMount assigned.
+    // The vfxMount of the currently active weapon slot. Null if no active slot or
+    // active slot is Instantiated mode with no vfxMount assigned.
     private Transform activeMount;
 
     // -------------------------------------------------------------------------
@@ -87,8 +65,8 @@ public class HoverController_Aim : MonoBehaviour
     }
 
     /// <summary>
-    /// LateUpdate: runs after Propulsion FixedUpdate has applied pitch torque.
-    /// Reads the vehicle's actual settled orientation — no independent state.
+    /// LateUpdate runs after Propulsion FixedUpdate has applied pitch torque.
+    /// Reads the vehicle's actual settled orientation, no independent state.
     /// </summary>
     private void LateUpdate()
     {
@@ -108,11 +86,8 @@ public class HoverController_Aim : MonoBehaviour
 
     /// <summary>
     /// Constructs a world-space aim rotation from the vehicle's actual orientation.
-    ///
-    /// Yaw:   vehicle's current world Y euler. Weapons always aim with heading.
-    /// Pitch: vehicle's current world X euler — the actual physics pitch driven by
-    ///        Propulsion.ApplyStrafePitch and Foundation leveling. No independent
-    ///        accumulation — eliminates divergence between body and bullet direction.
+    /// Yaw:   vehicle's current world Y. Weapons aim with heading.
+    /// Pitch: vehicle's current world X. The actual physics pitch.
     /// Roll:  always zero. Never intentional, never communicated to weapons.
     /// </summary>
     private Quaternion ComputeAimRotation()
@@ -123,7 +98,7 @@ public class HoverController_Aim : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // Public API — called by HoverController_Weapons
+    // Public API (called by HoverController_Weapons)
     // -------------------------------------------------------------------------
 
     /// <summary>

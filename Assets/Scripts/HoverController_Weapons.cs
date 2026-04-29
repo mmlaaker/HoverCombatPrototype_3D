@@ -3,60 +3,33 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Weapons v1.6
-/// ----------------------------
-/// Responsibilities:
-///   • Manages a list of weapon slots, each referencing a shared WeaponDefinition asset.
-///   • Cycles the active weapon slot on player input (D-Pad left/right, wraps).
-///   • Gates all firing through EMP freeze check (HoverController_Energy.IsEmpFrozen).
-///   • Dispatches fire to muzzle transforms or particle emitters assigned per slot.
-///   • Supports four firing behaviors driven by WeaponType:
-///       - SingleShot  : fires once per FirePressed event (Shotgun, Rail).
-///       - Automatic   : fires repeatedly while FireHeld, gated by fire rate (Minigun).
-///       - Missile     : FireHeld drives lock scanning; FirePressed commits on confirmed lock.
-///       - Mine        : fires once per FirePressed; spawns at muzzle, no projectile velocity.
-///   • Missile lock state machine: Idle → Scanning → Locked → Committed → Idle.
-///   • Minigun wind-up: fire rate scales with sustained hold time via AnimationCurve.
-///   • Broadcasts events for UI and audio hooks.
+/// HoverController_Weapons v1.0
 ///
-/// Design contracts:
-///   • Weapons do NOT consume energy. Ammo is the only resource managed here.
-///   • EMP freeze is read from HoverController_Energy.IsEmpFrozen — no energy is spent.
-///   • This script owns no physics. Projectile behavior lives on the projectile prefab.
-///   • WeaponDefinition is a shared ScriptableObject asset. All vehicles reference the
-///     same assets — change damage or fire rate once and every vehicle updates.
-///   • Vehicle-specific scene references (muzzlePoints, particleEmitters) live in
-///     WeaponSlot, not in WeaponDefinition.
+/// Manages a list of weapon slots, cycles the active slot on input, and dispatches
+/// fire events to muzzle transforms or particle emitters.
 ///
-/// v1.6 changes:
-///   • Input error message updated to match GetComponent standard across all scripts.
-///   • Committed missile lock state now broadcasts OnMissileLockStateChanged explicitly
-///     before resetting to Idle. Previously Committed was never surfaced to subscribers.
-///   • Unreachable Committed switch case removed (state is entered and reset in the
-///     same frame inside the Locked case — it can never be entered via the switch).
-///   • ScanForLockTarget now gated to Idle/Scanning states only — no OverlapSphere
-///     cost when already Locked or during non-missile weapon use.
-///   • Physics.OverlapSphere replaced with Physics.OverlapSphereNonAlloc using a
-///     pre-allocated Collider[16] buffer. Zero heap allocation per scan call.
+/// Four firing behaviors driven by WeaponType:
+///   SingleShot: fires once per FirePressed (Shotgun, Rail).
+///   Automatic:  fires repeatedly while FireHeld, gated by fire rate (Minigun).
+///   Missile:    FireHeld drives lock scanning; FirePressed commits on a confirmed lock.
+///   Mine:       fires once per FirePressed; spawns at muzzle, no projectile velocity.
 ///
-/// v1.5 changes:
-///   • WeaponDefinition promoted to ScriptableObject (own file: WeaponDefinition.cs).
-///     Create assets via Assets → Create → Weapons → Weapon Definition.
-///   • WeaponType and ProjectileMode moved to their own files.
-///   • muzzlePoints and particleEmitters moved from WeaponDefinition into WeaponSlot.
+/// Two projectile modes via ProjectileMode:
+///   Instantiated:    spawns a prefab at each muzzle.
+///   ParticleSystem:  drives Play / Stop on pre-placed emitters per slot.
 ///
-/// v1.4 changes:
-///   • useWindUp bool added. When false, windUpScale is always 1.0 — no lockout on release.
-///   • useMissileLock bool added. When false, Missile type fires as dumbfire.
+/// Missile lock state machine: Idle → Scanning → Locked → Committed → Idle.
+/// Committed is a one-frame broadcast pulse that fires the event then resets.
 ///
-/// v1.3 changes:
-///   • particleEmitter (single) replaced with particleEmitters (List).
-///
-/// v1.2 changes:
-///   • ProjectileMode enum added (Instantiated / ParticleSystem).
-///
-/// v1.1 changes:
-///   • Muzzle points moved into WeaponDefinition (now in WeaponSlot as of v1.5).
+/// Contracts:
+///   Weapons do NOT consume energy. Ammo is the only resource managed here.
+///   EMP freeze gates fire (read from HoverController_Energy.IsEmpFrozen). No
+///   energy is ever spent on a fire event.
+///   Owns no physics. Projectile behavior lives on the projectile prefab.
+///   WeaponDefinition is a shared ScriptableObject. All vehicles can reference the
+///   same asset; change damage or fire rate once and every vehicle updates.
+///   Vehicle-specific scene references (muzzlePoints, particleEmitters, vfxMount)
+///   live on WeaponSlot, not on WeaponDefinition.
 /// </summary>
 [RequireComponent(typeof(HoverController_Energy))]
 public class HoverController_Weapons : MonoBehaviour
@@ -67,7 +40,7 @@ public class HoverController_Weapons : MonoBehaviour
 
     /// <summary>
     /// Per-vehicle runtime wrapper around a shared WeaponDefinition asset.
-    /// Holds vehicle-specific scene references and all runtime state.
+    /// Holds vehicle-specific scene references and runtime state.
     /// One slot per entry in the weaponSlots list.
     /// </summary>
     [Serializable]
@@ -77,21 +50,18 @@ public class HoverController_Weapons : MonoBehaviour
                  "All vehicles using the same asset share its damage, fire rate, and tuning.")]
         public WeaponDefinition definition;
 
-        [Tooltip("Spawn origins for Instantiated projectiles. All fire simultaneously. " +
-                 "Assign child transforms from this vehicle's mesh. " +
-                 "Ignored when projectileMode is ParticleSystem.")]
+        [Tooltip("Spawn points for Instantiated projectiles. All fire simultaneously. " +
+                 "Assign child transforms from this vehicle's mesh. Ignored in ParticleSystem mode.")]
         public List<Transform> muzzlePoints = new List<Transform>();
 
         [Tooltip("Pre-placed ParticleSystem emitters for this weapon on this vehicle. " +
-                 "All start and stop together. Assign child ParticleSystems from this vehicle's hierarchy. " +
-                 "Only used when projectileMode is ParticleSystem. " +
-                 "Fire is suppressed if this list is empty in that mode.")]
+                 "All start and stop together. Assign child ParticleSystems from this vehicle. " +
+                 "Only used in ParticleSystem mode. Fire is suppressed if this list is empty in that mode.")]
         public List<ParticleSystem> particleEmitters = new List<ParticleSystem>();
 
         [Tooltip("Parent transform grouping all VFX for this weapon (e.g. VFX_MachineGuns). " +
-                 "HoverController_Aim rotates this node to apply intentional aim direction. " +
-                 "Children (individual emitters) follow automatically. " +
-                 "Only needed for ParticleSystem mode weapons. Leave null for Instantiated weapons.")]
+                 "HoverController_Aim rotates this node to apply intentional aim direction; child emitters follow. " +
+                 "Only needed for ParticleSystem mode. Leave null for Instantiated weapons.")]
         public Transform vfxMount;
 
         /// <summary>Current ammo remaining. -1 indicates unlimited (maxAmmo == 0).</summary>
@@ -138,7 +108,7 @@ public class HoverController_Weapons : MonoBehaviour
         /// <summary>Lock confirmed. Waiting for FirePressed to commit.</summary>
         Locked,
 
-        /// <summary>Missile committed and fired. Returns to Idle next frame.</summary>
+        /// <summary>Missile committed and fired. Resets to Idle next frame.</summary>
         Committed
     }
 
@@ -152,15 +122,15 @@ public class HoverController_Weapons : MonoBehaviour
     [SerializeField] private List<WeaponSlot> weaponSlots = new List<WeaponSlot>();
 
     [Header("🎯 Missile Lock")]
-    [Tooltip("Layer mask for missile lock-on targets. Set to enemy vehicle layers only. " +
-             "Default ~0 will lock onto terrain and props — always configure this.")]
+    [Tooltip("Layers that missiles can lock onto. Set to enemy vehicle layers only. " +
+             "Default ~0 will lock onto terrain and props, so always configure this.")]
     [SerializeField] private LayerMask lockTargetLayers = ~0;
 
     [Header("🛠 Debug")]
     [Tooltip("Draw muzzle points, emitter origins, and missile lock cone in the Scene view.")]
     [SerializeField] private bool drawDebug = true;
 
-    [Tooltip("Optional global debug toggle. When assigned, overrides drawDebug.")]
+    [Tooltip("Optional global debug toggle. When assigned, overrides Draw Debug.")]
     [SerializeField] private HoverDebugSettings debugSettings;
 
     private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
@@ -211,14 +181,14 @@ public class HoverController_Weapons : MonoBehaviour
 
     private IHoverInputProvider input;
     private HoverController_Energy energy;
-    private HoverController_Aim aim; // optional — null if not present on vehicle
+    private HoverController_Aim aim; // optional. Null if not present on vehicle.
 
     private float lockTimer;
     private MissileLockState prevLockState;
 
     // Pre-allocated buffer for missile lock scans. OverlapSphereNonAlloc writes
-    // into this array — no heap allocation per frame. Size 16 is generous for a
-    // game with a small vehicle roster; increase if lock targets exceed this count.
+    // into this array, so there is no heap allocation per frame. Size 16 is
+    // generous for a small vehicle roster; raise if lock targets exceed this count.
     private readonly Collider[] _lockScanBuffer = new Collider[16];
 
     // =========================================================================
@@ -229,7 +199,7 @@ public class HoverController_Weapons : MonoBehaviour
     {
         input  = GetComponent<IHoverInputProvider>();
         energy = GetComponent<HoverController_Energy>();
-        aim    = GetComponent<HoverController_Aim>(); // optional — no error if absent
+        aim    = GetComponent<HoverController_Aim>(); // optional, no error if absent
 
         if (input == null)
             Debug.LogError("[HoverController_Weapons] No IHoverInputProvider found on this GameObject. " +
@@ -354,8 +324,8 @@ public class HoverController_Weapons : MonoBehaviour
     /// Automatic: fires repeatedly while FireHeld.
     /// useWindUp false: windUpScale is always 1.0, constant fire rate from frame one.
     /// useWindUp true: fire rate scales via AnimationCurve over windUpDuration.
-    /// ParticleSystem mode: drives emitter Play()/Stop() directly.
-    /// Instantiated mode: spawns a projectile prefab per fire event.
+    /// ParticleSystem mode drives emitter Play / Stop directly.
+    /// Instantiated mode spawns a projectile per fire event.
     /// </summary>
     private void TickAutomatic(WeaponSlot slot)
     {
@@ -433,11 +403,11 @@ public class HoverController_Weapons : MonoBehaviour
     ///   Locked    → Committed : FirePressed while a ready slot has ammo.
     ///   Locked    → Idle      : FireHeld released.
     ///
-    /// Committed is a one-frame broadcast state — the event fires, missile launches,
-    /// and state resets to Idle in the same Update tick. It is never entered via the
-    /// switch because the transition and reset happen together in the Locked case.
-    /// OnMissileLockStateChanged fires for Committed explicitly before the reset
-    /// so subscribers (UI, audio) reliably receive the "missile away" signal.
+    /// Committed is a one-frame broadcast pulse. The event fires, missile launches,
+    /// and state resets to Idle in the same Update tick. It is never entered via
+    /// the switch because the transition and reset happen together in the Locked
+    /// case. OnMissileLockStateChanged fires for Committed explicitly before the
+    /// reset so subscribers (UI, audio) reliably receive the "missile away" signal.
     /// </summary>
     private void TickMissile(WeaponSlot slot)
     {
@@ -450,7 +420,7 @@ public class HoverController_Weapons : MonoBehaviour
             return;
         }
 
-        // Only scan for a target when actively looking — avoids OverlapSphere cost
+        // Only scan for a target when actively looking. Avoids OverlapSphere cost
         // every frame just because a missile weapon is equipped but not being used.
         bool targetInCone = (CurrentLockState == MissileLockState.Idle ||
                              CurrentLockState == MissileLockState.Scanning)
@@ -482,10 +452,9 @@ public class HoverController_Weapons : MonoBehaviour
                 if (!input.FireHeld) { ResetLockState(); break; }
                 if (input.FirePressed && slot.IsReady && slot.HasAmmo)
                 {
-                    // Transition to Committed, fire the event explicitly, then fire
-                    // and reset — all in the same frame. Committed is intentionally a
-                    // one-frame pulse: subscribers get the signal, but there's no
-                    // separate tick needed for it.
+                    // Transition to Committed, fire the event, then fire and reset,
+                    // all in the same frame. Committed is a one-frame pulse; no
+                    // separate tick is needed for it.
                     TransitionLockState(MissileLockState.Committed);
                     OnMissileLockStateChanged?.Invoke(MissileLockState.Committed);
                     prevLockState = MissileLockState.Committed;
@@ -537,7 +506,7 @@ public class HoverController_Weapons : MonoBehaviour
             // Non-Automatic weapons (SingleShot, Missile, Mine) need a stop-then-play
             // to restart the burst from scratch. Without this, the isPlaying guard in
             // PlayParticleEmitters skips Play() while particles from the previous burst
-            // are still alive — blocking subsequent shots.
+            // are still alive, blocking subsequent shots.
             if (def.type != WeaponType.Automatic)
                 StopParticleEmitters(slot);
 
@@ -738,7 +707,7 @@ public class HoverController_Weapons : MonoBehaviour
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 4.2f,
             $"WEAPON [{ActiveSlotIndex}] {slot.definition.displayName} " +
-            $"| AMMO {(slot.currentAmmo == -1 ? "\u221e" : slot.currentAmmo.ToString())} " +
+            $"| AMMO {(slot.currentAmmo == -1 ? "∞" : slot.currentAmmo.ToString())} " +
             $"| CD {slot.cooldownRemaining:F2}s" +
             (energy.IsEmpFrozen ? " [EMP FROZEN]" : "")
         );

@@ -30,11 +30,11 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 
 | Module | Version | Notes |
 |---|---|---|
-| `HoverController_Foundation.cs` | v4.3 | **Do not modify without explicit justification.** Spring-damper hover lift, leveling torque, two-path recovery (upright-stuck vs flipped). Public: `IsHoverGrounded`, `AverageGroundNormal`, `SetRecoveryEnabled(bool)` |
-| `HoverController_Propulsion.cs` | v6.0 | Drive/drag mutually exclusive; top speed in `ApplyDrive`; strafe dodge burst (v6.0); continuous boost requires >= 0.15 throttle deflection. Public: `DriftLerp`, `StrafeModeBlend`, `StrafePitchLimit`, `OnJumpDenied` event |
-| `HoverController_Energy.cs` | v1.2 | `TryConsume` fail also resets regen lockout (intentional anti-spam). EMP freeze additive. Public: `Energy`, `EnergyNormalized`, `IsEmpFrozen`, `IsRegenerating` |
-| `HoverController_Weapons.cs` | v1.6 | Weapons **never spend energy** -- EMP only gates fire via `IsEmpFrozen`. `WeaponDefinition` SO (shared); `WeaponSlot` (per-vehicle). Four `WeaponType`s: SingleShot, Automatic, Missile, Mine. Two `ProjectileMode`s: Instantiated, ParticleSystem. Public: `ActiveSlot`, `ActiveSlotIndex`, `CurrentLockState`, `LockProgress`, `LockTarget`, `RefillAmmo()`, `SetActiveSlot()` |
-| `HoverController_Aim.cs` | v1.3 | **LateUpdate only; no `DefaultExecutionOrder` needed.** Reads actual vehicle pitch from Rigidbody (no independent accumulation). Only rotates active slot's `vfxMount` -- Instantiated-mode weapons unaffected. Called by Weapons via `NotifySlotChanged(WeaponSlot)` |
+| `HoverController_Foundation.cs` | v1.0 | **Do not modify without explicit justification.** Spring-damper hover lift, leveling torque, two-path recovery (upright-stuck vs flipped). Public: `IsHoverGrounded`, `AverageGroundNormal`, `SetRecoveryEnabled(bool)` |
+| `HoverController_Propulsion.cs` | v1.0 | Drive/drag mutually exclusive; top speed in `ApplyDrive`; strafe dodge burst; continuous boost requires >= 0.15 throttle deflection. Public: `DriftLerp`, `StrafeModeBlend`, `StrafePitchLimit`, `OnJumpDenied` event |
+| `HoverController_Energy.cs` | v1.0 | `TryConsume` fail also resets regen lockout (intentional anti-spam). EMP freeze additive. Public: `Energy`, `EnergyNormalized`, `IsEmpFrozen`, `IsRegenerating` |
+| `HoverController_Weapons.cs` | v1.0 | Weapons **never spend energy**. EMP only gates fire via `IsEmpFrozen`. `WeaponDefinition` SO (shared); `WeaponSlot` (per-vehicle). Four `WeaponType`s: SingleShot, Automatic, Missile, Mine. Two `ProjectileMode`s: Instantiated, ParticleSystem. Public: `ActiveSlot`, `ActiveSlotIndex`, `CurrentLockState`, `LockProgress`, `LockTarget`, `RefillAmmo()`, `SetActiveSlot()` |
+| `HoverController_Aim.cs` | v1.0 | **LateUpdate only; no `DefaultExecutionOrder` needed.** Reads actual vehicle pitch from Rigidbody (no independent accumulation). Only rotates active slot's `vfxMount`; Instantiated-mode weapons unaffected. Called by Weapons via `NotifySlotChanged(WeaponSlot)` |
 | `VehicleHealth.cs` | Active | HP pool, `OnDamaged`/`OnDeath` events, invulnerability, `Respawn()` |
 | `VehicleHUD.cs` | v1.2 | Event-driven; `SyncAll()` in Start; trailing `_wasRegenerating` flag |
 | `HoverCameraController.cs` | Active | Cinemachine 3.1.6; strafe cam uses `LockToTargetNoRoll` |
