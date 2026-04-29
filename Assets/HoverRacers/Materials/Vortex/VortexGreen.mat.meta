@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 6e33a3e82ce2dc94e838c2117f9acbe3
+timeCreated: 1551884137
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Vortex/VortexGreen.mat
+  uploadId: 657355

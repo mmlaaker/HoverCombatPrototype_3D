@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: d0c3978b5c4e6fc4c902bf1c60cee351
+timeCreated: 1552223786
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Bolt/Bolt_Spoiler2.prefab
+  uploadId: 657355

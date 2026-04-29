@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 24341a6244300e8419de5e92288eaa11
+timeCreated: 1551973413
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Edge/Edge_Spoiler2.prefab
+  uploadId: 657355

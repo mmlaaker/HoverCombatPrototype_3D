@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 62e54d7571e88174eb3f0ff43ff84023
+timeCreated: 1551884134
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Vortex/VortexYellow.mat
+  uploadId: 657355

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 8875bf3c90371644bba7a8e9892b815f
+timeCreated: 1551945685
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Vortex/VortexBlue.mat
+  uploadId: 657355

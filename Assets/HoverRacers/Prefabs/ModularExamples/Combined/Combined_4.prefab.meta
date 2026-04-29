@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 2932bd63bc255bd4a8cff0c460a33e68
+timeCreated: 1552374136
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/ModularExamples/Combined/Combined_4.prefab
+  uploadId: 657355

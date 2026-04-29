@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f5bf3995c8140a64c995a22c7c0365a8
+timeCreated: 1551884136
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Vortex/VortexBlack.mat
+  uploadId: 657355

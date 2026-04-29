@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 8f60066a65fcf0f46b9a162a334174bb
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Vortex/Vortex_Wing4_Mirrored.prefab
+  uploadId: 657355

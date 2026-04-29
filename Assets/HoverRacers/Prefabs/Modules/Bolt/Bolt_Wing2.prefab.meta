@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: cae7621dcbda9e740b508297f929c617
+timeCreated: 1552223792
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Bolt/Bolt_Wing2.prefab
+  uploadId: 657355

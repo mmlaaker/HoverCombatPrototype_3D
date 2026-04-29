@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: cce5510f35dca964ab23dbab16f2fd09
+timeCreated: 1551621194
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Bolt/BoltViolet.mat
+  uploadId: 657355

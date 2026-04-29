@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 1dcd97fa52cc12e4dbbaf44788a9c536
+timeCreated: 1551621245
+licenseType: Store
+DefaultImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Scences/Catalog.unity
+  uploadId: 657355

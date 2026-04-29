@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: aae48f289317c4b4988df29fb1795f00
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 4890085278179872738
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Scences/Settings/LightingSettings.lighting
+  uploadId: 657355

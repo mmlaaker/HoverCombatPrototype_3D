@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 3a075164a4214ed47865915b71ed7fe2
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Bolt/Bolt_Wing2_Mirrored.prefab
+  uploadId: 657355

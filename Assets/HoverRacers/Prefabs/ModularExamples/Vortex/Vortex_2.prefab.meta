@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: ff962a4524da53b48ac36acd41499ec6
+timeCreated: 1552318914
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/ModularExamples/Vortex/Vortex_2.prefab
+  uploadId: 657355

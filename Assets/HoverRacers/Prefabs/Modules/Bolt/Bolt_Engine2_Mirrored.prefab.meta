@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 8e3fca301f581f241af2a14b1ef83b23
+PrefabImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Bolt/Bolt_Engine2_Mirrored.prefab
+  uploadId: 657355

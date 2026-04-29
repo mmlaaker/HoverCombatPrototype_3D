@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 54d7fd6542c8dc34b9366db53485075f
+timeCreated: 1552318492
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/ModularExamples/Edge/Edge_2.prefab
+  uploadId: 657355

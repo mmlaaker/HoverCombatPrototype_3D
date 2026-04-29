@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 4531a647883e2024690d1e6d6207092b
+timeCreated: 1551689910
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Edge/EdgeBlack.mat
+  uploadId: 657355

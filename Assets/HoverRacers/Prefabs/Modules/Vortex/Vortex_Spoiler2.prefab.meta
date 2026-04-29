@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 76b69df5c76aae2448463dd1c7fd431d
+timeCreated: 1552376262
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/Modules/Vortex/Vortex_Spoiler2.prefab
+  uploadId: 657355

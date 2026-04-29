@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: c92864b94bd0ed04aa782002c00456de
+timeCreated: 1552319967
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Prefabs/ModularExamples/Bolt/Bolt_1.prefab
+  uploadId: 657355

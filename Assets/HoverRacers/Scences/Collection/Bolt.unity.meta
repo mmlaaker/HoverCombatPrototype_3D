@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: a2c99bc53ea77fd4e9edc160403d0b79
+timeCreated: 1551621245
+licenseType: Store
+DefaultImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Scences/Collection/Bolt.unity
+  uploadId: 657355

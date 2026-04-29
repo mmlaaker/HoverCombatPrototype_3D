@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: edbfe8c533c9c4d42af33ddf1654803d
+timeCreated: 1551792124
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Edge/EdgeViolet.mat
+  uploadId: 657355

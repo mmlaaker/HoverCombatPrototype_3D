@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: dffcd8529f455d64f9919b179a5f26ec
+timeCreated: 1551621229
+licenseType: Store
+NativeFormatImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 103902
+  packageName: Sci-Fi Modular Hover Racers
+  packageVersion: 2.0
+  assetPath: Assets/HoverRacers/Materials/Bolt/BoltGreen.mat
+  uploadId: 657355
