@@ -20095,7 +20095,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
-  - definition: {fileID: 11400000, guid: b1a69f4a82b9fa94180156428644e784, type: 2}
+  - definition: {fileID: 11400000, guid: dcf0e75d40a945449a8b556e0eda4535, type: 2}
     muzzlePoints:
     - {fileID: 4481053510898385413}
     particleEmitters:

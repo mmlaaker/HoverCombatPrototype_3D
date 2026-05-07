@@ -275,6 +275,15 @@ public class VehicleHUD : MonoBehaviour
         _wasRegenerating = isRegen;
 
         SyncReticle();
+
+        // HandleLockStateChanged only fires on transitions, so the fill bar
+        // would snap 0 → 1 instead of animating. Poll while Scanning to tween it.
+        if (_weapons != null
+            && missileLockFill != null
+            && _weapons.CurrentLockState == HoverController_Weapons.MissileLockState.Scanning)
+        {
+            missileLockFill.fillAmount = _weapons.LockProgress;
+        }
     }
 
     // =========================================================================
