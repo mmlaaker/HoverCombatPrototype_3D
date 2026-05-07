@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &4126691510382875078
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2681037672598450986, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: m_Name
+      value: SoftHomingMissile
+      objectReference: {fileID: 0}
+    - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: turnRate
+      value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 6033046476915351036, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6033046476915351036, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6033046476915351036, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}

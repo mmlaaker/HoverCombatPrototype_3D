@@ -14832,7 +14832,7 @@ Transform:
   m_GameObject: {fileID: 3460858437510611220}
   serializedVersion: 2
   m_LocalRotation: {x: 0.16883378, y: -0.000000025778101, z: 0.000000004415602, w: 0.9856446}
-  m_LocalPosition: {x: 0, y: 4.5, z: -8.5}
+  m_LocalPosition: {x: 5, y: 9.5, z: -13.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -20086,6 +20086,24 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+  - definition: {fileID: 11400000, guid: 457bd803ca13668478669bb60371081f, type: 2}
+    muzzlePoints:
+    - {fileID: 4481053510898385413}
+    particleEmitters:
+    - {fileID: 1064493114267071020}
+    vfxMount: {fileID: 0}
+    currentAmmo: 0
+    cooldownRemaining: 0
+    windUpProgress: 0
+  - definition: {fileID: 11400000, guid: b1a69f4a82b9fa94180156428644e784, type: 2}
+    muzzlePoints:
+    - {fileID: 4481053510898385413}
+    particleEmitters:
+    - {fileID: 1064493114267071020}
+    vfxMount: {fileID: 0}
+    currentAmmo: 0
+    cooldownRemaining: 0
+    windUpProgress: 0
   lockTargetLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -20250,7 +20268,39 @@ Transform:
   m_Children:
   - {fileID: 5797443098344253826}
   - {fileID: 2288485457969061220}
+  - {fileID: 4481053510898385413}
   m_Father: {fileID: 5927693998371741120}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &4987206828941989974
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4481053510898385413}
+  m_Layer: 6
+  m_Name: Missile
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4481053510898385413
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4987206828941989974}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.425, z: 4.25}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 846686087818308023}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &5186263441999360649
 GameObject:

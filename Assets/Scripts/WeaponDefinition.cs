@@ -95,25 +95,26 @@ public class WeaponDefinition : ScriptableObject
     public float windDownDuration = 0.5f;
 
     // -------------------------------------------------------------------------
-    // 🎯 Missile Lock (Missile only)
+    // 🎯 Missile Fire Mode (Missile only)
     // -------------------------------------------------------------------------
-    [Header("🎯 Missile Lock (Missile only)")]
-    [Tooltip("When false: dumbfire mode — fires immediately on FirePressed, no lock required.\n" +
-             "When true: FireHeld accumulates lock; FirePressed commits on confirmed lock.")]
-    public bool useMissileLock = true;
+    [Header("🎯 Missile Fire Mode (Missile only)")]
+    [Tooltip("Dumbfire: fires on FirePressed, no homing.\n" +
+             "SoftHoming: fires on FirePressed; scans the cone once at fire time and homes on the best target found (or flies straight if none).\n" +
+             "HardLock: hold fire to scan and confirm a lock; release fire to launch.")]
+    public MissileFireMode missileFireMode = MissileFireMode.HardLock;
 
-    [Tooltip("Seconds of sustained FireHeld over a target to confirm lock.\n" +
-             "Only used when useMissileLock is true.")]
+    [Tooltip("Seconds of sustained FireHeld over a target to confirm a lock. " +
+             "HardLock only.")]
     [Min(0.01f)]
     public float lockAcquireTime = 1.5f;
 
-    [Tooltip("Maximum lock-on scan range in metres.\n" +
-             "Only used when useMissileLock is true.")]
+    [Tooltip("Maximum scan range for the homing cone, in metres. " +
+             "Used by SoftHoming and HardLock.")]
     [Min(1f)]
     public float lockRange = 80f;
 
-    [Tooltip("Half-angle of the lock-on cone in degrees. Target must stay inside this cone.\n" +
-             "Only used when useMissileLock is true.")]
+    [Tooltip("Half-angle of the homing cone in degrees. Target must be inside this cone to be considered. " +
+             "Used by SoftHoming and HardLock.")]
     [Range(1f, 45f)]
     public float lockConeAngle = 15f;
 }

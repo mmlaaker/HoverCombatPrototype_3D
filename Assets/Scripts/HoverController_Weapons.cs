@@ -11,7 +11,7 @@ using UnityEngine;
 /// Four firing behaviors driven by WeaponType:
 ///   SingleShot: fires once per FirePressed (Shotgun, Rail).
 ///   Automatic:  fires repeatedly while FireHeld, gated by fire rate (Minigun).
-///   Missile:    FireHeld drives lock scanning; FirePressed commits on a confirmed lock.
+///   Missile:    Dumbfire, SoftHoming, or HardLock via MissileFireMode. See that enum for behavior.
 ///   Mine:       fires once per FirePressed; spawns at muzzle, no projectile velocity.
 ///
 /// Two projectile modes via ProjectileMode:
@@ -95,7 +95,7 @@ public class HoverController_Weapons : MonoBehaviour
 
     /// <summary>
     /// State machine states for the missile lock-on system.
-    /// Only meaningful when the active slot is WeaponType.Missile with useMissileLock true.
+    /// Only meaningful when the active slot is WeaponType.Missile with MissileFireMode.HardLock.
     /// </summary>
     public enum MissileLockState
     {
@@ -394,14 +394,53 @@ public class HoverController_Weapons : MonoBehaviour
     }
 
     /// <summary>
-    /// Missile: dumbfire or lock-on depending on useMissileLock.
+    /// Missile dispatch. Routes to one of three sub-modes per WeaponDefinition.missileFireMode:
+    ///   Dumbfire:   FirePressed fires immediately. No homing.
+    ///   SoftHoming: FirePressed fires immediately. A single cone scan picks the best
+    ///               in-cone target and passes it to the missile via IHomingTarget.
+    ///               If no target is in cone, the missile fires straight.
+    ///   HardLock:   FireHeld accumulates a lock; releasing FireHeld while Locked
+    ///               launches the missile. Releasing while Scanning aborts.
+    /// HardLock state machine lives in TickHardLockMissile.
+    /// </summary>
+    private void TickMissile(WeaponSlot slot)
+    {
+        var def = slot.definition;
+
+        switch (def.missileFireMode)
+        {
+            case MissileFireMode.Dumbfire:
+                if (input.FirePressed && slot.IsReady && slot.HasAmmo)
+                    FireAllMuzzles(slot);
+                return;
+
+            case MissileFireMode.SoftHoming:
+                if (input.FirePressed && slot.IsReady && slot.HasAmmo)
+                {
+                    // Scan once at fire time. ScanForLockTarget assigns LockTarget
+                    // (best in-cone target, or null if nothing qualifies).
+                    // FireAllMuzzles reads LockTarget and forwards it via IHomingTarget.
+                    ScanForLockTarget(def);
+                    FireAllMuzzles(slot);
+                    LockTarget = null; // clear so the gizmo doesn't persist
+                }
+                return;
+
+            case MissileFireMode.HardLock:
+                TickHardLockMissile(slot);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// HardLock state machine. Hold fire to scan and acquire; release fire to launch.
     ///
     /// Lock state transitions:
     ///   Idle      → Scanning  : FireHeld begins while a target is in cone.
     ///   Scanning  → Locked    : Lock timer reaches lockAcquireTime.
     ///   Scanning  → Idle      : FireHeld released or target leaves cone.
-    ///   Locked    → Committed : FirePressed while a ready slot has ammo.
-    ///   Locked    → Idle      : FireHeld released.
+    ///   Locked    → Committed : FireHeld released while a ready slot has ammo.
+    ///   Locked    → Idle      : FireHeld released without ammo or while on cooldown.
     ///
     /// Committed is a one-frame broadcast pulse. The event fires, missile launches,
     /// and state resets to Idle in the same Update tick. It is never entered via
@@ -409,19 +448,12 @@ public class HoverController_Weapons : MonoBehaviour
     /// case. OnMissileLockStateChanged fires for Committed explicitly before the
     /// reset so subscribers (UI, audio) reliably receive the "missile away" signal.
     /// </summary>
-    private void TickMissile(WeaponSlot slot)
+    private void TickHardLockMissile(WeaponSlot slot)
     {
         var def = slot.definition;
 
-        if (!def.useMissileLock)
-        {
-            if (input.FirePressed && slot.IsReady && slot.HasAmmo)
-                FireAllMuzzles(slot);
-            return;
-        }
-
-        // Only scan for a target when actively looking. Avoids OverlapSphere cost
-        // every frame just because a missile weapon is equipped but not being used.
+        // Only scan when actively looking. Avoids OverlapSphere cost every frame
+        // when a missile weapon is equipped but not being used.
         bool targetInCone = (CurrentLockState == MissileLockState.Idle ||
                              CurrentLockState == MissileLockState.Scanning)
                             && ScanForLockTarget(def);
@@ -449,16 +481,18 @@ public class HoverController_Weapons : MonoBehaviour
                 break;
 
             case MissileLockState.Locked:
-                if (!input.FireHeld) { ResetLockState(); break; }
-                if (input.FirePressed && slot.IsReady && slot.HasAmmo)
+                // Release-to-fire: releasing FireHeld is the launch trigger.
+                // If we can fire (ammo + cooldown ready), commit and launch.
+                // Otherwise the lock just drops.
+                if (!input.FireHeld)
                 {
-                    // Transition to Committed, fire the event, then fire and reset,
-                    // all in the same frame. Committed is a one-frame pulse; no
-                    // separate tick is needed for it.
-                    TransitionLockState(MissileLockState.Committed);
-                    OnMissileLockStateChanged?.Invoke(MissileLockState.Committed);
-                    prevLockState = MissileLockState.Committed;
-                    FireAllMuzzles(slot);
+                    if (slot.IsReady && slot.HasAmmo)
+                    {
+                        TransitionLockState(MissileLockState.Committed);
+                        OnMissileLockStateChanged?.Invoke(MissileLockState.Committed);
+                        prevLockState = MissileLockState.Committed;
+                        FireAllMuzzles(slot);
+                    }
                     ResetLockState();
                 }
                 break;
@@ -537,6 +571,7 @@ public class HoverController_Weapons : MonoBehaviour
                 if (muzzle == null) continue;
                 var proj = Instantiate(def.projectilePrefab, muzzle.position, muzzle.rotation);
                 proj.GetComponent<IProjectileDamageCarrier>()?.SetDamage(def.damage);
+                proj.GetComponent<IHomingTarget>()?.SetTarget(LockTarget);
                 if (ShouldDrawDebug) Debug.DrawRay(muzzle.position, muzzle.forward * 3f, Color.red, 0.2f);
             }
         }
@@ -676,7 +711,7 @@ public class HoverController_Weapons : MonoBehaviour
             }
         }
 
-        if (slot.definition.type == WeaponType.Missile && slot.definition.useMissileLock)
+        if (slot.definition.type == WeaponType.Missile && slot.definition.missileFireMode != MissileFireMode.Dumbfire)
         {
             var def = slot.definition;
             Color coneColor = CurrentLockState switch

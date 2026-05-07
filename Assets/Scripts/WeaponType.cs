@@ -10,7 +10,7 @@ public enum WeaponType
     /// <summary>Continuous fire while FireHeld. Governed by fireRate. Optional wind-up.</summary>
     Automatic,
 
-    /// <summary>FireHeld accumulates lock on target. FirePressed commits when lock confirmed.</summary>
+    /// <summary>Dumbfire, soft-homing, or hold-to-lock missile. See MissileFireMode for sub-mode behavior.</summary>
     Missile,
 
     /// <summary>One mine spawned per FirePressed at muzzle position. No projectile force applied.</summary>
