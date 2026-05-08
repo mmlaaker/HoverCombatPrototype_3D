@@ -7,6 +7,9 @@ using UnityEngine;
 /// Shared resource pool for non-damaging mobility abilities (boost, jump, dodge,
 /// shield, EMP). Weapons do NOT spend energy; they only check IsEmpFrozen.
 ///
+/// Tuning lives on a VehicleTuningProfile asset (profile.energy). Runtime state
+/// (Energy value, EMP freeze timer, regen lockout) stays on the component.
+///
 /// Contracts:
 ///   Continuous abilities call TryConsume every frame they are active.
 ///   Instantaneous abilities call TryConsume once on activation.
@@ -25,36 +28,14 @@ using UnityEngine;
 public class HoverController_Energy : MonoBehaviour
 {
     // -------------------------------------------------------------------------
-    // ⚡ Pool
+    // 📦 Tuning Profile
     // -------------------------------------------------------------------------
-    [Header("⚡ Pool")]
-    [Tooltip("Maximum energy. Treat as an abstract unit, tuned relative to ability costs.")]
-    [Min(1f)]
-    [SerializeField] private float maxEnergy = 100f;
+    [Header("📦 Tuning")]
+    [Tooltip("Vehicle tuning profile (shared SO). All numeric tuning lives here. Required.")]
+    [SerializeField] private VehicleTuningProfile profile;
 
-    [Tooltip("Energy on spawn. Set to Max Energy to start full.")]
-    [Min(0f)]
-    [SerializeField] private float startingEnergy = 100f;
-
-    // -------------------------------------------------------------------------
-    // 🔋 Regeneration
-    // -------------------------------------------------------------------------
-    [Header("🔋 Regeneration")]
-    [Tooltip("How fast the pool refills per second once the lockout expires.")]
-    [Min(0f)]
-    [SerializeField] private float regenRate = 20f;
-
-    [Tooltip("How long after a spend attempt before regen resumes. Set to 0 to disable the lockout.")]
-    [Min(0f)]
-    [SerializeField] private float regenDelay = 1f;
-
-    // -------------------------------------------------------------------------
-    // 🧊 EMP Freeze
-    // -------------------------------------------------------------------------
-    [Header("🧊 EMP Freeze")]
-    [Tooltip("Time remaining on the EMP freeze. Additive on repeat hits. " +
-             "While > 0, both consumption and regen are suspended; the pool is frozen.")]
-    [SerializeField, Min(0f)] private float empFreezeRemaining;
+    /// <summary>Shorthand for profile.energy. Used at every read site below.</summary>
+    private EnergyTuning E => profile.energy;
 
     // -------------------------------------------------------------------------
     // 📢 Events
@@ -87,7 +68,15 @@ public class HoverController_Energy : MonoBehaviour
     public float Energy { get; private set; }
 
     /// <summary>Current energy as a 0..1 fraction. Safe for UI fill bars.</summary>
-    public float EnergyNormalized => maxEnergy > 0f ? Energy / maxEnergy : 0f;
+    public float EnergyNormalized
+    {
+        get
+        {
+            if (profile == null) return 0f;
+            float max = E.maxEnergy;
+            return max > 0f ? Energy / max : 0f;
+        }
+    }
 
     /// <summary>True while the pool is EMP-frozen. Abilities should treat this as "cannot spend."</summary>
     public bool IsEmpFrozen => empFreezeRemaining > 0f;
@@ -98,6 +87,13 @@ public class HoverController_Energy : MonoBehaviour
     // -------------------------------------------------------------------------
     // Runtime state
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Time remaining on the EMP freeze. Additive on repeat hits.
+    /// While > 0, both consumption and regen are suspended; the pool is frozen.
+    /// Pure runtime state, not tuning.
+    /// </summary>
+    private float empFreezeRemaining;
 
     /// <summary>
     /// Unscaled time of the last TryConsume call (success or failure).
@@ -121,7 +117,18 @@ public class HoverController_Energy : MonoBehaviour
 
     private void Awake()
     {
-        Energy = Mathf.Clamp(startingEnergy, 0f, maxEnergy);
+        if (profile == null)
+        {
+            Debug.LogError(
+                $"[Energy] '{name}': VehicleTuningProfile is not assigned. " +
+                $"Assign one in the inspector. Energy disabled.",
+                this
+            );
+            enabled = false;
+            return;
+        }
+
+        Energy = Mathf.Clamp(E.startingEnergy, 0f, E.maxEnergy);
     }
 
     private void Update()
@@ -216,8 +223,8 @@ public class HoverController_Energy : MonoBehaviour
         bool wasRegenerating = IsRegenerating;
 
         float timeSinceLastConsume = Time.unscaledTime - lastConsumeTime;
-        bool  recentlyConsumed     = timeSinceLastConsume < regenDelay;
-        bool  canRegen             = !recentlyConsumed && !IsEmpFrozen && Energy < maxEnergy;
+        bool  recentlyConsumed     = timeSinceLastConsume < E.regenDelay;
+        bool  canRegen             = !recentlyConsumed && !IsEmpFrozen && Energy < E.maxEnergy;
 
         IsRegenerating = canRegen;
 
@@ -225,7 +232,7 @@ public class HoverController_Energy : MonoBehaviour
             OnRegenStarted?.Invoke();
 
         if (IsRegenerating)
-            Energy = Mathf.Min(maxEnergy, Energy + regenRate * Time.deltaTime);
+            Energy = Mathf.Min(E.maxEnergy, Energy + E.regenRate * Time.deltaTime);
     }
 
     /// <summary>Tracks depletion state and fires OnEnergyDepleted once per depletion event.</summary>
@@ -254,6 +261,9 @@ public class HoverController_Energy : MonoBehaviour
         if (debugSettings != null && !debugSettings.enableDebugGizmos)
             return;
 
+        if (profile == null)
+            return;
+
         // Energy bar above the chassis. Green full, red empty, cyan while frozen.
         float normalized = EnergyNormalized;
         Color barColor   = IsEmpFrozen
@@ -270,8 +280,8 @@ public class HoverController_Energy : MonoBehaviour
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 3f,
             IsEmpFrozen
-                ? $"ENERGY [EMP FROZEN {empFreezeRemaining:F1}s] {Energy:F0}/{maxEnergy:F0}"
-                : $"ENERGY {Energy:F0}/{maxEnergy:F0}{(IsRegenerating ? " ↑" : "")}"
+                ? $"ENERGY [EMP FROZEN {empFreezeRemaining:F1}s] {Energy:F0}/{E.maxEnergy:F0}"
+                : $"ENERGY {Energy:F0}/{E.maxEnergy:F0}{(IsRegenerating ? " ↑" : "")}"
         );
     }
 #endif

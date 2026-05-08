@@ -17,6 +17,9 @@ using UnityEngine;
 /// Both paths can be suspended via SetRecoveryEnabled(bool) for EMP, scripted
 /// events, or ability hooks.
 ///
+/// Tuning lives on a VehicleTuningProfile asset (profile.foundation). Scene refs
+/// (hoverPoints, groundLayers) and runtime state stay on the component.
+///
 /// Physics contract: never writes to rb.angularVelocity, rb.rotation, or
 /// rb.linearVelocity. All motion is AddForce / AddTorque.
 /// </summary>
@@ -24,115 +27,22 @@ using UnityEngine;
 public class HoverController_Foundation : MonoBehaviour
 {
     // -------------------------------------------------------------------------
+    // 📦 Tuning Profile
+    // -------------------------------------------------------------------------
+    [Header("📦 Tuning")]
+    [Tooltip("Vehicle tuning profile (shared SO). All numeric tuning lives here. Required.")]
+    [SerializeField] private VehicleTuningProfile profile;
+
+    /// <summary>Shorthand for profile.foundation. Used at every read site below.</summary>
+    private FoundationTuning F => profile.foundation;
+
+    // -------------------------------------------------------------------------
     // 🧩 Hover Points
     // -------------------------------------------------------------------------
     [Header("🧩 Hover Points")]
     [Tooltip("Empty transforms positioned at the bottom of the chassis (one per corner is typical). " +
              "Each casts a ray straight down to find the ground. Assign by hand from the hover point children.")]
     [SerializeField] private Transform[] hoverPoints;
-
-    // -------------------------------------------------------------------------
-    // 🚀 Hover Lift
-    // -------------------------------------------------------------------------
-    [Header("🚀 Hover Lift")]
-    [Tooltip("How far above the ground the chassis floats at rest. Higher values lift the body further off the surface.")]
-    [SerializeField] private float hoverHeight = 3f;
-
-    [Tooltip("Stiffness of the hover spring. Higher values make the chassis correct height faster and feel firmer. " +
-             "Push too high and the vehicle starts bouncing.")]
-    [SerializeField] private float liftStrength = 50000f;
-
-    [Tooltip("Damping on the hover spring. Higher values absorb bounce after landings or slope transitions. " +
-             "Pair with Lift Strength.")]
-    [SerializeField] private float liftDamping = 5000f;
-
-    [Tooltip("How far the hover rays look down for ground. Set this generous enough that the chassis can drop a small distance before losing lift.")]
-    [SerializeField] private float sensorRange = 5f;
-
-    // -------------------------------------------------------------------------
-    // 🧮 Slope Lift Compensation
-    // -------------------------------------------------------------------------
-    [Header("🧮 Slope Lift Compensation")]
-    [Tooltip("Adds extra lift on slopes so the chassis doesn't sag into hills. Recommended on for any non-flat terrain.")]
-    [SerializeField] private bool enableSlopeLiftCompensation = true;
-
-    [Tooltip("How much extra lift the slope correction adds at the steepest angle. " +
-             "1.0 disables the boost, 1.3 is subtle, 1.6 is strong.")]
-    [Range(1f, 2f)]
-    [SerializeField] private float slopeLiftMultiplier = 1.3f;
-
-    // -------------------------------------------------------------------------
-    // ⚖️ Leveling
-    // -------------------------------------------------------------------------
-    [Header("⚖️ Leveling")]
-    [Tooltip("How aggressively the chassis rotates to match the ground beneath it. " +
-             "Higher levels out faster but can wobble. Start around 8 to 15.")]
-    [Range(0f, 50f)]
-    [SerializeField] private float levelingTorqueStrength = 12f;
-
-    [Tooltip("Resistance to tilting on the pitch and roll axes. Pair with Leveling Torque Strength to kill wobble. " +
-             "Higher values feel more planted.")]
-    [Range(0f, 30f)]
-    [SerializeField] private float pitchRollDamping = 8f;
-
-    // -------------------------------------------------------------------------
-    // 📌 Ground Unstick  (upright only)
-    // -------------------------------------------------------------------------
-    // Fires when the chassis is touching ground AND is not flipped.
-    // Speed is NOT gated. Unstick must work regardless of landing velocity.
-    [Header("📌 Ground Unstick")]
-    [Tooltip("How long the chassis can rest belly-down upright before the unstick lift fires. " +
-             "Keep this short. This is a physics correction, not a gameplay moment. Try 0.1 to 0.3.")]
-    [Min(0f)]
-    [SerializeField] private float unstickRecoveryDelay = 0.2f;
-
-    [Tooltip("Strength of the upward push that frees a stuck chassis. " +
-             "Front-loaded and fades over the lift window. Mass independent. Try 40 to 80.")]
-    [Min(0f)]
-    [SerializeField] private float unstickLiftForce = 25f;
-
-    [Tooltip("How long the unstick lift lasts as it tapers to zero. " +
-             "Longer reads as a gentle bump, shorter is a quick snap. Try 0.1 to 0.25.")]
-    [Min(0.01f)]
-    [SerializeField] private float unstickLiftDuration = 0.15f;
-
-    // -------------------------------------------------------------------------
-    // 🔄 Flip Recovery  (flipped only)
-    // -------------------------------------------------------------------------
-    // Fires when the chassis is touching ground AND flipped AND slow.
-    // Longer delay is intentional. A flipped vehicle should feel like a setback.
-    [Header("🔄 Flip Recovery")]
-    [Tooltip("Tilt angle that counts as flipped. 90 is on its side, 180 is fully upside down. Try 70 to 100.")]
-    [Range(10f, 180f)]
-    [SerializeField] private float flipRecoveryAngleThreshold = 80f;
-
-    [Tooltip("How long the chassis stays flipped before the righting torque kicks in. " +
-             "Longer values let the player feel the flip as a real setback. Try 0.75 to 1.5.")]
-    [Min(0f)]
-    [SerializeField] private float flipRecoveryDelay = 1.0f;
-
-    [Tooltip("Strength of the righting torque that flips the chassis upright. " +
-             "Must be stronger than Leveling Torque Strength to win at extreme angles. Try 20 to 40.")]
-    [Range(0f, 250f)]
-    [SerializeField] private float flipRecoveryTorque = 28f;
-
-    [Tooltip("Speed below which flip recovery is allowed to start. " +
-             "Prevents recovery from firing while the chassis is still tumbling. Try 0.5.")]
-    [Min(0f)]
-    [SerializeField] private float flipRecoverySpeedThreshold = 0.5f;
-
-    // -------------------------------------------------------------------------
-    // 🌎 Gravity
-    // -------------------------------------------------------------------------
-    [Header("🌎 Gravity")]
-    [Tooltip("Extra gravity applied at all times. Pulls the chassis down harder onto the hover springs for a heavier feel. 0 disables.")]
-    [Range(0f, 5f)]
-    [SerializeField] private float extraGravityMultiplier = 0f;
-
-    [Tooltip("Extra downward pull that only applies while airborne. " +
-             "Reduces hangtime after jumps and ramps without affecting grounded feel.")]
-    [Range(0f, 30f)]
-    [SerializeField] private float extraAirGravity = 0f;
 
     // -------------------------------------------------------------------------
     // 🌍 Ground Interaction
@@ -235,6 +145,18 @@ public class HoverController_Foundation : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+
+        if (profile == null)
+        {
+            Debug.LogError(
+                $"[Foundation] '{name}': VehicleTuningProfile is not assigned. " +
+                $"Assign one in the inspector. Hover disabled.",
+                this
+            );
+            enabled = false;
+            return;
+        }
+
         ValidateHoverPoints();
     }
 
@@ -300,21 +222,21 @@ public class HoverController_Foundation : MonoBehaviour
         {
             Vector3 rayDir = -point.up;
 
-            if (!Physics.Raycast(point.position, rayDir, out RaycastHit hit, sensorRange, groundLayers))
+            if (!Physics.Raycast(point.position, rayDir, out RaycastHit hit, F.sensorRange, groundLayers))
             {
                 if (ShouldDrawDebug)
-                    Debug.DrawRay(point.position, rayDir * sensorRange, Color.red);
+                    Debug.DrawRay(point.position, rayDir * F.sensorRange, Color.red);
                 continue;
             }
 
-            float compression         = hoverHeight - hit.distance;
+            float compression         = F.hoverHeight - hit.distance;
             float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), hit.normal);
-            float springForce         = compression * liftStrength - velocityAlongNormal * liftDamping;
+            float springForce         = compression * F.liftStrength - velocityAlongNormal * F.liftDamping;
 
-            if (enableSlopeLiftCompensation)
+            if (F.enableSlopeLiftCompensation)
             {
                 float slopeFactor = Mathf.Clamp01(1f - hit.normal.y);
-                springForce *= Mathf.Lerp(1f, slopeLiftMultiplier, slopeFactor);
+                springForce *= Mathf.Lerp(1f, F.slopeLiftMultiplier, slopeFactor);
             }
 
             springForce = Mathf.Max(springForce, 0f);
@@ -346,11 +268,11 @@ public class HoverController_Foundation : MonoBehaviour
     /// </summary>
     private void ApplyExtraGravity()
     {
-        if (extraGravityMultiplier > 0f)
-            rb.AddForce(Physics.gravity * extraGravityMultiplier, ForceMode.Acceleration);
+        if (F.extraGravityMultiplier > 0f)
+            rb.AddForce(Physics.gravity * F.extraGravityMultiplier, ForceMode.Acceleration);
 
-        if (!IsHoverGrounded && extraAirGravity > 0f)
-            rb.AddForce(Vector3.down * extraAirGravity, ForceMode.Acceleration);
+        if (!IsHoverGrounded && F.extraAirGravity > 0f)
+            rb.AddForce(Vector3.down * F.extraAirGravity, ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -358,11 +280,11 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private void ApplyLevelingTorque()
     {
-        if (!IsHoverGrounded || levelingTorqueStrength <= 0f)
+        if (!IsHoverGrounded || F.levelingTorqueStrength <= 0f)
             return;
 
         Vector3 torqueAxis = Vector3.Cross(transform.up, AverageGroundNormal);
-        rb.AddTorque(torqueAxis * levelingTorqueStrength, ForceMode.Acceleration);
+        rb.AddTorque(torqueAxis * F.levelingTorqueStrength, ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -370,15 +292,15 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private void ApplyPitchRollDamping()
     {
-        if (pitchRollDamping <= 0f)
+        if (F.pitchRollDamping <= 0f)
             return;
 
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
 
         Vector3 dampingLocal = new Vector3(
-            -localAngVel.x * pitchRollDamping,
+            -localAngVel.x * F.pitchRollDamping,
             0f,
-            -localAngVel.z * pitchRollDamping
+            -localAngVel.z * F.pitchRollDamping
         );
 
         rb.AddRelativeTorque(dampingLocal, ForceMode.Acceleration);
@@ -408,21 +330,21 @@ public class HoverController_Foundation : MonoBehaviour
             return;
 
         float tiltAngle = Vector3.Angle(transform.up, Vector3.up);
-        bool  isFlipped = tiltAngle >= flipRecoveryAngleThreshold;
-        bool  isSlow    = rb.linearVelocity.sqrMagnitude < flipRecoverySpeedThreshold * flipRecoverySpeedThreshold;
+        bool  isFlipped = tiltAngle >= F.flipRecoveryAngleThreshold;
+        bool  isSlow    = rb.linearVelocity.sqrMagnitude < F.flipRecoverySpeedThreshold * F.flipRecoverySpeedThreshold;
 
         // --- Righting torque (runs every frame while authorized) ---
         if (!isFlipped || IsHoverGrounded)
             rightingAuthorized = false;
 
-        if (rightingAuthorized && flipRecoveryTorque > 0f)
+        if (rightingAuthorized && F.flipRecoveryTorque > 0f)
         {
             Vector3 torqueAxis = Vector3.Cross(transform.up, Vector3.up);
 
             if (torqueAxis.sqrMagnitude < 0.001f)
                 torqueAxis = transform.right * 0.1f;
 
-            rb.AddTorque(torqueAxis.normalized * flipRecoveryTorque, ForceMode.Acceleration);
+            rb.AddTorque(torqueAxis.normalized * F.flipRecoveryTorque, ForceMode.Acceleration);
         }
 
         // --- Upright unstick path ---
@@ -431,7 +353,7 @@ public class HoverController_Foundation : MonoBehaviour
         {
             unstickTimer += Time.fixedDeltaTime;
 
-            if (unstickTimer >= unstickRecoveryDelay)
+            if (unstickTimer >= F.unstickRecoveryDelay)
             {
                 unstickTimer = 0f;
 
@@ -439,7 +361,7 @@ public class HoverController_Foundation : MonoBehaviour
                     ? groundContactNormal
                     : Vector3.up;
 
-                unstickForceTimer      = unstickLiftDuration;
+                unstickForceTimer      = F.unstickLiftDuration;
                 unstickFiredFlashTimer = 0.5f;
 
                 if (ShouldDrawDebug)
@@ -457,7 +379,7 @@ public class HoverController_Foundation : MonoBehaviour
         {
             flipTimer += Time.fixedDeltaTime;
 
-            if (flipTimer >= flipRecoveryDelay)
+            if (flipTimer >= F.flipRecoveryDelay)
             {
                 flipTimer          = 0f;
                 rightingAuthorized = true;
@@ -488,8 +410,8 @@ public class HoverController_Foundation : MonoBehaviour
         if (unstickForceTimer <= 0f)
             return;
 
-        float progress       = unstickForceTimer / Mathf.Max(0.01f, unstickLiftDuration);
-        float forceMagnitude = unstickLiftForce * progress;
+        float progress       = unstickForceTimer / Mathf.Max(0.01f, F.unstickLiftDuration);
+        float forceMagnitude = F.unstickLiftForce * progress;
 
         rb.AddForce(unstickForceDir * forceMagnitude, ForceMode.Acceleration);
 
@@ -536,9 +458,9 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         // --- Upright unstick timer bar (yellow) ---
-        if (isContactingGround && unstickTimer > 0f)
+        if (isContactingGround && unstickTimer > 0f && profile != null)
         {
-            float progress  = Mathf.Clamp01(unstickTimer / Mathf.Max(0.01f, unstickRecoveryDelay));
+            float progress  = Mathf.Clamp01(unstickTimer / Mathf.Max(0.01f, F.unstickRecoveryDelay));
             Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.8f, 0f), progress);
             Vector3 start   = transform.position + Vector3.up * 0.3f;
             Vector3 end     = start + transform.right * (progress * 2f);
@@ -548,14 +470,14 @@ public class HoverController_Foundation : MonoBehaviour
             UnityEditor.Handles.color = Gizmos.color;
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 1.5f,
-                $"Unstick {unstickTimer:F2} / {unstickRecoveryDelay:F2}s"
+                $"Unstick {unstickTimer:F2} / {F.unstickRecoveryDelay:F2}s"
             );
         }
 
         // --- Flip recovery timer bar (orange) ---
-        if (isContactingGround && flipTimer > 0f)
+        if (isContactingGround && flipTimer > 0f && profile != null)
         {
-            float progress  = Mathf.Clamp01(flipTimer / Mathf.Max(0.01f, flipRecoveryDelay));
+            float progress  = Mathf.Clamp01(flipTimer / Mathf.Max(0.01f, F.flipRecoveryDelay));
             Gizmos.color    = Color.Lerp(new Color(1f, 0.4f, 0f), Color.red, progress);
             Vector3 start   = transform.position + Vector3.up * 0.6f;
             Vector3 end     = start + transform.right * (progress * 2f);
@@ -565,7 +487,7 @@ public class HoverController_Foundation : MonoBehaviour
             UnityEditor.Handles.color = Gizmos.color;
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 2.0f,
-                $"Flip {flipTimer:F2} / {flipRecoveryDelay:F2}s"
+                $"Flip {flipTimer:F2} / {F.flipRecoveryDelay:F2}s"
             );
         }
 

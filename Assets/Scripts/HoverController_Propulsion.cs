@@ -6,6 +6,9 @@ using UnityEngine;
 /// Drives the chassis forward, back, sideways, and up. Owns turning, drag, drift,
 /// boost, dodge, jump, and strafe-mode authority.
 ///
+/// Tuning lives on a VehicleTuningProfile asset (profile.propulsion). Scene refs
+/// (meshRoot) and runtime state (timers, lerps) stay on the component.
+///
 /// Key design choices baked in:
 ///
 ///   Drive and forward drag are mutually exclusive. Holding throttle applies drive
@@ -35,124 +38,31 @@ using UnityEngine;
 public class HoverController_Propulsion : MonoBehaviour
 {
     // -------------------------------------------------------------------------
-    // 🚀 Drive
+    // 📦 Tuning Profile
     // -------------------------------------------------------------------------
-    [Header("🚀 Drive")]
-    [Tooltip("How hard the chassis accelerates forward at full throttle, before boost.")]
-    [SerializeField] private float maxForwardAccel = 25f;
+    [Header("📦 Tuning")]
+    [Tooltip("Vehicle tuning profile (shared SO). All numeric tuning lives here. Required.")]
+    [SerializeField] private VehicleTuningProfile profile;
 
-    [Tooltip("How hard the chassis accelerates in reverse at full throttle.")]
-    [SerializeField] private float maxReverseAccel = 15f;
-
-    [Tooltip("Reverse top speed. Independent of forward top speed. " +
-             "Tune this alongside Max Reverse Accel and Strafe Top Speed; they should feel like a matched budget.")]
-    [SerializeField] private float reverseTopSpeed = 20f;
-
-    [Tooltip("Forward top speed before boost.")]
-    [SerializeField] private float topSpeed = 40f;
+    /// <summary>Shorthand for profile.propulsion. Used at every read site below.</summary>
+    private PropulsionTuning P => profile.propulsion;
 
     // -------------------------------------------------------------------------
-    // 🔄 Turning
+    // ⚡ Boost runtime state
     // -------------------------------------------------------------------------
-    [Header("🔄 Turning")]
-    [Tooltip("How fast the chassis rotates at full turn input. Higher feels twitchier and more arcade.")]
-    [SerializeField] private float yawAccel = 8f;
-
-    [Tooltip("How firmly turning settles. Counter-torque proportional to current yaw rate. Higher kills wobble.")]
-    [Range(0f, 20f)]
-    [SerializeField] private float yawDamping = 6f;
-
-    [Tooltip("How much steering authority is retained airborne. 0 disables air turning, 1 is full ground response.")]
-    [Range(0f, 1f)]
-    [SerializeField] private float airTurnMultiplier = 0.5f;
-
-    // -------------------------------------------------------------------------
-    // ⚡ Boost
-    // -------------------------------------------------------------------------
-    [Header("⚡ Boost")]
-    [Tooltip("Master switch for boost.")]
-    [SerializeField] private bool enableBoost = true;
-
-    [Tooltip("How much harder the chassis accelerates while boosting.")]
-    [Range(1f, 3f)]
-    [SerializeField] private float boostAccelMultiplier = 1.75f;
-
-    [Tooltip("How much higher the top speed climbs while boosting.")]
-    [Range(1f, 3f)]
-    [SerializeField] private float boostSpeedMultiplier = 1.5f;
-
-    [Tooltip("How long it takes for boost to ramp in and ramp out. Longer feels smoother, shorter feels punchier.")]
-    [Min(0.01f)]
-    [SerializeField] private float boostBlendSeconds = 0.35f;
-
-    [Tooltip("Energy drained per second of continuous boost. " +
-             "Defaults assume a full 100-energy tank lasts about 5 seconds of pure boost.")]
-    [Min(0f)]
-    [SerializeField] private float boostEnergyPerSecond = 20f;
-
     private float boostLerp; // 0..1, managed by ApplyBoostBlend
 
     // -------------------------------------------------------------------------
-    // 💨 Dodge (Strafe Mode)
+    // 💨 Dodge runtime state
     // -------------------------------------------------------------------------
-    [Header("💨 Dodge (Strafe Mode)")]
-    [Tooltip("Peak strength of the dodge burst. Front-loaded and tapers to zero. Mass independent.")]
-    [Min(0f)]
-    [SerializeField] private float dodgeForce = 120f;
-
-    [Tooltip("How long the dodge burst lasts as it tapers to zero. Shorter is snappier, longer is more jet-like. Try 0.15 to 0.35.")]
-    [Min(0.01f)]
-    [SerializeField] private float dodgeDuration = 0.25f;
-
-    [Tooltip("Flat energy cost per dodge.")]
-    [Min(0f)]
-    [SerializeField] private float dodgeEnergyCost = 20f;
-
-    [Tooltip("Seconds between dodges. Prevents spam.")]
-    [Min(0f)]
-    [SerializeField] private float dodgeCooldown = 0.5f;
-
     private float   dodgeCooldownTimer;
     private float   dodgeForceTimer;   // counts down while dodge force is being applied
     private Vector3 dodgeForceDir;     // world-space direction cached at trigger time
     private bool    boostHeldLastFrame; // for rising-edge detection on boost button
 
     // -------------------------------------------------------------------------
-    // 🦘 Jump
+    // 🦘 Jump runtime state
     // -------------------------------------------------------------------------
-    [Header("🦘 Jump")]
-    [Tooltip("Master switch for jump.")]
-    [SerializeField] private bool enableJump = true;
-
-    [Tooltip("Jump strength on a quick tap (minimum charge). Mass independent so all vehicles reach the same height.")]
-    [Min(0f)]
-    [SerializeField] private float jumpImpulseMin = 4f;
-
-    [Tooltip("Jump strength on a fully charged hold. Mass independent so all vehicles reach the same height.")]
-    [Min(0f)]
-    [SerializeField] private float jumpImpulseMax = 12f;
-
-    [Tooltip("How long the player must hold to reach a full charge. Charge holds at full until release.")]
-    [Min(0.05f)]
-    [SerializeField] private float jumpMaxChargeTime = 2f;
-
-    [Tooltip("Cooldown after landing before another jump is allowed.")]
-    [Min(0f)]
-    [SerializeField] private float jumpGroundedLockout = 0.2f;
-
-    [Tooltip("Energy cost for a grounded jump. Flat cost regardless of charge level.")]
-    [Min(0f)]
-    [SerializeField] private float jumpGroundedEnergyCost = 25f;
-
-    [Tooltip("Energy cost for an air jump.")]
-    [Min(0f)]
-    [SerializeField] private float jumpAirEnergyCost = 25f;
-
-    [Tooltip("Air jump strength. Not charge-based. Mass independent so all vehicles reach the same height.")]
-    [Min(0f)]
-    [SerializeField] private float airJumpImpulse = 7f;
-
-    // ── Jump runtime state ──────────────────────────────────────────────────
 
     /// <summary>How long the jump button has been held this press. Capped at jumpMaxChargeTime.</summary>
     private float jumpChargeTimer;
@@ -176,76 +86,25 @@ public class HoverController_Propulsion : MonoBehaviour
     private bool wasGroundedLastFrame;
 
     // -------------------------------------------------------------------------
-    // 🧲 Drag
-    // -------------------------------------------------------------------------
-    [Header("🧲 Drag")]
-    [Tooltip("Sideways resistance to lateral velocity. " +
-             "Controls how tightly the chassis tracks its heading and how hard strafe accel must push to build sideways speed. " +
-             "Higher needs higher Strafe Accel to compensate. 0 is fully slippery sideways.")]
-    [Range(0f, 50f)]
-    [SerializeField] private float lateralDamp = 2f;
-
-    [Tooltip("Forward and reverse resistance to longitudinal velocity. " +
-             "Controls coasting bleed-off when throttle is released. " +
-             "Only applies near-zero throttle (drive and drag are mutually exclusive). " +
-             "0 means the chassis coasts indefinitely.")]
-    [Range(0f, 50f)]
-    [SerializeField] private float forwardDamp = 2f;
-
-    // -------------------------------------------------------------------------
-    // 🌀 Drift
+    // 🌀 Drift scene refs + runtime state
     // -------------------------------------------------------------------------
     [Header("🌀 Drift")]
-    [Tooltip("Lateral resistance while fully drifting. " +
-             "Lower than Lateral Damp so the chassis slides through the turn. 0 is fully free.")]
-    [Range(0f, 50f)]
-    [SerializeField] private float driftLateralDamp = 0f;
-
-    [Tooltip("Forward resistance while fully drifting. " +
-             "Typically close to Forward Damp; drift changes how the chassis slides sideways, not how it coasts forward. " +
-             "Lower this slightly to carry more forward momentum through a drift.")]
-    [Range(0f, 50f)]
-    [SerializeField] private float driftForwardDamp = 2f;
-
-    [Tooltip("Yaw rate multiplier while fully drifting. " +
-             "Above 1 means the nose rotates faster than the momentum vector, creating the shouldering angle. Try 1.2 to 1.6.")]
-    [Range(1f, 3f)]
-    [SerializeField] private float driftYawMultiplier = 1.4f;
-
-    [Tooltip("Minimum turn input required to engage drift. Prevents drift from triggering on gentle steering. Try 0.3 to 0.5.")]
-    [Range(0f, 1f)]
-    [SerializeField] private float driftTurnThreshold = 0.4f;
-
-    [Tooltip("Minimum forward speed required to start a drift. " +
-             "Once drifting, speed is no longer checked: you own the drift until the button releases. " +
-             "Aligns naturally with Strafe Top Speed: outpacing strafe means you can drift.")]
-    [Min(0f)]
-    [SerializeField] private float minDriftSpeed = 20f;
-
-    [Tooltip("How long it takes for drift to ramp in and out. Faster is snappier. Try 0.1 to 0.25.")]
-    [Min(0.01f)]
-    [SerializeField] private float driftBlendSeconds = 0.15f;
-
     [Tooltip("Mesh parent (HoverCar). Rotated on local Z for the chassis bank visual. " +
              "Assign the HoverCar object in the inspector, not the root or individual meshes.")]
     [SerializeField] private Transform meshRoot;
 
-    [Tooltip("Maximum chassis lean at full drift. Try 15 to 25. " +
-             "Exaggerate slightly: readability matters at speed.")]
-    [Range(0f, 45f)]
-    [SerializeField] private float maxBankAngle = 20f;
-
-    [Tooltip("Subtle bank applied during normal turns (not drift). " +
-             "Gives the chassis a constant carving look. Stacks with drift bank, so keep it low. Try 3 to 5.")]
-    [Range(0f, 15f)]
-    [SerializeField] private float passiveBankAngle = 4f;
-
-    [Tooltip("How fast the chassis lean catches up to the target angle. Try 6 to 10.")]
-    [Range(1f, 20f)]
-    [SerializeField] private float bankLerpSpeed = 8f;
-
     private float driftLerp;   // 0..1, managed by ApplyDriftBlend
     private bool  _isDrifting; // entry-gate state: true once speed+turn initiated drift
+
+    // -------------------------------------------------------------------------
+    // 🎯 Strafe runtime state
+    // -------------------------------------------------------------------------
+    private float _strafeModeBlend; // 0..1, blends strafe movement authority in/out
+    private float _strafePitchAccum; // accumulated FPS-style pitch angle (degrees)
+
+    // -------------------------------------------------------------------------
+    // Public read-only state
+    // -------------------------------------------------------------------------
 
     /// <summary>
     /// Current drift blend weight (0 = no drift, 1 = full drift).
@@ -258,6 +117,18 @@ public class HoverController_Propulsion : MonoBehaviour
     /// Read by HoverVehicleVFX to modulate particle emission rates.
     /// </summary>
     public float BoostLerp => boostLerp;
+
+    /// <summary>
+    /// Maximum nose pitch (degrees) in strafe mode.
+    /// Read by HoverController_Aim to keep weapon aim range consistent with vehicle pitch range.
+    /// </summary>
+    public float StrafePitchLimit => profile.propulsion.strafePitchLimit;
+
+    /// <summary>
+    /// Current strafe blend weight (0 = drive mode, 1 = full strafe).
+    /// Read by HoverController_Aim to scale aim pitch in sync with strafe entry/exit.
+    /// </summary>
+    public float StrafeModeBlend => _strafeModeBlend;
 
     // -------------------------------------------------------------------------
     // 📢 Events
@@ -278,76 +149,6 @@ public class HoverController_Propulsion : MonoBehaviour
     public event System.Action<Vector3> OnDodge;
 
     // -------------------------------------------------------------------------
-    // 🎯 Strafe Mode
-    // -------------------------------------------------------------------------
-    [Header("🎯 Strafe Mode")]
-    [Tooltip("Master switch for strafe / aim mode (Left Trigger).")]
-    [SerializeField] private bool enableStrafe = true;
-
-    [Tooltip("Maximum speed sustainable in strafe mode. " +
-             "Entry speed above this bleeds off naturally via the soft cap. " +
-             "Cannot be re-built above this threshold once in strafe.")]
-    [Min(1f)]
-    [SerializeField] private float strafeTopSpeed = 20f;
-
-    [Tooltip("Acceleration for omni-directional strafe movement on the ground plane. " +
-             "Lower than forward accel: strafe is maneuvering, not charging.")]
-    [Min(0f)]
-    [SerializeField] private float strafeAccel = 15f;
-
-    [Tooltip("Maximum nose tilt (up or down) in strafe mode. " +
-             "Applied via torque; Foundation's leveling fights it, creating natural resistance.")]
-    [Range(5f, 45f)]
-    [SerializeField] private float strafePitchLimit = 15f;
-
-    [Tooltip("Strength of the torque that drives the nose toward the target pitch in strafe mode. " +
-             "Keep LOW: Foundation's Leveling Torque Strength fights it. Above 5 will oscillate. Try 2 to 5.")]
-    [Range(0.5f, 15f)]
-    [SerializeField] private float strafePitchTorque = 3f;
-
-    [Tooltip("Damping on pitch angular velocity in strafe mode. " +
-             "Critical for preventing oscillation. Pair with Strafe Pitch Torque. Try 4 to 8.")]
-    [Range(0f, 20f)]
-    [SerializeField] private float strafePitchDamping = 6f;
-
-    [Tooltip("Aim sensitivity in degrees per second at full stick deflection. " +
-             "Controls how fast the pitch angle changes with stick input. Try 60 to 120.")]
-    [Range(10f, 300f)]
-    [SerializeField] private float strafePitchSensitivity = 90f;
-
-    [Tooltip("How long it takes strafe mode to ramp in or out on trigger press / release.")]
-    [Min(0.05f)]
-    [SerializeField] private float strafeModeBlendSeconds = 0.2f;
-
-    [Tooltip("Resistance per unit of excess lateral speed in strafe. " +
-             "Caps lateral velocity at Strafe Top Speed without a hard clamp. " +
-             "Only acts on the lateral axis. Try 20 to 60.")]
-    [Range(0f, 120f)]
-    [SerializeField] private float strafeLateralCapStrength = 40f;
-
-    private float _strafeModeBlend; // 0..1, blends strafe movement authority in/out
-    private float _strafePitchAccum; // accumulated FPS-style pitch angle (degrees)
-
-    /// <summary>
-    /// Maximum nose pitch (degrees) in strafe mode.
-    /// Read by HoverController_Aim to keep weapon aim range consistent with vehicle pitch range.
-    /// </summary>
-    public float StrafePitchLimit => strafePitchLimit;
-
-    /// <summary>
-    /// Current strafe blend weight (0 = drive mode, 1 = full strafe).
-    /// Read by HoverController_Aim to scale aim pitch in sync with strafe entry/exit.
-    /// </summary>
-    public float StrafeModeBlend => _strafeModeBlend;
-
-    // -------------------------------------------------------------------------
-    // 🕹 Input
-    // -------------------------------------------------------------------------
-    // Acquired via GetComponent<IHoverInputProvider>() in Awake.
-    // Attach PlayerHoverInput (or any AI implementation) to this same GameObject.
-    // Swapping the component swaps who drives the vehicle, no other wiring needed.
-
-    // -------------------------------------------------------------------------
     // 🧭 Debug
     // -------------------------------------------------------------------------
     [Header("🧭 Debug")]
@@ -357,6 +158,13 @@ public class HoverController_Propulsion : MonoBehaviour
     [SerializeField] private HoverDebugSettings debugSettings;
 
     private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+
+    // -------------------------------------------------------------------------
+    // 🕹 Input
+    // -------------------------------------------------------------------------
+    // Acquired via GetComponent<IHoverInputProvider>() in Awake.
+    // Attach PlayerHoverInput (or any AI implementation) to this same GameObject.
+    // Swapping the component swaps who drives the vehicle, no other wiring needed.
 
     // -------------------------------------------------------------------------
     // Runtime
@@ -374,6 +182,17 @@ public class HoverController_Propulsion : MonoBehaviour
         rb         = GetComponent<Rigidbody>();
         foundation = GetComponent<HoverController_Foundation>();
         energy     = GetComponent<HoverController_Energy>();
+
+        if (profile == null)
+        {
+            Debug.LogError(
+                $"[Propulsion] '{name}': VehicleTuningProfile is not assigned. " +
+                $"Assign one in the inspector. Vehicle disabled.",
+                this
+            );
+            enabled = false;
+            return;
+        }
 
         input = GetComponent<IHoverInputProvider>();
         if (input == null)
@@ -403,9 +222,9 @@ public class HoverController_Propulsion : MonoBehaviour
 
     private void FixedUpdate()
     {
-        bool  grounded      = foundation.IsHoverGrounded;
-        float effectiveTopSpeed    = topSpeed        * Mathf.Lerp(1f, boostSpeedMultiplier,  boostLerp);
-        float effectiveForwardAccel = maxForwardAccel * Mathf.Lerp(1f, boostAccelMultiplier, boostLerp);
+        bool  grounded               = foundation.IsHoverGrounded;
+        float effectiveTopSpeed      = P.topSpeed        * Mathf.Lerp(1f, P.boostSpeedMultiplier,  boostLerp);
+        float effectiveForwardAccel  = P.maxForwardAccel * Mathf.Lerp(1f, P.boostAccelMultiplier, boostLerp);
         _cachedLocalVel = transform.InverseTransformDirection(rb.linearVelocity);
 
         ApplyBoostBlend();
@@ -453,12 +272,12 @@ public class HoverController_Propulsion : MonoBehaviour
         bool hasThrottle = inStrafe
             ? (input.ThrottleInput >= 0.15f && input.ThrottleInput > Mathf.Abs(input.StrafeX))
             : Mathf.Abs(input.ThrottleInput) >= 0.15f;
-        bool wantsBoost  = enableBoost && input.Boost && hasThrottle;
+        bool wantsBoost  = P.enableBoost && input.Boost && hasThrottle;
         bool energyGranted = wantsBoost &&
-                             energy.TryConsume(boostEnergyPerSecond * Time.fixedDeltaTime);
+                             energy.TryConsume(P.boostEnergyPerSecond * Time.fixedDeltaTime);
 
         float target = energyGranted ? 1f : 0f;
-        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, boostBlendSeconds);
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.boostBlendSeconds);
         boostLerp    = Mathf.MoveTowards(boostLerp, target, step);
     }
 
@@ -478,7 +297,7 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void HandleDodge(bool grounded)
     {
-        if (!enableBoost || _strafeModeBlend <= 0f)
+        if (!P.enableBoost || _strafeModeBlend <= 0f)
         {
             boostHeldLastFrame = input.Boost;
             return;
@@ -507,12 +326,12 @@ public class HoverController_Propulsion : MonoBehaviour
         if (localDir.sqrMagnitude < 0.01f)
             return;
 
-        if (!energy.TryConsume(dodgeEnergyCost))
+        if (!energy.TryConsume(P.dodgeEnergyCost))
             return;
 
         dodgeForceDir   = (transform.right * localDir.x + transform.forward * localDir.z).normalized;
-        dodgeForceTimer = dodgeDuration;
-        dodgeCooldownTimer = dodgeCooldown;
+        dodgeForceTimer = P.dodgeDuration;
+        dodgeCooldownTimer = P.dodgeCooldown;
 
         OnDodge?.Invoke(localDir);
 
@@ -533,8 +352,8 @@ public class HoverController_Propulsion : MonoBehaviour
         if (dodgeForceTimer <= 0f)
             return;
 
-        float progress  = dodgeForceTimer / Mathf.Max(0.01f, dodgeDuration);
-        float magnitude = dodgeForce * progress;
+        float progress  = dodgeForceTimer / Mathf.Max(0.01f, P.dodgeDuration);
+        float magnitude = P.dodgeForce * progress;
 
         rb.AddForce(dodgeForceDir * magnitude, ForceMode.Acceleration);
 
@@ -560,7 +379,7 @@ public class HoverController_Propulsion : MonoBehaviour
     private void ApplyDriftBlend()
     {
         bool baseCondition = input.Drift
-                          && Mathf.Abs(input.TurnInput) >= driftTurnThreshold
+                          && Mathf.Abs(input.TurnInput) >= P.driftTurnThreshold
                           && foundation.IsHoverGrounded;
 
         if (_isDrifting)
@@ -571,11 +390,11 @@ public class HoverController_Propulsion : MonoBehaviour
         else
         {
             // Not yet drifting. Require minimum forward speed to initiate.
-            _isDrifting = baseCondition && _cachedLocalVel.z >= minDriftSpeed;
+            _isDrifting = baseCondition && _cachedLocalVel.z >= P.minDriftSpeed;
         }
 
         float target = _isDrifting ? 1f : 0f;
-        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, driftBlendSeconds);
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.driftBlendSeconds);
         driftLerp    = Mathf.MoveTowards(driftLerp, target, step);
     }
 
@@ -602,7 +421,7 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void HandleJump(bool grounded)
     {
-        if (!enableJump)
+        if (!P.enableJump)
             return;
 
         bool jumpHeld    = input.Jump;
@@ -625,7 +444,7 @@ public class HoverController_Propulsion : MonoBehaviour
             {
                 jumpChargeTimer = Mathf.Min(
                     jumpChargeTimer + Time.fixedDeltaTime,
-                    jumpMaxChargeTime
+                    P.jumpMaxChargeTime
                 );
             }
             else if (jumpChargeTimer > 0f)
@@ -660,13 +479,13 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void FireGroundedJump()
     {
-        float chargeT = Mathf.Clamp01(jumpChargeTimer / jumpMaxChargeTime);
-        float impulse = Mathf.Lerp(jumpImpulseMin, jumpImpulseMax, chargeT);
+        float chargeT = Mathf.Clamp01(jumpChargeTimer / P.jumpMaxChargeTime);
+        float impulse = Mathf.Lerp(P.jumpImpulseMin, P.jumpImpulseMax, chargeT);
 
         // Reset charge unconditionally. The player released the button.
         jumpChargeTimer = 0f;
 
-        if (!energy.TryConsume(jumpGroundedEnergyCost))
+        if (!energy.TryConsume(P.jumpGroundedEnergyCost))
         {
             OnJumpDenied?.Invoke(true);
             return;
@@ -674,7 +493,7 @@ public class HoverController_Propulsion : MonoBehaviour
 
         // VelocityChange: adds m/s directly, ignoring mass.
         rb.AddForce(Vector3.up * impulse, ForceMode.VelocityChange);
-        jumpLockoutTimer = jumpGroundedLockout;
+        jumpLockoutTimer = P.jumpGroundedLockout;
 
         if (ShouldDrawDebug)
             Debug.DrawRay(transform.position, Vector3.up * impulse * 0.5f, Color.cyan, 0.5f);
@@ -686,7 +505,7 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void FireAirJump()
     {
-        if (!energy.TryConsume(jumpAirEnergyCost))
+        if (!energy.TryConsume(P.jumpAirEnergyCost))
         {
             OnJumpDenied?.Invoke(false);
             return;
@@ -695,10 +514,10 @@ public class HoverController_Propulsion : MonoBehaviour
         airJumpAvailable = false;
 
         // VelocityChange: adds m/s directly, ignoring mass.
-        rb.AddForce(Vector3.up * airJumpImpulse, ForceMode.VelocityChange);
+        rb.AddForce(Vector3.up * P.airJumpImpulse, ForceMode.VelocityChange);
 
         if (ShouldDrawDebug)
-            Debug.DrawRay(transform.position, Vector3.up * airJumpImpulse * 0.5f, Color.magenta, 0.5f);
+            Debug.DrawRay(transform.position, Vector3.up * P.airJumpImpulse * 0.5f, Color.magenta, 0.5f);
     }
 
     // -------------------------------------------------------------------------
@@ -735,9 +554,9 @@ public class HoverController_Propulsion : MonoBehaviour
         // Blend forward cap and accel toward strafe values in strafe mode.
         // Strafe top speed is boost-scaled the same way ApplyStrafe scales lateral
         // top speed, so boost still affects strafe mode (relative to the strafe ceiling).
-        float strafeEffectiveTopSpeed = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
+        float strafeEffectiveTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
         float blendedTopSpeed  = Mathf.Lerp(effectiveTopSpeed,     strafeEffectiveTopSpeed, _strafeModeBlend);
-        float blendedFwdAccel  = Mathf.Lerp(effectiveForwardAccel, strafeAccel,             _strafeModeBlend);
+        float blendedFwdAccel  = Mathf.Lerp(effectiveForwardAccel, P.strafeAccel,           _strafeModeBlend);
 
         float rawAccel = 0f;
         if (grounded)
@@ -753,8 +572,8 @@ public class HoverController_Propulsion : MonoBehaviour
                 // Suppress reverse drive if already at or below reverse top speed.
                 // reverseTopSpeed is independent of strafe mode by design (reverse
                 // and strafe share the same speed budget), so no blending here.
-                if (currentFwd > -reverseTopSpeed)
-                    rawAccel = throttle * maxReverseAccel;
+                if (currentFwd > -P.reverseTopSpeed)
+                    rawAccel = throttle * P.maxReverseAccel;
             }
         }
         else
@@ -779,16 +598,16 @@ public class HoverController_Propulsion : MonoBehaviour
     private void ApplyTurning(bool grounded)
     {
         float turn      = Mathf.Clamp(input.TurnInput, -1f, 1f);
-        float turnScale = grounded ? 1f : airTurnMultiplier;
+        float turnScale = grounded ? 1f : P.airTurnMultiplier;
 
         // Effective yaw multiplier inlined: lerp between 1 and driftYawMultiplier.
-        float effectiveYawMult = Mathf.Lerp(1f, driftYawMultiplier, driftLerp);
+        float effectiveYawMult = Mathf.Lerp(1f, P.driftYawMultiplier, driftLerp);
 
         float inertiaY      = Mathf.Max(0.001f, rb.inertiaTensor.y);
-        float desiredYawAcc = turn * yawAccel * turnScale * effectiveYawMult;
+        float desiredYawAcc = turn * P.yawAccel * turnScale * effectiveYawMult;
 
         float localYawRate  = transform.InverseTransformDirection(rb.angularVelocity).y;
-        float dampingTorque = yawDamping > 0f ? -localYawRate * yawDamping : 0f;
+        float dampingTorque = P.yawDamping > 0f ? -localYawRate * P.yawDamping : 0f;
 
         rb.AddRelativeTorque(Vector3.up * ((desiredYawAcc + dampingTorque) * inertiaY), ForceMode.Force);
     }
@@ -813,7 +632,7 @@ public class HoverController_Propulsion : MonoBehaviour
             return;
 
         // Lateral drag: always active grounded, independent of throttle.
-        float effectiveLateralDamp = Mathf.Lerp(lateralDamp, driftLateralDamp, driftLerp);
+        float effectiveLateralDamp = Mathf.Lerp(P.lateralDamp, P.driftLateralDamp, driftLerp);
         if (effectiveLateralDamp > 0f)
             rb.AddForce(transform.right * (-_cachedLocalVel.x * effectiveLateralDamp), ForceMode.Acceleration);
 
@@ -832,7 +651,7 @@ public class HoverController_Propulsion : MonoBehaviour
             : 1f - Mathf.Clamp01(throttleMag / 0.15f);
         if (dragWeight > 0f)
         {
-            float effectiveForwardDamp = Mathf.Lerp(forwardDamp, driftForwardDamp, driftLerp);
+            float effectiveForwardDamp = Mathf.Lerp(P.forwardDamp, P.driftForwardDamp, driftLerp);
             if (effectiveForwardDamp > 0f)
                 rb.AddForce(transform.forward * (-_cachedLocalVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
         }
@@ -869,14 +688,14 @@ public class HoverController_Propulsion : MonoBehaviour
         if (forwardSpeed > effectiveTopSpeed)
         {
             float excess = forwardSpeed - effectiveTopSpeed;
-            rb.AddForce(-transform.forward * excess * forwardDamp, ForceMode.Acceleration);
+            rb.AddForce(-transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
         }
-        else if (forwardSpeed < -reverseTopSpeed)
+        else if (forwardSpeed < -P.reverseTopSpeed)
         {
             // Mirror bleed for reverse. Catches dodge burst overshoot and any other
             // impulse that pushes past reverseTopSpeed backward.
-            float excess = -reverseTopSpeed - forwardSpeed;
-            rb.AddForce(transform.forward * excess * forwardDamp, ForceMode.Acceleration);
+            float excess = -P.reverseTopSpeed - forwardSpeed;
+            rb.AddForce(transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
         }
     }
 
@@ -900,15 +719,15 @@ public class HoverController_Propulsion : MonoBehaviour
         float turnSign = Mathf.Sign(turn);
         float turnMag  = Mathf.Abs(turn);
 
-        float passiveAngle = -turnSign * passiveBankAngle * turnMag;
-        float driftAngle   = -turnSign * maxBankAngle * driftLerp;
+        float passiveAngle = -turnSign * P.passiveBankAngle * turnMag;
+        float driftAngle   = -turnSign * P.maxBankAngle * driftLerp;
         float targetAngle  = passiveAngle + driftAngle;
 
         Quaternion targetRot = Quaternion.Euler(0f, 0f, targetAngle);
         meshRoot.localRotation = Quaternion.Lerp(
             meshRoot.localRotation,
             targetRot,
-            bankLerpSpeed * Time.deltaTime
+            P.bankLerpSpeed * Time.deltaTime
         );
     }
 
@@ -923,14 +742,14 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyStrafeModeBlend()
     {
-        if (!enableStrafe)
+        if (!P.enableStrafe)
         {
             _strafeModeBlend = 0f;
             return;
         }
 
         float target = input.StrafeHeld ? 1f : 0f;
-        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, strafeModeBlendSeconds);
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.strafeModeBlendSeconds);
         _strafeModeBlend = Mathf.MoveTowards(_strafeModeBlend, target, step);
     }
 
@@ -962,8 +781,8 @@ public class HoverController_Propulsion : MonoBehaviour
         // Lateral accel and top speed scale with boost the same way forward does.
         // Derives the boost ratio from the forward accel multiplier so strafe
         // acceleration scales identically with boost without a separate parameter.
-        float lateralAccel             = strafeAccel * (effectiveForwardAccel / maxForwardAccel);
-        float effectiveLateralTopSpeed = strafeTopSpeed * (effectiveTopSpeed / topSpeed);
+        float lateralAccel             = P.strafeAccel * (effectiveForwardAccel / P.maxForwardAccel);
+        float effectiveLateralTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
 
         rb.AddForce(transform.right * (stickX * lateralAccel * _strafeModeBlend), ForceMode.Acceleration);
 
@@ -974,7 +793,7 @@ public class HoverController_Propulsion : MonoBehaviour
         if (Mathf.Abs(localLateral) > effectiveLateralTopSpeed)
         {
             float excess = Mathf.Abs(localLateral) - effectiveLateralTopSpeed;
-            rb.AddForce(-transform.right * (Mathf.Sign(localLateral) * excess * strafeLateralCapStrength),
+            rb.AddForce(-transform.right * (Mathf.Sign(localLateral) * excess * P.strafeLateralCapStrength),
                         ForceMode.Acceleration);
         }
     }
@@ -1015,18 +834,18 @@ public class HoverController_Propulsion : MonoBehaviour
 
         // Accumulate stick input as delta. FPS-style.
         // Stick up (+1) = nose up = negative pitch convention.
-        _strafePitchAccum -= aimY * strafePitchSensitivity * Time.fixedDeltaTime;
-        _strafePitchAccum  = Mathf.Clamp(_strafePitchAccum, -strafePitchLimit, strafePitchLimit);
+        _strafePitchAccum -= aimY * P.strafePitchSensitivity * Time.fixedDeltaTime;
+        _strafePitchAccum  = Mathf.Clamp(_strafePitchAccum, -P.strafePitchLimit, P.strafePitchLimit);
 
         float currentPitch = HoverMath.NormalizeAngle(transform.localEulerAngles.x);
         float pitchError   = _strafePitchAccum - currentPitch;
 
         // Proportional drive toward accumulated target pitch.
-        float driveTorque = pitchError * strafePitchTorque * _strafeModeBlend;
+        float driveTorque = pitchError * P.strafePitchTorque * _strafeModeBlend;
 
         // Damping: counter-torque opposing current pitch angular velocity.
         float localPitchRate = transform.InverseTransformDirection(rb.angularVelocity).x;
-        float dampTorque     = -localPitchRate * strafePitchDamping * _strafeModeBlend;
+        float dampTorque     = -localPitchRate * P.strafePitchDamping * _strafeModeBlend;
 
         rb.AddRelativeTorque(Vector3.right * (driveTorque + dampTorque), ForceMode.Acceleration);
     }

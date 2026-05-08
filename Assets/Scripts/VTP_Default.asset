@@ -1,0 +1,85 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1aa106e104496444b9b68db6d6e23917, type: 3}
+  m_Name: VTP_Default
+  m_EditorClassIdentifier: Assembly-CSharp::VehicleTuningProfile
+  foundation:
+    hoverHeight: 5
+    sensorRange: 7
+    liftStrength: 10000
+    liftDamping: 1500
+    enableSlopeLiftCompensation: 1
+    slopeLiftMultiplier: 1.15
+    levelingTorqueStrength: 12
+    pitchRollDamping: 8
+    unstickRecoveryDelay: 0.2
+    unstickLiftForce: 60
+    unstickLiftDuration: 0.15
+    flipRecoveryAngleThreshold: 80
+    flipRecoveryDelay: 1
+    flipRecoveryTorque: 60
+    flipRecoverySpeedThreshold: 0.5
+    extraGravityMultiplier: 3
+    extraAirGravity: 3
+  propulsion:
+    maxForwardAccel: 50
+    topSpeed: 50
+    maxReverseAccel: 25
+    reverseTopSpeed: 30
+    yawAccel: 7
+    yawDamping: 6
+    airTurnMultiplier: 0.5
+    enableBoost: 1
+    boostAccelMultiplier: 1.5
+    boostSpeedMultiplier: 1.5
+    boostBlendSeconds: 0.35
+    boostEnergyPerSecond: 20
+    dodgeForce: 700
+    dodgeDuration: 0.1
+    dodgeEnergyCost: 15
+    dodgeCooldown: 0.2
+    enableJump: 1
+    jumpImpulseMin: 15
+    jumpImpulseMax: 40
+    jumpMaxChargeTime: 2
+    jumpGroundedLockout: 0.2
+    jumpGroundedEnergyCost: 25
+    jumpAirEnergyCost: 25
+    airJumpImpulse: 25
+    lateralDamp: 1
+    forwardDamp: 1
+    driftLateralDamp: 0
+    driftForwardDamp: 1
+    driftYawMultiplier: 1.5
+    driftTurnThreshold: 0.5
+    minDriftSpeed: 25
+    driftBlendSeconds: 0.15
+    maxBankAngle: 12
+    passiveBankAngle: 3
+    bankLerpSpeed: 8
+    enableStrafe: 1
+    strafeTopSpeed: 30
+    strafeAccel: 25
+    strafePitchLimit: 20
+    strafePitchTorque: 3
+    strafePitchDamping: 6
+    strafePitchSensitivity: 90
+    strafeModeBlendSeconds: 0.2
+    strafeLateralCapStrength: 40
+  energy:
+    maxEnergy: 100
+    startingEnergy: 100
+    regenRate: 20
+    regenDelay: 1
+  health:
+    maxHealth: 100
+    startingHealth: 100

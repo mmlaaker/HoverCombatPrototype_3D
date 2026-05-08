@@ -11,6 +11,9 @@ using UnityEngine;
 ///   • Implements IDamageable — place this on the vehicle root so
 ///     ParticleWeaponCollision.GetComponentInParent finds it.
 ///
+/// Tuning lives on a VehicleTuningProfile asset (profile.health). Runtime state
+/// (Health value, invulnerability timer) stays on the component.
+///
 /// Design contracts:
 ///   • This script owns no physics and no respawn logic.
 ///   • Invulnerability window (e.g. post-respawn) can be set via SetInvulnerable().
@@ -21,17 +24,14 @@ using UnityEngine;
 public class VehicleHealth : MonoBehaviour, IDamageable
 {
     // -------------------------------------------------------------------------
-    // ❤️ Pool
+    // 📦 Tuning Profile
     // -------------------------------------------------------------------------
+    [Header("📦 Tuning")]
+    [Tooltip("Vehicle tuning profile (shared SO). All numeric tuning lives here. Required.")]
+    [SerializeField] private VehicleTuningProfile profile;
 
-    [Header("❤️ Health")]
-    [Tooltip("Maximum HP.")]
-    [Min(1f)]
-    [SerializeField] private float maxHealth = 100f;
-
-    [Tooltip("Starting HP on spawn. Set to maxHealth to start full.")]
-    [Min(0f)]
-    [SerializeField] private float startingHealth = 100f;
+    /// <summary>Shorthand for profile.health. Used at every read site below.</summary>
+    private HealthTuning H => profile.health;
 
     // -------------------------------------------------------------------------
     // 📢 Events
@@ -57,7 +57,15 @@ public class VehicleHealth : MonoBehaviour, IDamageable
     public float Health { get; private set; }
 
     /// <summary>Current HP as a 0..1 fraction. Safe for UI fill bar.</summary>
-    public float HealthNormalized => maxHealth > 0f ? Health / maxHealth : 0f;
+    public float HealthNormalized
+    {
+        get
+        {
+            if (profile == null) return 0f;
+            float max = H.maxHealth;
+            return max > 0f ? Health / max : 0f;
+        }
+    }
 
     /// <summary>True if HP is above zero.</summary>
     public bool IsAlive { get; private set; }
@@ -79,7 +87,18 @@ public class VehicleHealth : MonoBehaviour, IDamageable
 
     private void Awake()
     {
-        Health  = Mathf.Clamp(startingHealth, 0f, maxHealth);
+        if (profile == null)
+        {
+            Debug.LogError(
+                $"[VehicleHealth] '{name}': VehicleTuningProfile is not assigned. " +
+                $"Assign one in the inspector. Health disabled.",
+                this
+            );
+            enabled = false;
+            return;
+        }
+
+        Health  = Mathf.Clamp(H.startingHealth, 0f, H.maxHealth);
         IsAlive = Health > 0f;
     }
 
@@ -107,7 +126,7 @@ public class VehicleHealth : MonoBehaviour, IDamageable
             return;
 
         Health = Mathf.Max(0f, Health - amount);
-        OnDamaged?.Invoke(Health, maxHealth);
+        OnDamaged?.Invoke(Health, H.maxHealth);
 
         if (Health <= 0f)
             HandleDeath();
@@ -133,7 +152,7 @@ public class VehicleHealth : MonoBehaviour, IDamageable
     /// </summary>
     public void Respawn()
     {
-        Health  = maxHealth;
+        Health  = H.maxHealth;
         IsAlive = true;
         gameObject.SetActive(true);
     }
@@ -159,6 +178,8 @@ public class VehicleHealth : MonoBehaviour, IDamageable
 
         if (debugSettings != null && !debugSettings.enableDebugGizmos) return;
 
+        if (profile == null) return;
+
         float normalized = HealthNormalized;
         Gizmos.color = Color.Lerp(Color.red, Color.green, normalized);
 
@@ -170,7 +191,7 @@ public class VehicleHealth : MonoBehaviour, IDamageable
         UnityEditor.Handles.color = Gizmos.color;
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 2.5f,
-            $"HP {Health:F0}/{maxHealth:F0}{(_isInvulnerable ? " [INVULN]" : "")}"
+            $"HP {Health:F0}/{H.maxHealth:F0}{(_isInvulnerable ? " [INVULN]" : "")}"
         );
     }
 #endif

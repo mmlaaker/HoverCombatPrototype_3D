@@ -2298,6 +2298,10 @@ PrefabInstance:
       value: 150
       objectReference: {fileID: 0}
     - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: profile
+      value: 
+      objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+    - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: meshRoot
       value: 
       objectReference: {fileID: 589118149}
@@ -2353,6 +2357,10 @@ PrefabInstance:
       propertyPath: 'weaponSlots.Array.data[4].particleEmitters.Array.data[0]'
       value: 
       objectReference: {fileID: 1709028747}
+    - target: {fileID: 3437989404244087800, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: profile
+      value: 
+      objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
@@ -2398,6 +2406,10 @@ PrefabInstance:
       value: -8.5
       objectReference: {fileID: 0}
     - target: {fileID: 6437614130089442384, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: profile
+      value: 
+      objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+    - target: {fileID: 6437614130089442384, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: groundLayers.m_Bits
       value: 1
       objectReference: {fileID: 0}
@@ -2429,6 +2441,10 @@ PrefabInstance:
       propertyPath: Lens.FieldOfView
       value: 55
       objectReference: {fileID: 0}
+    - target: {fileID: 7430656568362228766, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: profile
+      value: 
+      objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
     - target: {fileID: 7762352581548736760, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: aimMode
       value: 0
