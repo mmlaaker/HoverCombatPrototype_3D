@@ -712,6 +712,11 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 395349617}
   m_Mesh: {fileID: 4300060, guid: 27275aa30174308449b7adfdef5de29d, type: 3}
+--- !u!198 &403883801 stripped
+ParticleSystem:
+  m_CorrespondingSourceObject: {fileID: 3468116023211760221, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+  m_PrefabInstance: {fileID: 1266020441}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -2297,6 +2302,10 @@ PrefabInstance:
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
       objectReference: {fileID: 0}
+    - target: {fileID: 696110556930451447, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: EmissionModule.rateOverTime.scalar
+      value: 8
+      objectReference: {fileID: 0}
     - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: profile
       value: 
@@ -2305,6 +2314,10 @@ PrefabInstance:
       propertyPath: meshRoot
       value: 
       objectReference: {fileID: 589118149}
+    - target: {fileID: 948721441313247371, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: 5
@@ -2331,18 +2344,30 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: weaponSlots.Array.size
-      value: 5
+      value: 6
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: lockTargetLayers.m_Bits
       value: 128
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: weaponSlots.Array.data[5].vfxMount
+      value: 
+      objectReference: {fileID: 1827354461}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: weaponSlots.Array.data[4].definition
       value: 
       objectReference: {fileID: 11400000, guid: b1a69f4a82b9fa94180156428644e784, type: 2}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: weaponSlots.Array.data[5].definition
+      value: 
+      objectReference: {fileID: 11400000, guid: bafd3c3d389d65945ad1be2e80005961, type: 2}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: weaponSlots.Array.data[4].muzzlePoints.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: weaponSlots.Array.data[5].muzzlePoints.Array.size
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
@@ -2350,13 +2375,29 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 530386457}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: 'weaponSlots.Array.data[5].muzzlePoints.Array.data[0]'
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: weaponSlots.Array.data[4].particleEmitters.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: weaponSlots.Array.data[5].particleEmitters.Array.size
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: 'weaponSlots.Array.data[4].particleEmitters.Array.data[0]'
       value: 
       objectReference: {fileID: 1709028747}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: 'weaponSlots.Array.data[5].particleEmitters.Array.data[0]'
+      value: 
+      objectReference: {fileID: 403883801}
+    - target: {fileID: 2715742177400560942, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 3437989404244087800, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: profile
       value: 
@@ -2484,6 +2525,10 @@ PrefabInstance:
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: EmissionModule.rateOverTime.scalar
+      value: 8
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -3651,6 +3696,11 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1756501246}
   m_Mesh: {fileID: 4300014, guid: 27275aa30174308449b7adfdef5de29d, type: 3}
+--- !u!4 &1827354461 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5240693461481084245, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+  m_PrefabInstance: {fileID: 1266020441}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1854424011
 GameObject:
   m_ObjectHideFlags: 0
