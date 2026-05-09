@@ -88,6 +88,9 @@ public class VehicleHUD : MonoBehaviour
     [Tooltip("Color of the energy bar while regenerating.")]
     [SerializeField] private Color energyColorRegen = new Color(0.4f, 1f, 0.6f);
 
+    [Tooltip("Color of the energy bar while shield is active. Top priority over EMP and regen.")]
+    [SerializeField] private Color energyColorShieldActive = new Color(1f, 0.85f, 0.2f);
+
     // =========================================================================
     // 🔫 Weapon
     // =========================================================================
@@ -159,10 +162,12 @@ public class VehicleHUD : MonoBehaviour
     private HoverController_Energy     _energy;
     private HoverController_Weapons    _weapons;
     private HoverController_Propulsion _propulsion;
+    private HoverController_Shield     _shield;
 
     // Only EMP freeze is tracked locally — it has no per-frame readable equivalent
     // on the energy component that covers the full freeze window reliably.
     private bool _isEmpFrozen;
+    private bool _isShieldActive;
     private bool _wasRegenerating;
 
     // Smoothed reticle projection distance. Tracks the aim raycast hit distance,
@@ -187,11 +192,13 @@ public class VehicleHUD : MonoBehaviour
         _energy     = vehicleRoot.GetComponentInChildren<HoverController_Energy>();
         _weapons    = vehicleRoot.GetComponentInChildren<HoverController_Weapons>();
         _propulsion = vehicleRoot.GetComponentInChildren<HoverController_Propulsion>();
+        _shield     = vehicleRoot.GetComponentInChildren<HoverController_Shield>();
 
         if (_health     == null) Debug.LogWarning("[VehicleHUD] VehicleHealth not found on vehicleRoot.", this);
         if (_energy     == null) Debug.LogWarning("[VehicleHUD] HoverController_Energy not found on vehicleRoot.", this);
         if (_weapons    == null) Debug.LogWarning("[VehicleHUD] HoverController_Weapons not found on vehicleRoot.", this);
         if (_propulsion == null) Debug.LogWarning("[VehicleHUD] HoverController_Propulsion not found on vehicleRoot.", this);
+        if (_shield     == null) Debug.LogWarning("[VehicleHUD] HoverController_Shield not found on vehicleRoot.", this);
 
         // Strip the owning vehicle's layer so the aim raycast can't self-hit.
         // VehicleLayerAssigner runs at execution order -20, so the layer is settled by now.
@@ -223,6 +230,12 @@ public class VehicleHUD : MonoBehaviour
             _weapons.OnWeaponFired             += HandleWeaponFired;
             _weapons.OnMissileLockStateChanged += HandleLockStateChanged;
         }
+
+        if (_shield != null)
+        {
+            _shield.OnShieldActivated   += HandleShieldActivated;
+            _shield.OnShieldDeactivated += HandleShieldDeactivated;
+        }
     }
 
     private void Start()
@@ -253,6 +266,12 @@ public class VehicleHUD : MonoBehaviour
             _weapons.OnWeaponFired             -= HandleWeaponFired;
             _weapons.OnMissileLockStateChanged -= HandleLockStateChanged;
         }
+
+        if (_shield != null)
+        {
+            _shield.OnShieldActivated   -= HandleShieldActivated;
+            _shield.OnShieldDeactivated -= HandleShieldDeactivated;
+        }
     }
 
     /// <summary>
@@ -269,7 +288,7 @@ public class VehicleHUD : MonoBehaviour
 
         // Run SyncEnergy while the pool is changing or on the frame regen stops
         // (so the color snaps back to normal on the same frame regen completes).
-        if (_energy.EnergyNormalized < 1f || isRegen || _wasRegenerating || _isEmpFrozen)
+        if (_energy.EnergyNormalized < 1f || isRegen || _wasRegenerating || _isEmpFrozen || _isShieldActive)
             SyncEnergy();
 
         _wasRegenerating = isRegen;
@@ -329,6 +348,22 @@ public class VehicleHUD : MonoBehaviour
     private void HandleEnergyDepleted()
     {
         // Force an immediate sync so the bar snaps to empty without waiting for Update.
+        SyncEnergy();
+    }
+
+    // =========================================================================
+    // Event handlers — Shield
+    // =========================================================================
+
+    private void HandleShieldActivated()
+    {
+        _isShieldActive = true;
+        SyncEnergy();
+    }
+
+    private void HandleShieldDeactivated()
+    {
+        _isShieldActive = false;
         SyncEnergy();
     }
 
@@ -402,15 +437,16 @@ public class VehicleHUD : MonoBehaviour
         SetFill(energyFill, normalized);
         SetText(energyText, Mathf.CeilToInt(_energy.Energy).ToString());
 
-        // Color priority: EMP frozen > regenerating > normal.
-        // All state read directly from the energy component — no local flags.
+        // Color priority: shield active > EMP frozen > regenerating > normal.
         if (energyFill != null)
         {
-            energyFill.color = _isEmpFrozen
-                ? energyColorEmpFrozen
-                : _energy.IsRegenerating
-                    ? energyColorRegen
-                    : energyColorNormal;
+            energyFill.color = _isShieldActive
+                ? energyColorShieldActive
+                : _isEmpFrozen
+                    ? energyColorEmpFrozen
+                    : _energy.IsRegenerating
+                        ? energyColorRegen
+                        : energyColorNormal;
         }
     }
 

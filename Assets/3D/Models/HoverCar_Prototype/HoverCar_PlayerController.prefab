@@ -24551,7 +24551,7 @@ Transform:
   m_GameObject: {fileID: 3460858437510611220}
   serializedVersion: 2
   m_LocalRotation: {x: 0.16883378, y: -0.000000025778101, z: 0.000000004415602, w: 0.9856446}
-  m_LocalPosition: {x: 5, y: 9.5, z: -13.5}
+  m_LocalPosition: {x: 0, y: 4.5, z: -8.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -29582,9 +29582,10 @@ GameObject:
   - component: {fileID: 4826641157319664335}
   - component: {fileID: 1254805148386242258}
   - component: {fileID: 4964355425596500860}
-  - component: {fileID: 7460556337297359226}
   - component: {fileID: 3396267810379779740}
+  - component: {fileID: 3021440741374397934}
   - component: {fileID: 6056019813642530629}
+  - component: {fileID: 7460556337297359226}
   - component: {fileID: 2559843217812755066}
   - component: {fileID: 3375178076399956502}
   - component: {fileID: 6195698811811710777}
@@ -29683,20 +29684,6 @@ MonoBehaviour:
   meshRoot: {fileID: 0}
   drawDebug: 0
   debugSettings: {fileID: 0}
---- !u!114 &7460556337297359226
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4246840766707924649}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ce374367090c2d844a700fb2a697e2aa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::VehicleHealth
-  profile: {fileID: 0}
-  debugSettings: {fileID: 0}
 --- !u!114 &3396267810379779740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29709,6 +29696,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5d612f9a5cf343c4baaf7ce8fee02a9e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Energy
+  profile: {fileID: 0}
+  debugSettings: {fileID: 0}
+--- !u!114 &3021440741374397934
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4246840766707924649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5fb66a5b8f226d9468f9b6f61e242348, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverController_Shield
   profile: {fileID: 0}
   debugSettings: {fileID: 0}
 --- !u!114 &6056019813642530629
@@ -29772,6 +29773,20 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   drawDebug: 1
+  debugSettings: {fileID: 0}
+--- !u!114 &7460556337297359226
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4246840766707924649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce374367090c2d844a700fb2a697e2aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::VehicleHealth
+  profile: {fileID: 0}
   debugSettings: {fileID: 0}
 --- !u!114 &2559843217812755066
 MonoBehaviour:

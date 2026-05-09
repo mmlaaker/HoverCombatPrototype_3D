@@ -18,4 +18,5 @@ public class VehicleTuningProfile : ScriptableObject
     public PropulsionTuning propulsion = new PropulsionTuning();
     public EnergyTuning     energy     = new EnergyTuning();
     public HealthTuning     health     = new HealthTuning();
+    public ShieldTuning     shield     = new ShieldTuning();
 }

@@ -88,6 +88,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "Shield",
+                    "type": "Button",
+                    "id": "b47838a1-6ec6-4c75-9a0c-caf88cc810b6",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Strafe",
                     "type": "Button",
                     "id": "11a14ef5-1513-4d87-b205-e437aafe51f0",
@@ -216,6 +225,17 @@
                     "processors": "",
                     "groups": "",
                     "action": "Strafe",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "3180ce56-97d1-4b4d-a8c7-0c771325b84e",
+                    "path": "<Gamepad>/dpad/down",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Shield",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

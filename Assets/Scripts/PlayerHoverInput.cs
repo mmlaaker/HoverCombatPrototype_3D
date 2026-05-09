@@ -84,6 +84,9 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
     /// <summary>True on first frame D-Pad Left / Q pressed (rising edge).</summary>
     public bool CycleWeaponPrev { get; private set; }
 
+    /// <summary>True on first frame shield is pressed (rising edge).</summary>
+    public bool ShieldPressed { get; private set; }
+
     // ── Serialized ───────────────────────────────────────────────────────
 
     [Header("Input Settings")]
@@ -102,10 +105,12 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
     private InputAction _fireAction;
     private InputAction _cycleWeaponNextAction;
     private InputAction _cycleWeaponPrevAction;
+    private InputAction _shieldAction;
 
     private bool _fireHeldLastFrame;
     private bool _cycleNextHeldLastFrame;
     private bool _cyclePrevHeldLastFrame;
+    private bool _shieldHeldLastFrame;
 
     // ── Unity Lifecycle ──────────────────────────────────────────────────
 
@@ -130,16 +135,18 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
         _fireAction            = playerInput.actions["Hover/Fire"];
         _cycleWeaponNextAction = playerInput.actions["Hover/CycleWeaponNext"];
         _cycleWeaponPrevAction = playerInput.actions["Hover/CycleWeaponPrev"];
+        _shieldAction          = playerInput.actions["Hover/Shield"];
 
         if (_throttleAction == null || _turnAction == null || _cameraLookYAction == null ||
             _strafeAction == null   || _boostAction == null || _driftAction == null ||
             _jumpAction == null     || _fireAction == null  ||
-            _cycleWeaponNextAction == null || _cycleWeaponPrevAction == null)
+            _cycleWeaponNextAction == null || _cycleWeaponPrevAction == null ||
+            _shieldAction == null)
         {
             Debug.LogError(
                 "[PlayerHoverInput] One or more actions missing from InputActionAsset. " +
                 "Expected Hover action map with: Throttle, Turn, CameraLookY, Strafe, " +
-                "Boost, Drift, Jump, Fire, CycleWeaponNext, CycleWeaponPrev.", this);
+                "Boost, Drift, Jump, Fire, CycleWeaponNext, CycleWeaponPrev, Shield.", this);
             enabled = false;
         }
     }
@@ -173,6 +180,10 @@ public class PlayerHoverInput : MonoBehaviour, IHoverInputProvider
         bool cyclePrevRaw       = _cycleWeaponPrevAction.ReadValue<float>() > 0.5f;
         CycleWeaponPrev         = cyclePrevRaw && !_cyclePrevHeldLastFrame;
         _cyclePrevHeldLastFrame = cyclePrevRaw;
+
+        bool shieldRaw         = _shieldAction.ReadValue<float>() > 0.5f;
+        ShieldPressed          = shieldRaw && !_shieldHeldLastFrame;
+        _shieldHeldLastFrame   = shieldRaw;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

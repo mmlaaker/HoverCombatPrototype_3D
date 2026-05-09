@@ -661,6 +661,10 @@ PrefabInstance:
       propertyPath: exhaustBoost.startLifetime
       value: 0.3
       objectReference: {fileID: 0}
+    - target: {fileID: 3021440741374397934, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: profile
+      value: 
+      objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
     - target: {fileID: 3396267810379779740, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: profile
       value: 

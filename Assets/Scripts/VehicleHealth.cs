@@ -80,6 +80,7 @@ public class VehicleHealth : MonoBehaviour, IDamageable
 
     private bool  _isInvulnerable;
     private float _invulnerableTimer;
+    private HoverController_Shield _shield;
 
     // -------------------------------------------------------------------------
     // Unity lifecycle
@@ -100,6 +101,8 @@ public class VehicleHealth : MonoBehaviour, IDamageable
 
         Health  = Mathf.Clamp(H.startingHealth, 0f, H.maxHealth);
         IsAlive = Health > 0f;
+
+        _shield = GetComponent<HoverController_Shield>();
     }
 
     private void Update()
@@ -122,7 +125,7 @@ public class VehicleHealth : MonoBehaviour, IDamageable
     /// </summary>
     public void TakeDamage(float amount)
     {
-        if (!IsAlive || _isInvulnerable || amount <= 0f)
+        if (!IsAlive || _isInvulnerable || (_shield != null && _shield.IsActive) || amount <= 0f)
             return;
 
         Health = Mathf.Max(0f, Health - amount);
@@ -189,9 +192,13 @@ public class VehicleHealth : MonoBehaviour, IDamageable
         Gizmos.DrawWireSphere(barEnd, 0.07f);
 
         UnityEditor.Handles.color = Gizmos.color;
+        string statusSuffix =
+              _shield != null && _shield.IsActive ? " [SHIELD]"
+            : _isInvulnerable                     ? " [INVULN]"
+            :                                       "";
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * 2.5f,
-            $"HP {Health:F0}/{H.maxHealth:F0}{(_isInvulnerable ? " [INVULN]" : "")}"
+            $"HP {Health:F0}/{H.maxHealth:F0}{statusSuffix}"
         );
     }
 #endif

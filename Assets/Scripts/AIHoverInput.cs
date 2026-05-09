@@ -52,6 +52,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     public bool    FirePressed      { get; private set; } // always false — AI uses FireHeld only
     public bool    CycleWeaponNext  { get; private set; } // always false — deferred
     public bool    CycleWeaponPrev  { get; private set; } // always false — deferred
+    public bool    ShieldPressed    { get; private set; } // always false — deferred
 
     // -------------------------------------------------------------------------
     // 🎯 Target Selection
@@ -506,6 +507,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         FirePressed     = false;
         CycleWeaponNext = false;
         CycleWeaponPrev = false;
+        ShieldPressed   = false;
     }
 
     // -------------------------------------------------------------------------

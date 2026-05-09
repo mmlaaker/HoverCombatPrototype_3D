@@ -171,6 +171,6 @@ Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
 ---
 
 ## 15. Credits
-**Design & Programming:** Meade Laaker (with ChatGPT collaboration)  
-**Engine:** Unity 6.2 URP  
-**Version Control:** GitHub + Fork + Rider integration  
+**Design & Programming:** Meade Laaker (with Claude collaboration)  
+**Engine:** Unity 6.3 URP  
+**Version Control:** GitHub + Fork + VSCode integration  

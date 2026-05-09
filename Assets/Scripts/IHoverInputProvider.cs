@@ -108,6 +108,13 @@ public interface IHoverInputProvider
     bool FirePressed { get; }
 
     /// <summary>
+    /// True on the first frame the shield button is pressed (rising edge only).
+    /// Used by HoverController_Shield to fire a fixed-duration invulnerability burst.
+    /// Held state is irrelevant — the ability cannot be cancelled by the player.
+    /// </summary>
+    bool ShieldPressed { get; }
+
+    /// <summary>
     /// True on the frame the cycle-next button is pressed (rising edge only).
     /// Advances the active weapon slot forward by one (wraps at end of list).
     /// D-Pad Right / E.

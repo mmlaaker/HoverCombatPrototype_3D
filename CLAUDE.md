@@ -35,7 +35,8 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 | `HoverController_Energy.cs` | v1.0 | `TryConsume` fail also resets regen lockout (intentional anti-spam). EMP freeze additive. Public: `Energy`, `EnergyNormalized`, `IsEmpFrozen`, `IsRegenerating` |
 | `HoverController_Weapons.cs` | v1.0 | Weapons **never spend energy**. EMP only gates fire via `IsEmpFrozen`. `WeaponDefinition` SO (shared); `WeaponSlot` (per-vehicle). Four `WeaponType`s: SingleShot, Automatic, Missile, Mine. Two `ProjectileMode`s: Instantiated, ParticleSystem. Public: `ActiveSlot`, `ActiveSlotIndex`, `CurrentLockState`, `LockProgress`, `LockTarget`, `RefillAmmo()`, `SetActiveSlot()` |
 | `HoverController_Aim.cs` | v1.0 | **LateUpdate only; no `DefaultExecutionOrder` needed.** Reads actual vehicle pitch from Rigidbody (no independent accumulation). Only rotates active slot's `vfxMount`; Instantiated-mode weapons unaffected. Called by Weapons via `NotifySlotChanged(WeaponSlot)` |
-| `VehicleHealth.cs` | Active | HP pool, `OnDamaged`/`OnDeath` events, invulnerability, `Respawn()` |
+| `HoverController_Shield.cs` | v1.0 | Fixed-duration invulnerability burst. Flat energy cost on activation; cannot be cancelled by player. EMP cancels active shield and blocks new activation. Public: `IsActive`, `TimeRemaining`, `OnShieldActivated`, `OnShieldDeactivated`, `TryActivate()` |
+| `VehicleHealth.cs` | Active | HP pool, `OnDamaged`/`OnDeath` events, invulnerability (post-respawn grace and shield-driven), `Respawn()` |
 | `VehicleHUD.cs` | v1.2 | Event-driven; `SyncAll()` in Start; trailing `_wasRegenerating` flag |
 | `HoverCameraController.cs` | Active | Cinemachine 3.1.6; strafe cam uses `LockToTargetNoRoll` |
 | `ParticleWeaponCollision.cs` | Active | Particle-based weapon hits; implements `IDamageable` |
@@ -44,9 +45,11 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 
 ## Inter-Module Wiring
 
-- **Input:** All four HoverController scripts acquire input via `GetComponent<IHoverInputProvider>()` in Awake. No inspector wiring. Swap `PlayerHoverInput` for an AI component to change who drives the vehicle. Key input props: `ThrottleInput`, `StrafeX`, `TurnInput`, `Boost`, `Drift`, `Jump`, `StrafeHeld`, `CameraLookY`, `FirePressed`, `FireHeld`, `CycleWeaponNext/Prev`.
+- **Input:** All HoverController scripts acquire input via `GetComponent<IHoverInputProvider>()` in Awake. No inspector wiring. Swap `PlayerHoverInput` for an AI component to change who drives the vehicle. Key input props: `ThrottleInput`, `StrafeX`, `TurnInput`, `Boost`, `Drift`, `Jump`, `StrafeHeld`, `CameraLookY`, `FirePressed`, `FireHeld`, `CycleWeaponNext/Prev`, `ShieldPressed`.
 - **Foundation → Propulsion:** Propulsion reads `Foundation.IsHoverGrounded` each FixedUpdate to gate throttle, drag, and drift.
-- **Energy → Propulsion/Weapons:** Propulsion calls `TryConsume` per frame for boost (continuous) and once for jump/dodge (instantaneous). Weapons only reads `IsEmpFrozen` -- no energy is spent on firing.
+- **Energy → Propulsion/Weapons/Shield:** Propulsion calls `TryConsume` per frame for boost (continuous) and once for jump/dodge (instantaneous). Shield calls `TryConsume` once on activation. Weapons only reads `IsEmpFrozen` -- no energy is spent on firing.
+- **Shield → Health:** `VehicleHealth.TakeDamage` short-circuits when `_shield.IsActive`. Shield owns its own invulnerability state; the existing `_isInvulnerable` flag remains for post-respawn grace.
+- **Energy → Shield:** Shield subscribes to `Energy.OnEmpFreezeApplied` and deactivates itself on EMP. New activation is also blocked while `IsEmpFrozen`.
 - **Weapons → Aim:** Weapons calls `aim.NotifySlotChanged(slot)` on slot change. Aim caches the new `vfxMount`.
 - **Propulsion → Aim:** Aim reads `transform.eulerAngles` directly (actual vehicle orientation); no reference to Propulsion needed.
 - **`HoverDebugSettings` ScriptableObject:** Optional global gizmo toggle. All four scripts check it first, then fall back to their local `drawDebug` bool.
