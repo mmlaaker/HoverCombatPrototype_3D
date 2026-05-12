@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(sed 's/.*m_Name: //')",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(xargs grep *)"
     ]
   }
 }

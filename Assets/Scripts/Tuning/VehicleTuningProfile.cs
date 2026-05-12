@@ -19,4 +19,5 @@ public class VehicleTuningProfile : ScriptableObject
     public EnergyTuning     energy     = new EnergyTuning();
     public HealthTuning     health     = new HealthTuning();
     public ShieldTuning     shield     = new ShieldTuning();
+    public EmpTuning        emp        = new EmpTuning();
 }

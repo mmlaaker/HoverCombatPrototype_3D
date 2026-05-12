@@ -35,7 +35,7 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 | `HoverController_Energy.cs` | v1.0 | `TryConsume` fail also resets regen lockout (intentional anti-spam). EMP freeze additive. Public: `Energy`, `EnergyNormalized`, `IsEmpFrozen`, `IsRegenerating` |
 | `HoverController_Weapons.cs` | v1.0 | Weapons **never spend energy**. EMP only gates fire via `IsEmpFrozen`. `WeaponDefinition` SO (shared); `WeaponSlot` (per-vehicle). Four `WeaponType`s: SingleShot, Automatic, Missile, Mine. Two `ProjectileMode`s: Instantiated, ParticleSystem. Public: `ActiveSlot`, `ActiveSlotIndex`, `CurrentLockState`, `LockProgress`, `LockTarget`, `RefillAmmo()`, `SetActiveSlot()` |
 | `HoverController_Aim.cs` | v1.0 | **LateUpdate only; no `DefaultExecutionOrder` needed.** Reads actual vehicle pitch from Rigidbody (no independent accumulation). Only rotates active slot's `vfxMount`; Instantiated-mode weapons unaffected. Called by Weapons via `NotifySlotChanged(WeaponSlot)` |
-| `HoverController_Shield.cs` | v1.0 | Fixed-duration invulnerability burst. Flat energy cost on activation; cannot be cancelled by player. EMP cancels active shield and blocks new activation. Public: `IsActive`, `TimeRemaining`, `OnShieldActivated`, `OnShieldDeactivated`, `TryActivate()` |
+| `HoverController_Shield.cs` | v1.0 | Fixed-duration invulnerability burst. Flat energy cost on activation; cannot be cancelled by player. Active shield absorbs an incoming EMP (shield deactivates, no freeze). New activation still blocked while already EMP-frozen. Public: `IsActive`, `TimeRemaining`, `OnShieldActivated`, `OnShieldDeactivated`, `TryActivate()`, `TryAbsorbEmp()` |
 | `VehicleHealth.cs` | Active | HP pool, `OnDamaged`/`OnDeath` events, invulnerability (post-respawn grace and shield-driven), `Respawn()` |
 | `VehicleHUD.cs` | v1.2 | Event-driven; `SyncAll()` in Start; trailing `_wasRegenerating` flag |
 | `HoverCameraController.cs` | Active | Cinemachine 3.1.6; strafe cam uses `LockToTargetNoRoll` |
@@ -49,7 +49,7 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 - **Foundation → Propulsion:** Propulsion reads `Foundation.IsHoverGrounded` each FixedUpdate to gate throttle, drag, and drift.
 - **Energy → Propulsion/Weapons/Shield:** Propulsion calls `TryConsume` per frame for boost (continuous) and once for jump/dodge (instantaneous). Shield calls `TryConsume` once on activation. Weapons only reads `IsEmpFrozen` -- no energy is spent on firing.
 - **Shield → Health:** `VehicleHealth.TakeDamage` short-circuits when `_shield.IsActive`. Shield owns its own invulnerability state; the existing `_isInvulnerable` flag remains for post-respawn grace.
-- **Energy → Shield:** Shield subscribes to `Energy.OnEmpFreezeApplied` and deactivates itself on EMP. New activation is also blocked while `IsEmpFrozen`.
+- **Energy → Shield:** `EmpProjectile.Consume` calls `Shield.TryAbsorbEmp` on hit; if true the freeze is skipped. Shield also subscribes to `Energy.OnEmpFreezeApplied` as a defensive fallback. New activation is blocked while `IsEmpFrozen`.
 - **Weapons → Aim:** Weapons calls `aim.NotifySlotChanged(slot)` on slot change. Aim caches the new `vfxMount`.
 - **Propulsion → Aim:** Aim reads `transform.eulerAngles` directly (actual vehicle orientation); no reference to Propulsion needed.
 - **`HoverDebugSettings` ScriptableObject:** Optional global gizmo toggle. All four scripts check it first, then fall back to their local `drawDebug` bool.

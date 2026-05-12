@@ -73,6 +73,13 @@ public class HoverController_Weapons : MonoBehaviour
         /// <summary>Wind-up progress for Automatic weapons. Range 0..1.</summary>
         [HideInInspector] public float windUpProgress;
 
+        /// <summary>
+        /// Inspector-configured rateOverTime.constant per emitter, captured on Initialize.
+        /// Used as the unscaled "full spin" rate that wind-up modulates against.
+        /// Parallel list to particleEmitters.
+        /// </summary>
+        [HideInInspector] public List<float> baseEmitterRates = new List<float>();
+
         /// <summary>Initializes runtime state from the definition.</summary>
         public void Initialize()
         {
@@ -80,6 +87,13 @@ public class HoverController_Weapons : MonoBehaviour
             currentAmmo       = definition.maxAmmo == 0 ? -1 : definition.startingAmmo;
             cooldownRemaining = 0f;
             windUpProgress    = 0f;
+
+            baseEmitterRates.Clear();
+            for (int i = 0; i < particleEmitters.Count; i++)
+            {
+                var em = particleEmitters[i];
+                baseEmitterRates.Add(em != null ? em.emission.rateOverTime.constant : 0f);
+            }
         }
 
         /// <summary>True if ammo is unlimited or at least one round remains.</summary>
@@ -349,8 +363,24 @@ public class HoverController_Weapons : MonoBehaviour
                     : 0f;
             }
 
-            if (def.projectileMode == ProjectileMode.ParticleSystem)
+            // ParticleSystem + useWindUp: keep emitters playing at the decaying rate
+            // while wind-down is in progress so the stream visibly spools down instead
+            // of cutting off. No ammo decrement or fire events during this coast.
+            // Stops once windUpProgress reaches 0, or immediately for non-windup weapons.
+            bool visualWindDown = def.projectileMode == ProjectileMode.ParticleSystem
+                                  && def.useWindUp
+                                  && slot.windUpProgress > 0f;
+
+            if (visualWindDown)
+            {
+                float windDownScale = def.windUpCurve.Evaluate(slot.windUpProgress);
+                SetEmitterRateMultiplier(slot, windDownScale);
+                PlayParticleEmitters(slot);
+            }
+            else if (def.projectileMode == ProjectileMode.ParticleSystem)
+            {
                 StopParticleEmitters(slot);
+            }
         }
 
         if (!input.FireHeld) return;
@@ -369,6 +399,11 @@ public class HoverController_Weapons : MonoBehaviour
 
         if (def.projectileMode == ProjectileMode.ParticleSystem)
         {
+            // Scale emitter rateOverTime by the wind-up curve so the visual bullet
+            // stream ramps with the spin-up, not just the ammo decrement cadence.
+            if (def.useWindUp)
+                SetEmitterRateMultiplier(slot, windUpScale);
+
             PlayParticleEmitters(slot);
 
             if (!slot.IsReady) return;
@@ -611,38 +646,44 @@ public class HoverController_Weapons : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Writes baseRate * multiplier into each emitter's rateOverTime.constant so the
+    /// wind-up curve modulates the visible bullet stream. baseRate is captured on
+    /// Initialize from the inspector-configured value; the multiplier here is
+    /// expected to be windUpScale (0..1).
+    /// Avoids EmissionModule.rateOverTimeMultiplier, which overwrites the constant
+    /// in Constant mode rather than scaling against the inspector value.
+    /// </summary>
+    private void SetEmitterRateMultiplier(WeaponSlot slot, float multiplier)
+    {
+        var emitters = slot.particleEmitters;
+        var bases    = slot.baseEmitterRates;
+        int count    = Mathf.Min(emitters.Count, bases.Count);
+
+        for (int i = 0; i < count; i++)
+        {
+            var emitter = emitters[i];
+            if (emitter == null) continue;
+            var emission = emitter.emission;
+            var rate     = emission.rateOverTime;
+            rate.constant = bases[i] * multiplier;
+            emission.rateOverTime = rate;
+        }
+    }
+
     // =========================================================================
     // Missile lock helpers
     // =========================================================================
 
     private bool ScanForLockTarget(WeaponDefinition def)
     {
-        Vector3 scanOrigin = transform.position + transform.forward * (def.lockRange * 0.5f);
-        float   scanRadius = def.lockRange * Mathf.Tan(def.lockConeAngle * Mathf.Deg2Rad);
-
-        // NonAlloc: writes into the pre-allocated buffer, returns hit count.
-        // Zero heap allocation per call.
-        int hitCount = Physics.OverlapSphereNonAlloc(scanOrigin, scanRadius, _lockScanBuffer, lockTargetLayers);
-
-        Transform bestTarget = null;
-        float     bestAngle  = def.lockConeAngle + 1f;
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            var hit = _lockScanBuffer[i];
-            if (hit.transform.root == transform.root) continue;
-            Vector3 toTarget = hit.transform.position - transform.position;
-            if (toTarget.magnitude > def.lockRange) continue;
-            float angle = Vector3.Angle(transform.forward, toTarget);
-            if (angle < def.lockConeAngle && angle < bestAngle)
-            {
-                bestAngle  = angle;
-                bestTarget = hit.transform;
-            }
-        }
-
-        LockTarget = bestTarget;
-        return bestTarget != null;
+        LockTarget = TargetingScan.PickBestInCone(
+            transform,
+            def.lockRange,
+            def.lockConeAngle,
+            lockTargetLayers,
+            _lockScanBuffer);
+        return LockTarget != null;
     }
 
     private void TransitionLockState(MissileLockState newState) => CurrentLockState = newState;

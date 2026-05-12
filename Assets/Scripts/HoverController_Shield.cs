@@ -6,8 +6,9 @@ using UnityEngine;
 ///
 /// Fixed-duration invulnerability burst. Pays a flat energy cost on activation,
 /// runs for shieldDuration seconds, and blocks all damage during that window.
-/// Cannot be cancelled by the player. EMP cancels an active shield immediately
-/// and blocks new activation.
+/// Cannot be cancelled by the player. An incoming EMP impact is absorbed by an
+/// active shield: the shield deactivates and the freeze is not applied.
+/// Activation is still blocked while the vehicle is already EMP-frozen.
 ///
 /// Tuning lives on a VehicleTuningProfile asset (profile.shield). Runtime state
 /// (IsActive, TimeRemaining) stays on the component.
@@ -16,7 +17,9 @@ using UnityEngine;
 ///   Activation costs are paid once via energy.TryConsume(shieldEnergyCost).
 ///   While IsActive, VehicleHealth.TakeDamage early-outs to zero damage applied.
 ///   While IsActive, repeated presses are no-ops (no second debit, no extension).
-///   EMP raises OnEmpFreezeApplied; this component listens and calls Deactivate.
+///   EMP absorption is driven by EmpProjectile.Consume calling TryAbsorbEmp on hit.
+///   The OnEmpFreezeApplied subscription remains as a defensive safety net for
+///   any future freeze source that bypasses the projectile.
 ///
 /// Owns no physics. Pure ability state machine.
 /// </summary>
@@ -229,6 +232,19 @@ public class HoverController_Shield : MonoBehaviour
             _targetT = 1f;
         }
 
+        return true;
+    }
+
+    /// <summary>
+    /// Called by incoming EMP impacts to ask the shield to absorb the hit.
+    /// Returns true if the shield was active and absorbed the EMP (and has
+    /// now deactivated). Returns false if the shield was inactive -- caller
+    /// should apply the normal EMP freeze in that case.
+    /// </summary>
+    public bool TryAbsorbEmp()
+    {
+        if (!IsActive) return false;
+        Deactivate();
         return true;
     }
 

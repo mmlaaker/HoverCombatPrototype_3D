@@ -115,6 +115,13 @@ public interface IHoverInputProvider
     bool ShieldPressed { get; }
 
     /// <summary>
+    /// True on the first frame the EMP button is pressed (rising edge only).
+    /// Used by HoverController_EMP to fire a single particle burst that applies
+    /// EMP freeze on contact. Held state is irrelevant.
+    /// </summary>
+    bool EmpPressed { get; }
+
+    /// <summary>
     /// True on the frame the cycle-next button is pressed (rising edge only).
     /// Advances the active weapon slot forward by one (wraps at end of list).
     /// D-Pad Right / E.

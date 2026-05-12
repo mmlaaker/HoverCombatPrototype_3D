@@ -53,6 +53,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     public bool    CycleWeaponNext  { get; private set; } // always false — deferred
     public bool    CycleWeaponPrev  { get; private set; } // always false — deferred
     public bool    ShieldPressed    { get; private set; } // always false — deferred
+    public bool    EmpPressed       { get; private set; } // always false — deferred
 
     // -------------------------------------------------------------------------
     // 🎯 Target Selection
@@ -508,6 +509,7 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
         CycleWeaponNext = false;
         CycleWeaponPrev = false;
         ShieldPressed   = false;
+        EmpPressed      = false;
     }
 
     // -------------------------------------------------------------------------
