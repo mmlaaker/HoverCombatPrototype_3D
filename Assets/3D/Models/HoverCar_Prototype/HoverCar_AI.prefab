@@ -19987,28 +19987,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9b756b19bbed4ab42bedc1a00848ca3a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Foundation
+  profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
   hoverPoints:
   - {fileID: 7894094149123156333}
   - {fileID: 7227002333060208497}
   - {fileID: 2380519266511721574}
   - {fileID: 8468858880958529594}
-  hoverHeight: 5
-  liftStrength: 10000
-  liftDamping: 1500
-  sensorRange: 7
-  enableSlopeLiftCompensation: 1
-  slopeLiftMultiplier: 1.15
-  levelingTorqueStrength: 12
-  pitchRollDamping: 8
-  unstickRecoveryDelay: 0.2
-  unstickLiftForce: 60
-  unstickLiftDuration: 0.15
-  flipRecoveryAngleThreshold: 80
-  flipRecoveryDelay: 1
-  flipRecoveryTorque: 60
-  flipRecoverySpeedThreshold: 0.5
-  extraGravityMultiplier: 3
-  extraAirGravity: 3
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -20026,51 +20010,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 20d6ae1d2bf55ef4a82f194547b51e6e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Propulsion
-  maxForwardAccel: 50
-  maxReverseAccel: 25
-  reverseTopSpeed: 30
-  topSpeed: 50
-  yawAccel: 7
-  yawDamping: 6
-  airTurnMultiplier: 0.5
-  enableBoost: 1
-  boostAccelMultiplier: 1.5
-  boostSpeedMultiplier: 1.5
-  boostBlendSeconds: 0.35
-  boostEnergyPerSecond: 20
-  dodgeForce: 700
-  dodgeDuration: 0.1
-  dodgeEnergyCost: 15
-  dodgeCooldown: 0.2
-  enableJump: 1
-  jumpImpulseMin: 15
-  jumpImpulseMax: 40
-  jumpMaxChargeTime: 2
-  jumpGroundedLockout: 0.2
-  jumpGroundedEnergyCost: 25
-  jumpAirEnergyCost: 25
-  airJumpImpulse: 25
-  lateralDamp: 1
-  forwardDamp: 1
-  driftLateralDamp: 0
-  driftForwardDamp: 1
-  driftYawMultiplier: 1.5
-  driftTurnThreshold: 0.5
-  minDriftSpeed: 25
-  driftBlendSeconds: 0.15
-  meshRoot: {fileID: 0}
-  maxBankAngle: 12
-  passiveBankAngle: 3
-  bankLerpSpeed: 8
-  enableStrafe: 1
-  strafeTopSpeed: 30
-  strafeAccel: 25
-  strafePitchLimit: 20
-  strafePitchTorque: 3
-  strafePitchDamping: 6
-  strafePitchSensitivity: 90
-  strafeModeBlendSeconds: 0.2
-  strafeLateralCapStrength: 40
+  profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+  meshRoot: {fileID: 1580328478889343114}
   drawDebug: 0
   debugSettings: {fileID: 0}
 --- !u!114 &7460556337297359226
@@ -20085,8 +20026,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ce374367090c2d844a700fb2a697e2aa, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VehicleHealth
-  maxHealth: 100
-  startingHealth: 100
+  profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
   debugSettings: {fileID: 0}
 --- !u!114 &3396267810379779740
 MonoBehaviour:
@@ -20100,11 +20040,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5d612f9a5cf343c4baaf7ce8fee02a9e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Energy
-  maxEnergy: 100
-  startingEnergy: 100
-  regenRate: 20
-  regenDelay: 1
-  empFreezeRemaining: 0
+  profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
   debugSettings: {fileID: 0}
 --- !u!114 &6056019813642530629
 MonoBehaviour:
@@ -20128,6 +20064,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   - definition: {fileID: 11400000, guid: 985d2e7e07377ef40bc93e0f81901ad4, type: 2}
     muzzlePoints: []
     particleEmitters:
@@ -20136,6 +20073,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   lockTargetLayers:
     serializedVersion: 2
     m_Bits: 0
