@@ -225,16 +225,48 @@ public class HoverController_Weapons : MonoBehaviour
         aim?.NotifySlotChanged(ActiveSlot);
     }
 
+    private void OnEnable()
+    {
+        if (energy != null)
+            energy.OnEmpFreezeApplied += HandleEmpFreeze;
+    }
+
+    private void OnDisable()
+    {
+        if (energy != null)
+            energy.OnEmpFreezeApplied -= HandleEmpFreeze;
+    }
+
+    // Snap all active firing/lock state to a cold-start condition on freeze entry.
+    // Without this, a spinning minigun emitter would continue playing visually
+    // because the early-out in Update prevents TickAutomatic from ever calling
+    // StopParticleEmitters.
+    private void HandleEmpFreeze(float _)
+    {
+        for (int i = 0, count = weaponSlots.Count; i < count; i++)
+        {
+            var slot = weaponSlots[i];
+            if (slot == null) continue;
+            StopParticleEmitters(slot);
+            slot.windUpProgress = 0f;
+        }
+
+        ResetLockState();
+    }
+
     private void Update()
     {
         if (input == null || energy == null)
             return;
 
-        TickCooldowns();
-        TickCycleWeapon();
-
+        // EMP freeze: complete weapon lockout. Cooldowns pause, switching blocked,
+        // firing blocked, missile lock progress frozen. HandleEmpFreeze (subscribed
+        // to OnEmpFreezeApplied) has already stopped emitters and reset lock state.
         if (energy.IsEmpFrozen)
             return;
+
+        TickCooldowns();
+        TickCycleWeapon();
 
         var slot = ActiveSlot;
         if (slot == null || slot.definition == null)

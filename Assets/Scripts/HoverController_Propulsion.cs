@@ -216,12 +216,54 @@ public class HoverController_Propulsion : MonoBehaviour
         airJumpAvailable     = false;
     }
 
+    private void OnEnable()
+    {
+        if (energy != null)
+            energy.OnEmpFreezeApplied += HandleEmpFreeze;
+    }
+
+    private void OnDisable()
+    {
+        if (energy != null)
+            energy.OnEmpFreezeApplied -= HandleEmpFreeze;
+    }
+
+    // Snap all input-driven transient state to a clean zero on freeze entry.
+    // Snap (not fade) because the chassis is about to tumble — smooth blend has no payoff.
+    private void HandleEmpFreeze(float _)
+    {
+        boostLerp          = 0f;
+        driftLerp          = 0f;
+        _strafeModeBlend   = 0f;
+        _strafePitchAccum  = 0f;
+        _isDrifting        = false;
+        dodgeForceTimer    = 0f;
+        jumpChargeTimer    = 0f;
+        airJumpAvailable   = false;
+        boostHeldLastFrame = false;
+        jumpHeldLastFrame  = false;
+
+        if (meshRoot != null)
+            meshRoot.localRotation = Quaternion.identity;
+    }
+
     // Cached once per FixedUpdate, read by multiple methods below.
     // Avoids redundant rb.linearVelocity reads and InverseTransformDirection calls.
     private Vector3 _cachedLocalVel;
 
     private void FixedUpdate()
     {
+        // EMP freeze: complete control lockout. Skip every input-driven and
+        // damping force. HandleEmpFreeze (subscribed to OnEmpFreezeApplied) has
+        // already zeroed transient state; nothing to maintain here. Keep
+        // wasGroundedLastFrame pinned false so the air-jump token cannot
+        // false-grant via an airborne→grounded transition during the freeze.
+        if (energy.IsEmpFrozen)
+        {
+            wasGroundedLastFrame = false;
+            return;
+        }
+
         bool  grounded               = foundation.IsHoverGrounded;
         float effectiveTopSpeed      = P.topSpeed        * Mathf.Lerp(1f, P.boostSpeedMultiplier,  boostLerp);
         float effectiveForwardAccel  = P.maxForwardAccel * Mathf.Lerp(1f, P.boostAccelMultiplier, boostLerp);
@@ -243,6 +285,11 @@ public class HoverController_Propulsion : MonoBehaviour
 
     private void Update()
     {
+        // EMP freeze: chassis bank is input-driven (turn input). HandleEmpFreeze
+        // already snapped meshRoot to identity on freeze entry.
+        if (energy.IsEmpFrozen)
+            return;
+
         // Chassis bank is visual only. Runs in Update for smooth interpolation
         // independent of the physics timestep.
         ApplyChassisBank();

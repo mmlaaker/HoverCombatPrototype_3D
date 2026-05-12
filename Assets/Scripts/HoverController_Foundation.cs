@@ -98,6 +98,7 @@ public class HoverController_Foundation : MonoBehaviour
     // Runtime state
     // -------------------------------------------------------------------------
     private Rigidbody rb;
+    private HoverController_Energy energy;
 
     // Pre-allocated buffer for OnCollisionStay contact reads. Avoids per-call
     // ContactPoint[] allocation on every physics tick.
@@ -144,7 +145,8 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private void Awake()
     {
-        rb = GetComponent<Rigidbody>();
+        rb     = GetComponent<Rigidbody>();
+        energy = GetComponent<HoverController_Energy>();
 
         if (profile == null)
         {
@@ -190,6 +192,16 @@ public class HoverController_Foundation : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // EMP freeze: all Foundation forces off. Default Unity gravity still pulls
+        // the chassis down; existing angular velocity persists with no leveling or
+        // damping, so the vehicle tumbles for the freeze duration.
+        if (energy != null && energy.IsEmpFrozen)
+        {
+            IsHoverGrounded     = false;
+            AverageGroundNormal = Vector3.up;
+            return;
+        }
+
         ApplyHoverForces();
         ApplyExtraGravity();
         ApplyLevelingTorque();

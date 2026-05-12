@@ -50,6 +50,7 @@ public class HoverController_Aim : MonoBehaviour
     // -------------------------------------------------------------------------
 
     private HoverController_Propulsion propulsion;
+    private HoverController_Energy     energy;
 
     // The vfxMount of the currently active weapon slot. Null if no active slot or
     // active slot is Instantiated mode with no vfxMount assigned.
@@ -62,6 +63,7 @@ public class HoverController_Aim : MonoBehaviour
     private void Awake()
     {
         propulsion = GetComponent<HoverController_Propulsion>();
+        energy     = GetComponent<HoverController_Energy>();
     }
 
     /// <summary>
@@ -71,6 +73,11 @@ public class HoverController_Aim : MonoBehaviour
     private void LateUpdate()
     {
         if (propulsion == null || activeMount == null)
+            return;
+
+        // EMP freeze: vfxMount holds its last rotation through the freeze. Since
+        // weapons can't fire while frozen, drift on the visual mount is harmless.
+        if (energy != null && energy.IsEmpFrozen)
             return;
 
         Quaternion aimRotation = ComputeAimRotation();
