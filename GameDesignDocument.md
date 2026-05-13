@@ -4,48 +4,79 @@
 ---
 
 ## 1. Project Overview
-This project is a small-scale, single-player prototype exploring hover-vehicle combat at ground level — where vehicles behave like aerial dogfighters but without the constant forward motion of aircraft.
 
-The goal is to develop **fun, physical, skill-based movement and combat** in a confined arena environment.  
-Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
+This project is a hover vehicle combat game built around a single design conviction: **momentum management is the primary skill expression.**
+
+Vehicles behave like low-altitude jets dogfighting above the ground. Combat and traversal are the same action: players who control momentum win fights. Players who react to momentum lose them.
+
+The solo campaign pits the player against AI opponents across a roster of distinct vehicles, each with a unique pilot and reason to compete. This is a full product layer, not a test harness. Multiplayer is a future phase; the solo game stands alone.
+
+Initial prototype scope: 1v1 combat against AI, expanding to 3-5 opponents per match.
 
 ---
 
 ## 2. Core Design Pillars
-1. **Hybrid Controls:**  
-   - A blend between *Twisted Metal*’s weighty vehicle steering and *Rocket League*’s responsive, air-like maneuvering.  
-   - Hovercrafts can strafe and jump, offering omnidirectional control.
-2. **Energy-Based Abilities:**  
-   - Boost, jump, and shields consume energy — a shared non-damaging ability resource.  
-   - Players manage energy to stay mobile and survive.
-3. **Pickup-Based Weaponry:**  
-   - Infinite low-damage machine gun.  
-   - Secondary weapons (missiles, shotgun bursts, etc.) rely on limited ammo pickups.  
-   - Map control becomes strategic.
-4. **Arena Combat Loop:**  
-   - Players chase, strafe, dodge, and time ability usage while managing energy and ammo.  
-   - Focus on “feel first” — tuning handling and responsiveness before visual polish.
+
+1. **Momentum Is the Resource**  
+   Boost, jump, drift, and strafe are not just movement tools. They are the primary weapons. A player who enters a fight with speed and a planned approach vector beats a player who aims better but moves reactively. Every design decision is evaluated against this principle first.
+
+2. **Combat and Traversal Are the Same Skill**  
+   There is no mode switch between moving and fighting. The same inputs, the same momentum management, the same map reading: all of it applies simultaneously. A fight is two momentum vectors intersecting. The player who constructed the better approach angle three seconds earlier wins.
+
+3. **Hit Disruption Over Flat Damage**  
+   Being hit disrupts momentum first, health second. A hit that spins you out or kills your speed is more punishing than one that reduces HP, because it costs you the resource you are actually managing. Weapons that manipulate momentum vectors are prioritized over weapons that simply deal damage.
+
+4. **Shared Arsenal, Distinct Profiles**  
+   All vehicles share the full weapon roster and ability set. Vehicle identity comes from handling profile and one unique special weapon only. Vehicles change *how* actions are executed, never *whether* they are available. No vehicle is locked out of any situation.
+
+5. **Energy as Tempo**  
+   The energy meter governs mobility and utility, not weapons. Managing it is managing tempo: the ability to dictate when and where fights happen. A player who burns energy poorly loses the ability to disengage, reposition, or respond. Energy discipline is fight discipline.
+
+6. **Feel First**  
+   Mechanics must be fun before they are beautiful. Tuning handling and responsiveness takes priority over visual polish at every stage of development.
 
 ---
 
-## 3. Gameplay Summary
+## 3. World and Narrative Framing
+
+This is not a narrative game. The world exists to make the combat coherent and give each vehicle a reason to be in the arena. No deep lore is required or desired.
+
+**The Premise**
+
+An intergalactic combat sport (part sanctioned league, part blood sport) that draws pilots across species, factions, and civilizations. Nobody fully agrees on who started it or whether it is legitimate. It does not matter. The arena is the equalizer.
+
+**The Pilots**
+
+Each vehicle has a pilot with an origin and a reason to compete. Pilots may be human, alien, AI, cyborg, or biological symbiote. The roster spans the breadth of the universe that hosts the sport. Their vehicles reflect their philosophy, their faction, and their resources. A corporate human with a sponsor-plastered machine. An alien whose civilization has been doing this longer than humans have had writing. A scrappy mechanic who built their rig from salvage. A military AI drone entered by an institution with unclear motives. A biological symbiote craft where the line between pilot and vehicle is genuinely ambiguous.
+
+**Campaign Structure**
+
+Twisted Metal's model: per-vehicle pilot stories told through brief intro and outro cinematics. Players complete the campaign with one vehicle to see that pilot's outcome, then replay with another. Low production cost, high replayability, distinct perspective per vehicle.
+
+**Weapon Faction Aesthetic**
+
+Human-origin vehicles tend toward physical weapons: bullets, explosions, kinetic force. Alien and synthetic vehicles tend toward energy weapons: plasma, lasers, gravitational manipulation. Both coexist in every match. The distinction is aesthetic and identity-driven, not a balance lever. No weapon type is exclusive to any faction.
+
+---
+
+## 4. Gameplay Summary
 | System | Description |
 |--------|--------------|
 | **Camera** | Third-person follow camera with mild positional lag and rotation offset controls. |
 | **Vehicle Movement** | Hovercrafts use a Rigidbody-based controller. Ground proximity forces stabilize hover height. Steering blends drift and strafing. |
 | **Combat** | Forward-facing weapons; player aims primarily via vehicle orientation. No soft lock or perfect tracking. |
-| **Abilities** | Non-damaging utility powers that consume shared energy: <br>• **Boost** – temporary acceleration burst.<br>• **Jump** – instant hover lift.<br>• **Shield** – temporary damage resistance. |
-| **Weapons** | • **Machine Gun** (infinite ammo, low DPS) <br>• **Missile** (forward shot, medium DPS) <br>• **Homing Missile** (requires lock, high DPS) <br>• **Shotgun Burst** (short range, spread) |
+| **Abilities** | Non-damaging utility powers that consume shared energy: <br>• **Boost** – temporary acceleration burst.<br>• **Jump** – instant hover lift.<br>• **Shield** – temporary damage resistance.<br>• **EMP** – soft-homing electric projectile; freezes energy use on unshielded hit. |
+| **Weapons** | Shared 13-weapon roster (Machine Gun is infinite ammo; all others pickup-limited). See Section 9 for the full table. |
 | **Pickups** | Map-scattered items for ammo, health, and energy recharge. |
 | **Game Modes** | 1v1 versus AI opponent (initial). Later expansion: 3–4 combatants per match. |
 
 ---
 
-## 4. Technical Overview
+## 5. Technical Overview
 
 | Category | Implementation |
 |-----------|----------------|
-| **Engine** | Unity 6.2 (URP template) |
+| **Engine** | Unity 6.3 URP |
 | **Physics Base** | Rigidbody-based hover vehicle controller |
 | **Input** | Unity Input System (single-player bindings for keyboard/controller) |
 | **Camera System** | Third-person follow camera with aim assist offset |
@@ -55,7 +86,7 @@ Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
 
 ---
 
-## 5. Control Scheme (Prototype)
+## 6. Control Scheme (Prototype)
 | Action | Key / Binding | Notes |
 |--------|----------------|-------|
 | Thrust Forward | `W` / Left Stick Up | Standard acceleration |
@@ -67,12 +98,13 @@ Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
 | Fire Primary | `Left Mouse` / RT | Infinite ammo |
 | Fire Secondary | `Right Mouse` / LT | Requires pickup ammo |
 | Activate Shield | `F` / Face Button | Energy cost, brief invulnerability |
+| Fire EMP | *unbound* / D-pad Up | Tap; ~70-80% energy cost. Keyboard binding not yet wired |
 | Camera Orbit | Mouse / Right Stick | Free rotation around vehicle |
 | Reset Orientation | `R` | Upright correction if flipped |
 
 ---
 
-## 6. Vehicle Behavior Breakdown
+## 7. Vehicle Behavior Breakdown
 
 **Hover Physics**
 - Uses downward raycasts to maintain a target hover height.  
@@ -90,25 +122,137 @@ Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
 
 ---
 
-## 7. Combat Systems
+## 8. Vehicle Identity Philosophy
+
+**Two Axes, Not One Spectrum**
+
+Vehicle profiles are defined by two independent axes:
+
+- **Mass and momentum character:** How the vehicle builds, holds, and loses speed. Not just top speed. The personality of momentum.
+- **Stability vs agility:** How the vehicle handles directional change and how it responds to being hit.
+
+These axes are independent. A vehicle can be high mass and low stability simultaneously. This creates a two-dimensional design space where vehicles occupy genuinely distinct positions that do not reduce to a simple fast/slow hierarchy.
+
+**The Distinction That Prevents Hero Shooter Drift**
+
+Vehicles change *how* actions are executed, never *whether* they are available. Every vehicle can pursue, escape, fight in corridors, fight in arena rooms, and use every weapon in the shared arsenal. The tuning changes the expression of those actions, not the availability of them.
+
+The moment a player looks at a situation and thinks "I need the heavy vehicle for this" rather than "I prefer the heavy vehicle", the design has crossed into role selection territory. That is the line. Every vehicle must be capable of winning every situation.
+
+**The Special Weapon Test**
+
+The special weapon must pass this test before it is considered valid: would a player choose this vehicle *because of* the special, or *despite not needing* the special?
+
+If the answer is because of it, the special is doing too much work and is functioning as a loadout tool. The vehicle identity must come from the tuning. The special is a stylistic exclamation point that expresses that identity in a spectacular way, not the reason the identity exists. Specials are allowed to bend the shared rules and provide spectacle. They are not allowed to be the answer to a specific tactical problem.
+
+**Proposed Five-Vehicle Roster Framework**
+
+| Profile | Momentum Character | Stability | Pilot Archetype |
+|---|---|---|---|
+| Bruiser | High mass, holds momentum relentlessly | High stability | Ancient alien civilization: unstoppable by tradition |
+| Interceptor | Low mass, loses momentum fast | High agility | Biological symbiote: organic, reactive, fragile |
+| Chaos Vehicle | High mass, unpredictable on impact | Low stability | Scrappy human mechanic: powerful and held together by stubbornness |
+| Precision Drone | Low mass, operating at tolerance limits | Low stability | Military AI: calculating but unforgiving |
+| Transition Specialist | Balanced mass | Specialized: fastest state transitions | Corporate human: tournament-engineered for adaptability |
+
+No vehicle is strictly better than another in all situations. The bruiser beats the interceptor in a corridor but loses in an arena room. The chaos vehicle is terrifying when it works and a liability when it does not. The transition specialist does not win any specific matchup but never loses one badly either.
+
+---
+
+## 9. Combat Systems
 
 **Weapon Slots**
-- **Primary:** Infinite machine gun (low damage, accurate).  
-- **Secondary:** Limited ammo (missiles, shotgun, etc.).  
 
-**Energy System**
-- Governs *non-damaging* abilities (boost, jump, shield).  
-- Regenerates over time when idle.  
-- Encourages pacing and decision-making.
+All vehicles share the full weapon roster. Vehicle identity comes from handling profile and one unique special weapon. Weapons use limited ammo sourced from map pickups, except the Machine Gun which has infinite ammo.
 
-**Pickups**
+### Energy System
+
+Governs non-damaging abilities only. Weapons never spend energy. Regenerates over time when not actively consumed. Depleted by: Boost, Jump, Shield, EMP.
+
+### Shared Abilities
+
+| Ability | Input | Cost | Contract |
+|---------|-------|------|----------|
+| Boost | Hold | Continuous drain | Succeeds when used for repositioning, not permanent speed |
+| Jump | Tap / Hold to charge | Flat cost | Succeeds when verticality meaningfully disrupts targeting |
+| Shield | Tap | Flat cost | Succeeds when timed, not spammed. Absorbs one incoming EMP hit; shield deactivates, no freeze applied |
+| EMP | Tap | ~70-80% of meter | Soft-homing electric projectile. Direct hit only, no AOE. On unshielded hit: applies energy freeze. On shielded hit: destroys shield, no freeze. Succeeds when it denies tempo, not when it deletes control |
+
+### Weapons
+
+| # | Weapon | Input | Ammo | Notes |
+|---|--------|-------|------|-------|
+| 1 | Machine Gun | Hold | Infinite | Low DPS, always available, requires exposure commitment |
+| 2 | Minigun | Hold | Limited | Wind-up/wind-down. Fire rate scales via AnimationCurve. Requires commitment to spin-up |
+| 3 | Shotgun | Tap | Limited | Short range burst. Succeeds only when lethal proximity is achieved |
+| 4 | Rocket Launcher | Tap | Limited | High damage, blast radius, high outward force. Low fire rate. Primary momentum disruption tool |
+| 5 | Soft Homing Projectile | Tap | Limited | Homes on nearest target. High steering, low damage and force, medium fire rate. Harassment and pressure tool |
+| 6 | Hard Lock Projectile | Hold to lock, tap to fire | Limited | Single target lock-on. Single guided projectile. Expandable to multi-target cascade |
+| 7 | Sniper / Lightning Bolt | Tap | Limited | Zoom scopes view; blind outside scope. Instant hit, high damage, low fire rate. Strafe mode active during zoom |
+| 8 | Laser Cannon | Hold to charge, release | Limited | Hold to charge, release fires sustained beam. Pierces multiple targets. High damage and outward force on beam axis. Short charge = weak shot, full charge = peak damage window that tapers off |
+| 9 | Gravity Well / Repulsor | Tap to deploy | Limited | Lobbed deployable. Pulls or pushes vehicles caught in field. Drains energy of caught vehicles. Duration-limited with visible decay VFX. One active at a time. Does not affect deploying vehicle |
+| 10 | Bouncing Disc Blade | Tap | Limited | Ricochets off walls, floors, and ceilings in 3D space. Rewards map literacy and spatial prediction |
+| 11 | Floating Proximity Mine | Tap to deploy | Limited | Deploys at hover height, suspended in airspace. Omnidirectional trigger radius. Visual indicator communicates detection field |
+| 12 | Directional Remote Mine | Tap to deploy, tap to trigger | Limited | Attaches to any surface. Fires projectile outward from placement angle on manual trigger. Placement orientation is the skill expression |
+| 13 | Special | None | None | One unique weapon per vehicle. Allowed to bend shared rules and provide spectacle |
+
+### Weapon Implementation Status
+
+| Weapon | Status |
+|--------|--------|
+| Machine Gun | Stubbed |
+| Minigun | Stubbed |
+| Shotgun | Stubbed |
+| Rocket Launcher | Stubbed |
+| Soft Homing Projectile | Stubbed |
+| Hard Lock Projectile | Stubbed |
+| Sniper / Lightning Bolt | Planned |
+| Laser Cannon | Planned |
+| Gravity Well / Repulsor | Planned |
+| Bouncing Disc Blade | Planned |
+| Floating Proximity Mine | Planned |
+| Directional Remote Mine | Planned |
+
+### Pickups
 - **Ammo Pickup:** Restores secondary ammo.  
 - **Energy Cell:** Rapidly recharges energy.  
 - **Health Repair:** Restores hit points.
 
 ---
 
-## 8. Prototype Scope
+## 10. Arena Design Philosophy
+
+**The Core Model: Track With Rooms**
+
+Arenas are not open bowls or pure mazes. They are tracks with rooms. The track provides directionality and flow: corridors where momentum builds and pursuits develop. The rooms are arena spaces where the flow opens up, a pickup lives, a hazard exists, or a chokepoint forces interaction. Players move through the track to reach the rooms. The rooms are where fights happen.
+
+**Three Vertical Layers**
+
+Every arena operates on three levels:
+
+- **Ground level:** Primary combat surface. Wide enough for strafe and boost play, broken by obstacles and cover that reward spatial awareness.
+- **Mid level:** Ramps, platforms, elevated routes. Where pursuits and escapes live. A vehicle with momentum advantage should be able to gain or lose an opponent by going vertical.
+- **High level:** Dramatic verticality. Launch ramps, high platforms, deliberate fall lines. High risk, high reward positioning. Falling from height is a tactical choice with a physics outcome, not a punishment.
+
+**Pickup Placement**
+
+Powerful pickups live in vulnerable positions. Collecting them costs positional exposure. This is the primary mechanism for forcing engagement: players cannot ignore a power weapon spawn without conceding map control. The player who reaches it must accept the risk of being caught in the approach or the collection. This logic is borrowed directly from Quake and Unreal Tournament arena design.
+
+**Parallel Routes and Intersection Design**
+
+Every major node in the arena must be reachable by at least two routes of roughly equal travel time. This enables the head-off play: a pursuing player taking a different cut to intercept rather than chase. If one route is always faster, the meta collapses to a single path and the head-off play disappears.
+
+**Corridor Function**
+
+Corridors are not transitions. They are where momentum builds. A vehicle entering a room with full speed has a different set of options than one who had to brake to make a corner. Corridor width must accommodate vehicle turning radius at speed: tight enough to create pressure, wide enough that drift through a corner feels intentional rather than forced.
+
+**Design Reference**
+
+Quake and Unreal Tournament map logic applied to vehicle scale. Hydro Thunder route hierarchy. Jak 2 Erol race hybrid track/arena structure. F-Zero GX momentum corridor pacing. The emotional target is flow state: the feeling of reading the map fast enough that decisions happen slightly ahead of conscious thought.
+
+---
+
+## 11. Prototype Scope
 - **Single level:** small test arena with ramps and obstacles.  
 - **Two hovercrafts:** Player and 1 AI.  
 - **Functional prototype goals:**
@@ -120,41 +264,47 @@ Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
 
 ---
 
-## 9. Future Expansion Ideas
-- Arena hazards (explosive barrels, shock fields).  
-- Environmental effects (dust trails, hover distortion).  
-- AI improvements (dodge, strafe combat awareness).  
-- Multiplayer or split-screen support.  
-- Upgradeable hovercraft stats or cosmetics.  
+## 12. Future Expansion Ideas
+- Arena hazards (explosive barrels, shock fields, environmental momentum traps).
+- Environmental effects (dust trails, hover distortion, impact debris).
+- AI improvements (momentum-aware pursuit, dodge timing, pickup prioritization).
+- Multiplayer and split-screen support.
+- Vehicle cosmetics.
+- Additional vehicles expanding the two-axis roster.
+- Per-vehicle campaign missions and cinematics.
+
+*Note: Upgradeable vehicle stats are explicitly out of scope and in conflict with the no-loadout design pillar. Cosmetic customization is acceptable. Stat customization is not.*
 
 ---
 
-## 10. Visual Style Goals
-- Stylized semi-realistic tone (clean readability > realism).  
-- Emphasis on glowing energy and hover effects.  
-- Clear silhouettes and color-coded player/AI vehicles.
+## 13. Visual Style Goals
+- **Tone:** High-energy, colorful, confident, and kinetic. Not grimdark, not sterile, not comedic. The aesthetic is a sci-fi blood sport: dangerous and spectacular without being grim.
+- **Vehicles:** Engineered and lived-in. They have been used, modified, and fought in. Not clinical showroom machines. Bold silhouettes that read instantly at high speed.
+- **Weapons:** Mixed human physical weapons (bullets, explosions) and alien/energy weapons (plasma, lasers) coexist in the same match. Faction identity is communicated through weapon aesthetic the way Halo communicates it: you know what hit you and who fired it without a UI prompt.
+- **Readability:** Visual clarity is a gameplay requirement, not just an aesthetic preference. At high speed, with multiple vehicles in a chaotic fight, every visual element must communicate something useful. Spectacle that reduces readability is a design failure.
+- **Reference touchstones:** Wipeout, F-Zero GX, Jak and Daxter hover vehicles, Ratchet and Clank Deadlocked, Unreal Tournament, Jet Set Radio.
 
 ---
 
-## 11. Development Notes
+## 14. Development Notes
 - Use **URP** for performance and easy post-processing.  
 - **No HDRP** (unnecessary overhead).  
 - Keep project modular:  
-  - `HovercraftController.cs` handles movement and forces.  
-  - `EnergySystem.cs` governs ability usage.  
-  - `WeaponSystem.cs` handles primary/secondary weapons.  
-  - `PickupManager.cs` spawns pickups.  
+  - `HoverController_Foundation.cs` and `HoverController_Propulsion.cs` handle hover physics and movement forces.  
+  - `HoverController_Energy.cs` governs ability resource usage.  
+  - `HoverController_Weapons.cs`, `HoverController_Aim.cs`, and `HoverController_Shield.cs` handle weapons, aiming, and shield activation.  
+  - `PickupManager.cs` spawns pickups (planned, not yet implemented).  
 
 ---
 
-## 12. Diagrams (Planned)
+## 15. Diagrams (Planned)
 - Control Flow (Vehicle Input → Movement → Abilities → Energy System).  
 - Interaction Map (Player ↔ Pickups ↔ Weapons ↔ UI).  
 *(Will add via `.png` or `.drawio` export in `/Docs/` later.)*
 
 ---
 
-## 13. Implementation Priorities
+## 16. Implementation Priorities
 1. ✅ Establish project, repo, and IDE integration (complete).  
 2. 🚧 Implement **hovercraft movement & physics.**  
 3. 🚧 Add **camera and input control**.  
@@ -164,13 +314,13 @@ Initial scope: **1v1 combat**, expanding to 3–4 AI opponents.
 
 ---
 
-## 14. Design Philosophy
-> *“The fun comes from control.”*  
-> Hover Combat is about mastering momentum and precision — being slightly overpowered, but always at risk of losing control.
+## 17. Design Philosophy
+> *"The fun comes from control."*  
+> Hover Combat is about mastering momentum and precision: being slightly overpowered, but always at risk of losing control.
 
 ---
 
-## 15. Credits
+## 18. Credits
 **Design & Programming:** Meade Laaker (with Claude collaboration)  
 **Engine:** Unity 6.3 URP  
 **Version Control:** GitHub + Fork + VSCode integration  

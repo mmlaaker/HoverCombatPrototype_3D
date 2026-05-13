@@ -1,4 +1,4 @@
-# Hover Combat Prototype — Claude Context
+# Hover Combat Prototype: Claude Context
 
 ## Behavioral Rules
 - Read existing files before writing. Do not re-read unless the file has changed.
@@ -11,7 +11,7 @@
 ---
 
 ## Project Summary
-Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude jets. Inspired by Twisted Metal and Rocket League. Unity 6.3 URP. Single-player prototype; 1v1 vs AI, expanding to 4-5 opponents.
+Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude jets dogfighting above the ground. Combat and traversal are the same skill expression: momentum management determines fight outcomes, not aim or loadout. Inspired by Twisted Metal, Rocket League, Unreal Tournament, Wipeout, F-Zero GX, and Jak 2. Unity 6.3 URP. Solo campaign against AI opponents; multiplayer is a future phase.
 
 **Design motto:** "The fun comes from control."
 
@@ -76,34 +76,77 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 
 ## Design Pillars (Guardrails)
 Reject or redesign any feature that violates these:
-- Hover is persistent. Always airborne; not a modifier or special state.
-- Movement is the primary skill expression. Momentum and positioning determine outcomes, not loadouts or stats.
-- No asymmetric loadouts. All vehicles share the same weapons and abilities. Identity comes from handling profile + one unique special weapon only.
-- Movement disruption over flat damage. Destabilization, knockback, and tempo denial are prioritized over raw DPS.
-- Clarity at high speed. Visual readability must be maintained during fast, chaotic play.
-- Feel first. Mechanics must be fun before they are beautiful.
+
+- **Hover is persistent.** Always airborne. Not a modifier or special state.
+- **Momentum is the primary skill expression.** Positioning and momentum management determine outcomes, not loadouts, stats, or aim in isolation.
+- **Combat and traversal are the same skill.** There is no mode switch. Map reading, momentum management, and weapon use happen simultaneously.
+- **Hit disruption over flat damage.** Being hit should disrupt momentum first, health second. Weapons that manipulate momentum vectors are prioritized over weapons that simply deal damage.
+- **No asymmetric loadouts.** All vehicles share the same weapons and abilities. Identity comes from handling profile and one unique special weapon only.
+- **Vehicles change how, not whether.** Every vehicle can execute every action. Tuning changes the expression of those actions, not their availability. The moment a player feels they need a specific vehicle for a specific situation, the design has crossed into hero shooter territory.
+- **Special weapons are exclamation points, not answers.** A special weapon must not be the solution to a specific tactical problem. It expresses the vehicle's identity spectacularly. It does not define what the vehicle can do.
+- **Pickup placement creates vulnerability.** Powerful pickups live in exposed positions. Collecting them costs positional safety. Map control is the mechanism for forcing engagement.
+- **Clarity at high speed.** Visual readability is a gameplay requirement. Spectacle that reduces readability is a design failure.
+- **Feel first.** Mechanics must be fun before they are beautiful.
+
+### Arena Design Guardrails
+
+Reject or redesign any arena that violates these:
+
+- **Track with rooms.** Corridors build momentum and create pursuit pressure. Rooms are where fights happen. Both must be present.
+- **Three vertical layers.** Ground, mid, and high level must each serve a distinct tactical purpose. Verticality is a choice with consequence, not scenery.
+- **Parallel routes at every major node.** At least two routes of roughly equal travel time. Single-path layouts kill the head-off play and collapse the meta.
+- **Corridors are not transitions.** They are where momentum builds. Width must accommodate vehicle turning radius at combat speed.
+- **Falling from height is a tactic.** Descent must be dramatic enough that following is genuinely risky. The escaping player chooses it intentionally because they know the map. The pursuer does not.
 
 ---
 
 ## Systems Reference
 
 ### Energy System
-Shared non-damaging ability resource. Governs mobility/utility only, not weapons. Regenerates over time when idle. Depleted by: Boost, Jump, Shield.
+Shared non-damaging ability resource. Governs mobility/utility only, not weapons. Regenerates over time when idle. Depleted by: Boost, Jump, Shield, EMP.
 
 ### Shared Abilities
-| Ability | Contract (when it succeeds) |
-|---|---|
-| Boost | Repositioning -- not permanent speed increase |
-| Jump | Verticality meaningfully disrupts targeting |
-| Shield | Timed, not spammed |
-| EMP/Freeze | Denies tempo, not just deletes player control |
+| Ability | Input | Cost | Contract (when it succeeds) |
+|---|---|---|---|
+| Boost | Hold | Continuous drain | Repositioning, not permanent speed |
+| Jump | Tap / Hold to charge | Flat cost | Verticality meaningfully disrupts targeting |
+| Shield | Tap | Flat cost | Timed, not spammed. Absorbs one incoming EMP hit (shield deactivates, no freeze) |
+| EMP | Tap | ~70-80% of meter | Soft-homing projectile, direct hit only. Unshielded hit applies freeze; shielded hit destroys shield, no freeze. Denies tempo, not control |
 
 ### Weapons
-- **Machine Gun** -- infinite ammo, low DPS, requires exposure commitment
-- **Missile** -- dumbfire or hard-lock; one target, no deferred execution
-- **Shotgun Burst** -- close range; only succeeds when lethal proximity is achieved
-- **Rail/Lightning Gun** -- high precision; only succeeds when aim is maintained under chaos
-- **Ricochet Disk / Mines / Hazard Field / Multi-target** -- planned secondaries; see GDD for contracts
+All vehicles share the full roster. Vehicle identity = handling profile + one unique special. All weapons use limited pickup ammo except the Machine Gun (infinite).
+
+| # | Weapon | Input | Notes |
+|---|---|---|---|
+| 1 | Machine Gun | Hold | Infinite ammo. Low DPS, always available, requires exposure commitment |
+| 2 | Minigun | Hold | Wind-up/wind-down. Fire rate scales via AnimationCurve |
+| 3 | Shotgun | Tap | Short range burst; succeeds only at lethal proximity |
+| 4 | Rocket Launcher | Tap | High damage, blast radius, high outward force. Primary momentum disruption tool |
+| 5 | Soft Homing Projectile | Tap | Homes nearest target. Low damage/force, medium fire rate. Harassment tool |
+| 6 | Hard Lock Projectile | Hold to lock, tap to fire | Single guided projectile. Expandable to multi-target cascade |
+| 7 | Sniper / Lightning Bolt | Tap | Zoom scopes view; blind outside scope. Instant hit, high damage. Strafe mode during zoom |
+| 8 | Laser Cannon | Hold to charge, release | Sustained beam, pierces targets. Short charge = weak; full charge = peak window that tapers |
+| 9 | Gravity Well / Repulsor | Tap to deploy | Lobbed deployable. Pulls/pushes and drains caught vehicles. One active; does not affect deployer |
+| 10 | Bouncing Disc Blade | Tap | Ricochets in 3D space. Rewards map literacy and spatial prediction |
+| 11 | Floating Proximity Mine | Tap to deploy | Suspended at hover height. Omnidirectional trigger; visible detection field |
+| 12 | Directional Remote Mine | Tap to deploy, tap to trigger | Attaches to surfaces. Fires outward from placement angle on manual trigger |
+| 13 | Special | n/a | One unique per vehicle. Allowed to bend shared rules; provides spectacle |
+
+#### Weapon Implementation Status
+| Weapon | Status |
+|---|---|
+| Machine Gun | Stubbed |
+| Minigun | Stubbed |
+| Shotgun | Stubbed |
+| Rocket Launcher | Stubbed |
+| Soft Homing Projectile | Stubbed |
+| Hard Lock Projectile | Stubbed |
+| Sniper / Lightning Bolt | Planned |
+| Laser Cannon | Planned |
+| Gravity Well / Repulsor | Planned |
+| Bouncing Disc Blade | Planned |
+| Floating Proximity Mine | Planned |
+| Directional Remote Mine | Planned |
 
 ### Pickups
 Ammo (restores secondary ammo), Energy Cell (rapid recharge), Health Repair.
