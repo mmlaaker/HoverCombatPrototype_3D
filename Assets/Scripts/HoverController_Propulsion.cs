@@ -22,8 +22,10 @@ using UnityEngine;
 ///   Drift modifies three physics values (lateralDamp, forwardDamp, yawAccel) and
 ///   one visual transform (meshRoot Z rotation). It does not introduce new forces.
 ///
-///   Strafe mode blends in lateral authority and a free-aim pitch torque. Forward
-///   top speed and accel blend toward strafe values as the blend rises.
+///   Strafe mode blends in lateral authority and a free-aim pitch target. The
+///   pitch target is handed to Foundation (SetAimPitch), whose leveling torque is
+///   the single attitude authority; Propulsion applies no pitch torque itself.
+///   Forward top speed and accel blend toward strafe values as the blend rises.
 ///
 ///   Boost is continuous while throttle is held. In strafe mode, pressing boost
 ///   without forward throttle fires a tapering dodge burst instead.
@@ -242,6 +244,11 @@ public class HoverController_Propulsion : MonoBehaviour
         airJumpAvailable   = false;
         boostHeldLastFrame = false;
         jumpHeldLastFrame  = false;
+
+        // Clear the aim pitch target held by Foundation. Foundation skips all
+        // torques during the freeze, but a stale target must not snap the nose
+        // when the freeze lifts.
+        foundation.SetAimPitch(0f, 0f);
 
         if (meshRoot != null)
             meshRoot.localRotation = Quaternion.identity;
@@ -857,19 +864,20 @@ public class HoverController_Propulsion : MonoBehaviour
     /// The accumulated angle is clamped to [-strafePitchLimit, +strafePitchLimit].
     /// Resets to 0 on strafe exit so Foundation leveling can take over cleanly.
     ///
-    /// Implementation: proportional torque drives toward the accumulated target;
-    /// a separate damping term kills pitch angular velocity to prevent oscillation.
-    /// Foundation's leveling torque is the opposing force.
-    ///
-    /// Tuning: strafePitchTorque must stay LOW relative to Foundation's
-    /// levelingTorqueStrength. They're competing forces. strafePitchDamping is the
-    /// primary oscillation killer. Start with torque=3, damping=6.
+    /// Implementation: this method only accumulates the target angle and hands it
+    /// to Foundation via SetAimPitch. Foundation's leveling torque is the single
+    /// attitude authority and drives toward the target itself, aim strength on
+    /// the pitch axis only (aimPitchTrackingStrength / pitchRollDamping own the
+    /// response feel). The previous design applied a pitch torque here that
+    /// fought leveling; two competing force systems are a jitter source (see
+    /// Architecture Principles) and coupled the tuning of both modules.
     /// </summary>
     private void ApplyStrafePitch()
     {
         if (_strafeModeBlend <= 0f)
         {
             _strafePitchAccum = 0f;
+            foundation.SetAimPitch(0f, 0f);
             return;
         }
 
@@ -880,21 +888,12 @@ public class HoverController_Propulsion : MonoBehaviour
             aimY = 0f;
 
         // Accumulate stick input as delta. FPS-style.
-        // Stick up (+1) = nose up = negative pitch convention.
+        // Stick up (+1) = nose up = negative pitch convention (Unity euler X).
         _strafePitchAccum -= aimY * P.strafePitchSensitivity * Time.fixedDeltaTime;
         _strafePitchAccum  = Mathf.Clamp(_strafePitchAccum, -P.strafePitchLimit, P.strafePitchLimit);
 
-        float currentPitch = HoverMath.NormalizeAngle(transform.localEulerAngles.x);
-        float pitchError   = _strafePitchAccum - currentPitch;
-
-        // Proportional drive toward accumulated target pitch.
-        float driveTorque = pitchError * P.strafePitchTorque * _strafeModeBlend;
-
-        // Damping: counter-torque opposing current pitch angular velocity.
-        float localPitchRate = transform.InverseTransformDirection(rb.angularVelocity).x;
-        float dampTorque     = -localPitchRate * P.strafePitchDamping * _strafeModeBlend;
-
-        rb.AddRelativeTorque(Vector3.right * (driveTorque + dampTorque), ForceMode.Acceleration);
+        // Weight = strafe blend, so aim authority ramps in/out with strafe mode.
+        foundation.SetAimPitch(_strafePitchAccum, _strafeModeBlend);
     }
 
 }

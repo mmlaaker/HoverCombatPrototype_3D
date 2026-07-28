@@ -48,9 +48,22 @@ public class FoundationTuning
     public float levelingTorqueStrength = 12f;
 
     [Tooltip("Resistance to tilting on the pitch and roll axes. Pair with Leveling Torque Strength to kill wobble. " +
-             "Higher values feel more planted.")]
+             "Higher values feel more planted. Also the sole oscillation killer for aim pitch tracking.")]
     [Range(0f, 30f)]
     public float pitchRollDamping = 8f;
+
+    // -------------------------------------------------------------------------
+    // 🎯 Aim Pitch Tracking
+    // -------------------------------------------------------------------------
+    [Header("🎯 Aim Pitch Tracking")]
+    [Tooltip("Torque strength while an aim pitch target is active (strafe mode). Propulsion sets the target angle " +
+             "via SetAimPitch and leveling drives toward it as the single torque authority, replacing the old " +
+             "design where Propulsion's pitch torque fought leveling (competing forces = jitter). " +
+             "Applies to the PITCH AXIS ONLY: ground-normal alignment (roll, bump following) stays at Leveling " +
+             "Torque Strength, so cranking this for FPS-snappy aim does not stiffen the ride over bumps. " +
+             "Pitch Roll Damping kills the overshoot; raise it if the nose oscillates.")]
+    [Range(0f, 300f)]
+    public float aimPitchTrackingStrength = 150f;
 
     // -------------------------------------------------------------------------
     // 📌 Ground Unstick

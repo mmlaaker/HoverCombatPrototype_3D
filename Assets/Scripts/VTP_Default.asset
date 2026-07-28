@@ -15,12 +15,13 @@ MonoBehaviour:
   foundation:
     hoverHeight: 5
     sensorRange: 7
-    liftStrength: 10000
-    liftDamping: 1500
+    liftStrength: 10
+    liftDamping: 1.5
     enableSlopeLiftCompensation: 1
     slopeLiftMultiplier: 1.15
     levelingTorqueStrength: 12
     pitchRollDamping: 8
+    aimPitchTrackingStrength: 150
     unstickRecoveryDelay: 0.2
     unstickLiftForce: 60
     unstickLiftDuration: 0.15
@@ -70,8 +71,6 @@ MonoBehaviour:
     strafeTopSpeed: 30
     strafeAccel: 25
     strafePitchLimit: 20
-    strafePitchTorque: 3
-    strafePitchDamping: 6
     strafePitchSensitivity: 90
     strafeModeBlendSeconds: 0.2
     strafeLateralCapStrength: 40

@@ -64,8 +64,14 @@ public class HoverController_Foundation : MonoBehaviour
     // 📡 Collision Tracking
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Tracks ground-layer collision contact. OnCollisionStay fires every physics step
-    /// while contact persists, so isContactingGround stays live without polling.
+    /// Tracks ground-layer collision contact. OnCollisionStay fires every physics
+    /// step while contact persists, refreshing a timestamp. Contact state is a
+    /// timestamp, not a boolean, per the timestamps-over-booleans principle:
+    /// an OnCollisionExit-cleared bool goes false when exiting ONE of two
+    /// simultaneously touching ground colliders, and needs the exit callback to
+    /// fire at all (not guaranteed on collider destruction). The timestamp simply
+    /// goes stale. groundContactNormal is only read behind IsContactingGround, so
+    /// staleness there is harmless.
     /// Both flip recovery and unstick read these values; neither writes them.
     /// </summary>
     private void OnCollisionStay(Collision collision)
@@ -73,7 +79,7 @@ public class HoverController_Foundation : MonoBehaviour
         if ((groundLayers.value & (1 << collision.gameObject.layer)) == 0)
             return;
 
-        isContactingGround = true;
+        lastGroundContactTime = Time.time;
 
         int count = collision.GetContacts(_contactBuffer);
         if (count > 0)
@@ -83,15 +89,6 @@ public class HoverController_Foundation : MonoBehaviour
                 normalSum += _contactBuffer[i].normal;
             groundContactNormal = (normalSum / count).normalized;
         }
-    }
-
-    private void OnCollisionExit(Collision collision)
-    {
-        if ((groundLayers.value & (1 << collision.gameObject.layer)) == 0)
-            return;
-
-        isContactingGround  = false;
-        groundContactNormal = Vector3.zero;
     }
 
     // -------------------------------------------------------------------------
@@ -106,8 +103,21 @@ public class HoverController_Foundation : MonoBehaviour
 
     private float   unstickTimer;            // counts up while upright and contacting ground
     private float   flipTimer;               // counts up while flipped, slow, and contacting ground
-    private bool    isContactingGround;      // written by OnCollisionStay/Exit
+    private float   lastGroundContactTime = float.NegativeInfinity; // refreshed by OnCollisionStay
     private Vector3 groundContactNormal;
+
+    /// <summary>
+    /// True while ground contact is fresh. OnCollisionStay refreshes the
+    /// timestamp every physics step during contact; two fixed steps of grace
+    /// covers callback ordering within a step.
+    /// </summary>
+    private bool IsContactingGround => Time.time - lastGroundContactTime <= Time.fixedDeltaTime * 2f;
+
+    // Aim pitch target, written by Propulsion via SetAimPitch each FixedUpdate
+    // while strafe mode is active. Degrees in Unity euler-X convention
+    // (negative = nose up). Weight is the strafe blend (0 = no target).
+    private float aimPitchDegrees;
+    private float aimPitchWeight;
     private float   unstickFiredFlashTimer;  // drives the fired-impulse gizmo
     private bool    rightingAuthorized;      // true after flip timer threshold; cleared when craft rights
     private bool    recoveryEnabled = true;
@@ -123,6 +133,23 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Sets the aim pitch target for the leveling torque. Called by Propulsion
+    /// every FixedUpdate while strafe mode is active (weight = strafe blend),
+    /// and with (0, 0) on strafe exit or EMP freeze.
+    ///
+    /// Degrees use Unity's euler-X convention: negative = nose up.
+    /// While weight > 0, leveling drives toward the ground normal rotated by
+    /// this pitch, at aimPitchTrackingStrength on the pitch axis only. This
+    /// makes leveling the single torque authority over attitude; Propulsion
+    /// applies no pitch torque of its own (competing forces cause jitter).
+    /// </summary>
+    public void SetAimPitch(float degrees, float weight)
+    {
+        aimPitchDegrees = degrees;
+        aimPitchWeight  = Mathf.Clamp01(weight);
+    }
 
     /// <summary>
     /// Enables or disables both flip recovery and ground unstick.
@@ -234,7 +261,10 @@ public class HoverController_Foundation : MonoBehaviour
         {
             Vector3 rayDir = -point.up;
 
-            if (!Physics.Raycast(point.position, rayDir, out RaycastHit hit, F.sensorRange, groundLayers))
+            // QueryTriggerInteraction.Ignore: trigger volumes (pickups, ability
+            // fields) must never feed the hover springs.
+            if (!Physics.Raycast(point.position, rayDir, out RaycastHit hit, F.sensorRange, groundLayers,
+                                 QueryTriggerInteraction.Ignore))
             {
                 if (ShouldDrawDebug)
                     Debug.DrawRay(point.position, rayDir * F.sensorRange, Color.red);
@@ -251,8 +281,17 @@ public class HoverController_Foundation : MonoBehaviour
                 springForce *= Mathf.Lerp(1f, F.slopeLiftMultiplier, slopeFactor);
             }
 
+            // Clamp at zero: the spring only pushes, never pulls. Load-bearing for
+            // jump feel — without it the damping term would fight jump takeoff.
             springForce = Mathf.Max(springForce, 0f);
-            rb.AddForceAtPosition(hit.normal * springForce, point.position, ForceMode.Force);
+
+            // ForceMode.Acceleration: mass independent, like every other force in
+            // the controllers (jump, dodge, unstick, gravity, all torques).
+            // liftStrength/liftDamping are accelerations, so one tuning profile
+            // behaves identically across vehicle masses. Values retuned from
+            // Force-mode by dividing by vehicle mass (1000): 10000 -> 10,
+            // 1500 -> 1.5. Identical forces at mass 1000; feel unchanged.
+            rb.AddForceAtPosition(hit.normal * springForce, point.position, ForceMode.Acceleration);
 
             normalSum    += hit.normal;
             groundedCount++;
@@ -288,15 +327,59 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // ⚖️ Torque-Based Ground-Normal Alignment
+    // ⚖️ Torque-Based Attitude Alignment (ground normal + aim pitch)
     // -------------------------------------------------------------------------
+    /// <summary>
+    /// Single torque authority over attitude. Two responsibilities, one torque:
+    ///
+    ///   Grounded leveling: align chassis up to AverageGroundNormal (original role,
+    ///               unchanged behavior when no aim target is set).
+    ///
+    ///   Aim pitch:  while Propulsion sets a target via SetAimPitch (strafe mode),
+    ///               the target up is the ground normal rotated by the aim pitch.
+    ///               Axis split: the pitch-axis torque component runs at
+    ///               aimPitchTrackingStrength, everything else (roll, bump
+    ///               following) stays at base leveling strength, so FPS-snappy aim
+    ///               tuning (150 vs 12) never stiffens the ride over bumps.
+    ///               Replaces the old design where Propulsion torqued the nose
+    ///               *against* this leveling (competing forces cause jitter).
+    ///               pitchRollDamping is the oscillation killer.
+    ///
+    /// Airborne with an aim target, the pitch axis still tracks (aiming mid-jump
+    /// matters in combat); AverageGroundNormal is Vector3.up there, and the align
+    /// component gets zero strength, preserving free airborne attitude.
+    /// </summary>
     private void ApplyLevelingTorque()
     {
-        if (!IsHoverGrounded || F.levelingTorqueStrength <= 0f)
+        // Aim tracking is honored when hover springs are engaged or the craft is
+        // truly in the air. While scraping ground without hover (belly/roof
+        // contact), recovery paths own attitude and aim must not fight them.
+        bool aiming = aimPitchWeight > 0.001f
+                   && (IsHoverGrounded || !IsContactingGround);
+
+        float baseStrength = IsHoverGrounded ? F.levelingTorqueStrength : 0f;
+
+        if (!aiming && baseStrength <= 0f)
             return;
 
-        Vector3 torqueAxis = Vector3.Cross(transform.up, AverageGroundNormal);
-        rb.AddTorque(torqueAxis * F.levelingTorqueStrength, ForceMode.Acceleration);
+        Vector3 targetUp = aiming
+            ? Quaternion.AngleAxis(aimPitchDegrees, transform.right) * AverageGroundNormal
+            : AverageGroundNormal;
+
+        Vector3 torqueAxis = Vector3.Cross(transform.up, targetUp);
+
+        if (aiming)
+        {
+            Vector3 pitchPart = Vector3.Project(torqueAxis, transform.right);
+            Vector3 alignPart = torqueAxis - pitchPart;
+
+            float aimStrength = Mathf.Lerp(baseStrength, F.aimPitchTrackingStrength, aimPitchWeight);
+            rb.AddTorque(pitchPart * aimStrength + alignPart * baseStrength, ForceMode.Acceleration);
+        }
+        else
+        {
+            rb.AddTorque(torqueAxis * baseStrength, ForceMode.Acceleration);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -361,7 +444,7 @@ public class HoverController_Foundation : MonoBehaviour
 
         // --- Upright unstick path ---
         // Gate: contacting ground AND upright. Speed intentionally not gated.
-        if (isContactingGround && !isFlipped)
+        if (IsContactingGround && !isFlipped)
         {
             unstickTimer += Time.fixedDeltaTime;
 
@@ -387,7 +470,7 @@ public class HoverController_Foundation : MonoBehaviour
 
         // --- Flip recovery path ---
         // Gate: contacting ground AND flipped AND slow.
-        if (isContactingGround && isFlipped && isSlow)
+        if (IsContactingGround && isFlipped && isSlow)
         {
             flipTimer += Time.fixedDeltaTime;
 
@@ -462,7 +545,7 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         // --- Ground contact normal ---
-        if (isContactingGround && groundContactNormal.sqrMagnitude > 0.01f)
+        if (IsContactingGround && groundContactNormal.sqrMagnitude > 0.01f)
         {
             Gizmos.color = Color.cyan;
             Gizmos.DrawRay(transform.position, groundContactNormal * 1.5f);
@@ -470,7 +553,7 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         // --- Upright unstick timer bar (yellow) ---
-        if (isContactingGround && unstickTimer > 0f && profile != null)
+        if (IsContactingGround && unstickTimer > 0f && profile != null)
         {
             float progress  = Mathf.Clamp01(unstickTimer / Mathf.Max(0.01f, F.unstickRecoveryDelay));
             Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.8f, 0f), progress);
@@ -487,7 +570,7 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         // --- Flip recovery timer bar (orange) ---
-        if (isContactingGround && flipTimer > 0f && profile != null)
+        if (IsContactingGround && flipTimer > 0f && profile != null)
         {
             float progress  = Mathf.Clamp01(flipTimer / Mathf.Max(0.01f, F.flipRecoveryDelay));
             Gizmos.color    = Color.Lerp(new Color(1f, 0.4f, 0f), Color.red, progress);

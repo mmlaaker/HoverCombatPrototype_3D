@@ -203,19 +203,10 @@ public class PropulsionTuning
     public float strafeAccel = 15f;
 
     [Tooltip("Maximum nose tilt (up or down) in strafe mode. " +
-             "Applied via torque; Foundation's leveling fights it, creating natural resistance.")]
+             "The accumulated aim angle is clamped to this range; Foundation's leveling drives the nose toward it " +
+             "(response feel lives in Foundation: Aim Pitch Tracking Strength / Pitch Roll Damping).")]
     [Range(5f, 45f)]
     public float strafePitchLimit = 15f;
-
-    [Tooltip("Strength of the torque that drives the nose toward the target pitch in strafe mode. " +
-             "Keep LOW: Foundation's Leveling Torque Strength fights it. Above 5 will oscillate. Try 2 to 5.")]
-    [Range(0.5f, 15f)]
-    public float strafePitchTorque = 3f;
-
-    [Tooltip("Damping on pitch angular velocity in strafe mode. " +
-             "Critical for preventing oscillation. Pair with Strafe Pitch Torque. Try 4 to 8.")]
-    [Range(0f, 20f)]
-    public float strafePitchDamping = 6f;
 
     [Tooltip("Aim sensitivity in degrees per second at full stick deflection. " +
              "Controls how fast the pitch angle changes with stick input. Try 60 to 120.")]
