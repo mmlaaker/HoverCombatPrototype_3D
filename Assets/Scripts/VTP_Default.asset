@@ -22,7 +22,9 @@ MonoBehaviour:
     levelingTorqueStrength: 12
     pitchRollDamping: 8
     aimPitchTrackingStrength: 150
+    aimPitchDamping: 8
     unstickRecoveryDelay: 0.2
+    unstickMaxVerticalSpeed: 1
     unstickLiftForce: 60
     unstickLiftDuration: 0.15
     flipRecoveryAngleThreshold: 80
@@ -73,7 +75,7 @@ MonoBehaviour:
     strafePitchLimit: 20
     strafePitchSensitivity: 90
     strafeModeBlendSeconds: 0.2
-    strafeLateralCapStrength: 40
+    strafeLateralCapStrength: 3
   energy:
     maxEnergy: 100
     startingEnergy: 100

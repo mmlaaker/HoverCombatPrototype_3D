@@ -123,9 +123,10 @@ public class PropulsionTuning
     // 🧲 Drag
     // -------------------------------------------------------------------------
     [Header("🧲 Drag")]
-    [Tooltip("Sideways resistance to lateral velocity. " +
-             "Controls how tightly the chassis tracks its heading and how hard strafe accel must push to build sideways speed. " +
-             "Higher needs higher Strafe Accel to compensate. 0 is fully slippery sideways.")]
+    [Tooltip("Sideways resistance to UNWANTED lateral velocity. " +
+             "Controls how tightly the chassis tracks its heading and how fast residual slide dies. " +
+             "The player's intended strafe velocity is excluded from damping, so this no longer fights strafe input " +
+             "or caps strafe speed (Strafe Top Speed is the real ceiling). 0 is fully slippery sideways.")]
     [Range(0f, 50f)]
     public float lateralDamp = 2f;
 
@@ -191,7 +192,8 @@ public class PropulsionTuning
     [Tooltip("Master switch for strafe / aim mode (Left Trigger).")]
     public bool enableStrafe = true;
 
-    [Tooltip("Maximum speed sustainable in strafe mode. " +
+    [Tooltip("Maximum speed sustainable in strafe mode. This is the REAL lateral ceiling: lateral damp excludes " +
+             "intended strafe velocity, so raising this needs no Strafe Accel compensation. " +
              "Entry speed above this bleeds off naturally via the soft cap. " +
              "Cannot be re-built above this threshold once in strafe.")]
     [Min(1f)]
@@ -217,9 +219,10 @@ public class PropulsionTuning
     [Min(0.05f)]
     public float strafeModeBlendSeconds = 0.2f;
 
-    [Tooltip("Resistance per unit of excess lateral speed in strafe. " +
-             "Caps lateral velocity at Strafe Top Speed without a hard clamp. " +
-             "Only acts on the lateral axis. Try 20 to 60.")]
+    [Tooltip("Over-speed bleed per unit of excess lateral speed in strafe. Lateral drive is gated at the cap " +
+             "(exact-cap clamp), so this only acts on speed ABOVE Strafe Top Speed: dodge bursts, entry momentum, " +
+             "boost fade. Keep it gentle so a dodge fired at the cap reads as an additive surge that glides back " +
+             "down (~1s at 3) instead of being crushed (40 = gone in a tenth of a second). Try 2 to 6.")]
     [Range(0f, 120f)]
-    public float strafeLateralCapStrength = 40f;
+    public float strafeLateralCapStrength = 3f;
 }

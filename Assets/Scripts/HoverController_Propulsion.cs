@@ -16,8 +16,10 @@ using UnityEngine;
 ///   drive. Never both at once. This is the only reliable cure for jitter caused
 ///   by opposing forces fighting at the same speed.
 ///
-///   Top speed is enforced inside ApplyDrive. Once forward speed reaches the cap,
-///   drive simply stops pushing. No drag wall is needed to hold the ceiling.
+///   Top speed is enforced inside ApplyDrive. Full accel until the tick that
+///   crosses the cap, which is clamped to land exactly on it (no overshoot
+///   ripple). At the cap, drive simply stops pushing; no drag wall is needed
+///   to hold the ceiling.
 ///
 ///   Drift modifies three physics values (lateralDamp, forwardDamp, yawAccel) and
 ///   one visual transform (meshRoot Z rotation). It does not introduce new forces.
@@ -585,8 +587,9 @@ public class HoverController_Propulsion : MonoBehaviour
     ///   jitter at any speed between zero and top speed.
     ///
     /// Top speed enforcement: drive is suppressed when forward speed already meets
-    /// or exceeds effectiveTopSpeed. Drag is no longer needed to hold the ceiling;
-    /// the drive simply stops pushing.
+    /// or exceeds effectiveTopSpeed, and the crossing tick is clamped to land
+    /// exactly on the cap (no overshoot ripple). Drag is not needed to hold the
+    /// ceiling; the drive simply stops pushing.
     ///
     /// Airborne: throttle suppressed without boost. Boost re-enables drive scaled by
     /// boost multipliers. Exit velocity carries cleanly as inertia.
@@ -612,6 +615,14 @@ public class HoverController_Propulsion : MonoBehaviour
         float blendedTopSpeed  = Mathf.Lerp(effectiveTopSpeed,     strafeEffectiveTopSpeed, _strafeModeBlend);
         float blendedFwdAccel  = Mathf.Lerp(effectiveForwardAccel, P.strafeAccel,           _strafeModeBlend);
 
+        // Exact-cap clamp: full accel until the tick that crosses the cap, which
+        // is clamped to land exactly ON the cap. Without it, the hard gate
+        // overshot by accel * dt (0.5 m/s at default tuning) and the weak
+        // over-speed bleed took ~1s to pull it back before drive re-fired: a
+        // permanent 0.5 m/s ripple at ~1Hz riding above the cap. Invisible in
+        // motion but it flickers any speedometer HUD and pulses anything keyed
+        // to "is accelerating" (audio pitch, thruster VFX). Feel-identical below
+        // the cap; only the single crossing tick changes.
         float rawAccel = 0f;
         if (grounded)
         {
@@ -619,7 +630,8 @@ public class HoverController_Propulsion : MonoBehaviour
             {
                 // Suppress drive if already at or above top speed forward.
                 if (currentFwd < blendedTopSpeed)
-                    rawAccel = throttle * blendedFwdAccel;
+                    rawAccel = Mathf.Min(throttle * blendedFwdAccel,
+                                         (blendedTopSpeed - currentFwd) / Time.fixedDeltaTime);
             }
             else
             {
@@ -627,14 +639,16 @@ public class HoverController_Propulsion : MonoBehaviour
                 // reverseTopSpeed is independent of strafe mode by design (reverse
                 // and strafe share the same speed budget), so no blending here.
                 if (currentFwd > -P.reverseTopSpeed)
-                    rawAccel = throttle * P.maxReverseAccel;
+                    rawAccel = Mathf.Max(throttle * P.maxReverseAccel,
+                                         (-P.reverseTopSpeed - currentFwd) / Time.fixedDeltaTime);
             }
         }
         else
         {
-            // Airborne with boost. Forward only, capped at top speed.
+            // Airborne with boost. Forward only, capped exactly at top speed.
             if (currentFwd < blendedTopSpeed)
-                rawAccel = Mathf.Max(throttle, 0f) * blendedFwdAccel;
+                rawAccel = Mathf.Min(Mathf.Max(throttle, 0f) * blendedFwdAccel,
+                                     (blendedTopSpeed - currentFwd) / Time.fixedDeltaTime);
         }
 
         if (Mathf.Abs(rawAccel) < 0.001f)
@@ -670,8 +684,10 @@ public class HoverController_Propulsion : MonoBehaviour
     // Drag (grounded only, both axes)
     // -------------------------------------------------------------------------
     /// <summary>
-    /// Lateral drag: always applies grounded. Shapes heading tracking and strafe
-    /// feel regardless of throttle.
+    /// Lateral drag: always applies grounded. Shapes heading tracking and kills
+    /// unwanted slide. The player's intended strafe velocity is excluded from
+    /// damping so drag never fights strafe input; strafeTopSpeed (via the soft
+    /// cap in ApplyStrafe) is the real lateral ceiling.
     ///
     /// Forward drag: mutually exclusive with drive. Only applies near-zero throttle
     /// (coasting or braking). When throttle is held, drive handles the force and
@@ -686,9 +702,24 @@ public class HoverController_Propulsion : MonoBehaviour
             return;
 
         // Lateral drag: always active grounded, independent of throttle.
+        // Damps only UNWANTED lateral velocity: the player's intended strafe
+        // velocity (stick * strafeTopSpeed, boost-scaled to mirror ApplyStrafe's
+        // effectiveLateralTopSpeed) is excluded. Damping raw velocity silently
+        // capped strafe at strafeAccel / lateralDamp (25 m/s at default tuning),
+        // below strafeTopSpeed (30), making that knob dead and the soft cap in
+        // ApplyStrafe unreachable. With the intended term excluded, lateralDamp
+        // purely kills unwanted slide and the soft cap owns the ceiling.
+        // In drive mode intended is zero, so drive-mode behavior is unchanged.
         float effectiveLateralDamp = Mathf.Lerp(P.lateralDamp, P.driftLateralDamp, driftLerp);
         if (effectiveLateralDamp > 0f)
-            rb.AddForce(transform.right * (-_cachedLocalVel.x * effectiveLateralDamp), ForceMode.Acceleration);
+        {
+            float boostRatio      = Mathf.Lerp(1f, P.boostSpeedMultiplier, boostLerp);
+            float intendedLateral = Mathf.Clamp(input.StrafeX, -1f, 1f)
+                                  * P.strafeTopSpeed * boostRatio * _strafeModeBlend;
+            float unwantedLateral = _cachedLocalVel.x - intendedLateral;
+
+            rb.AddForce(transform.right * (-unwantedLateral * effectiveLateralDamp), ForceMode.Acceleration);
+        }
 
         // Forward drag: fades in as throttle approaches zero.
         // Full drag at throttle == 0, zero drag at throttle >= 0.15.
@@ -818,9 +849,12 @@ public class HoverController_Propulsion : MonoBehaviour
     /// In drive mode (blend == 0), lateral movement is fully suppressed: steering
     /// is yaw-only. Lateral damp in ApplyDrag handles residual slide.
     ///
-    /// The per-axis speed cap only kicks in when a single local axis exceeds
-    /// strafeTopSpeed. Forward and lateral are capped independently so entry
-    /// momentum doesn't strangle lateral acceleration.
+    /// Lateral speed model mirrors the forward axis: drive is gated at the
+    /// boost-scaled cap (exact-cap clamp), and a gentle over-speed bleed handles
+    /// anything above it. Forward and lateral are capped independently so entry
+    /// momentum doesn't strangle lateral acceleration. Dodge bursts fired at the
+    /// cap intentionally exceed it and glide back down via the bleed: additive
+    /// mobility, paid for in energy, decaying on its own.
     /// </summary>
     private void ApplyStrafe(bool grounded, float effectiveTopSpeed, float effectiveForwardAccel)
     {
@@ -838,10 +872,28 @@ public class HoverController_Propulsion : MonoBehaviour
         float lateralAccel             = P.strafeAccel * (effectiveForwardAccel / P.maxForwardAccel);
         float effectiveLateralTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
 
-        rb.AddForce(transform.right * (stickX * lateralAccel * _strafeModeBlend), ForceMode.Acceleration);
+        // Lateral drive: gated at the cap with the same exact-cap clamp as
+        // ApplyDrive (the crossing tick lands exactly on the cap). Drive no
+        // longer pushes against the soft cap, which lets the cap below be tuned
+        // purely as a gentle over-speed bleed instead of a wall strong enough
+        // to out-muscle drive.
+        float stickSign          = Mathf.Sign(stickX);
+        float lateralTowardStick = _cachedLocalVel.x * stickSign;
 
-        // Per-axis lateral speed cap. Only resists if lateral velocity alone
-        // exceeds the boost-scaled lateral top speed.
+        if (lateralTowardStick < effectiveLateralTopSpeed)
+        {
+            float accelMag = Mathf.Min(Mathf.Abs(stickX) * lateralAccel * _strafeModeBlend,
+                                       (effectiveLateralTopSpeed - lateralTowardStick) / Time.fixedDeltaTime);
+            rb.AddForce(transform.right * (stickSign * accelMag), ForceMode.Acceleration);
+        }
+
+        // Lateral over-speed bleed. Anything above the boost-scaled cap (dodge
+        // bursts, strafe-entry momentum, boost fade) tapers back down at
+        // excess * strafeLateralCapStrength. Deliberately gentle: a dodge fired
+        // at the cap must read as an ADDITIVE surge that glides back to the cap
+        // (~1s at default tuning), not get crushed. The old value (40) implied
+        // a 25ms decay constant and ate the burst in a tenth of a second, which
+        // silently gated dodge effectiveness at the strafe ceiling.
         float localLateral = _cachedLocalVel.x;
 
         if (Mathf.Abs(localLateral) > effectiveLateralTopSpeed)

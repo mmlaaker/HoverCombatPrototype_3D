@@ -65,6 +65,13 @@ public class FoundationTuning
     [Range(0f, 300f)]
     public float aimPitchTrackingStrength = 150f;
 
+    [Tooltip("EXTRA pitch-rate damping applied only while aiming, on top of Pitch Roll Damping, scaled by the " +
+             "strafe blend. Lets aim settle be tuned independently of ride stiffness. With tracking strength 150: " +
+             "Pitch Roll Damping 8 alone = ~35% overshoot on a flick; +8 here (16 total) = lands clean with snap. " +
+             "More damping also slows the approach slightly; raise tracking strength to compensate if it feels heavy.")]
+    [Range(0f, 30f)]
+    public float aimPitchDamping = 8f;
+
     // -------------------------------------------------------------------------
     // 📌 Ground Unstick
     // -------------------------------------------------------------------------
@@ -73,6 +80,13 @@ public class FoundationTuning
              "Keep this short. This is a physics correction, not a gameplay moment. Try 0.1 to 0.3.")]
     [Min(0f)]
     public float unstickRecoveryDelay = 0.2f;
+
+    [Tooltip("Unstick only arms while vertical speed is below this (m/s). A genuinely stuck craft has settled " +
+             "vertically; a dynamic belly scrape (ramp grind, bottoming out at speed) has not, so scrapes no longer " +
+             "receive periodic lift pulses on top of working hover springs. Horizontal speed remains ungated: " +
+             "unstick still works after any landing. Try 0.5 to 2.")]
+    [Min(0f)]
+    public float unstickMaxVerticalSpeed = 1f;
 
     [Tooltip("Strength of the upward push that frees a stuck chassis. " +
              "Front-loaded and fades over the lift window. Mass independent. Try 40 to 80.")]

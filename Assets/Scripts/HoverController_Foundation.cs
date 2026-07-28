@@ -7,8 +7,10 @@ using UnityEngine;
 /// the ground normal, damps tilt, and runs two recovery paths:
 ///
 ///   Upright unstick: chassis touching ground but not flipped. A short tapering
-///                    upward push frees it. Speed is intentionally NOT gated;
-///                    unstick must work after any landing velocity.
+///                    upward push frees it. Horizontal speed is intentionally
+///                    NOT gated (unstick must work after any landing velocity);
+///                    vertical speed IS gated so dynamic belly scrapes don't
+///                    receive pulse trains while the hover springs are working.
 ///
 ///   Flip recovery:   chassis touching ground, flipped, and slow. Righting
 ///                    torque rotates it back upright. Longer delay so a flip
@@ -387,13 +389,21 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private void ApplyPitchRollDamping()
     {
-        if (F.pitchRollDamping <= 0f)
+        // Aim pitch damping: extra pitch-rate damping while aiming, scaled by
+        // the strafe blend. pitchRollDamping alone (8) underdamps the aim
+        // tracking spring at strength 150 (~35% flick overshoot), but raising it
+        // globally would stiffen terrain response too. This keeps the two
+        // tunable independently: ride damping vs aim settle.
+        float pitchDamping = F.pitchRollDamping + F.aimPitchDamping * aimPitchWeight;
+
+        // pitchDamping >= pitchRollDamping always, so this covers both axes.
+        if (pitchDamping <= 0f)
             return;
 
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
 
         Vector3 dampingLocal = new Vector3(
-            -localAngVel.x * F.pitchRollDamping,
+            -localAngVel.x * pitchDamping,
             0f,
             -localAngVel.z * F.pitchRollDamping
         );
@@ -407,8 +417,9 @@ public class HoverController_Foundation : MonoBehaviour
     /// <summary>
     /// Two fully independent recovery paths:
     ///
-    ///   Upright unstick: contacting ground AND not flipped. Speed not gated.
-    ///                    After unstickRecoveryDelay, begins a sustained upward push
+    ///   Upright unstick: contacting ground AND not flipped AND vertically
+    ///                    settled (horizontal speed not gated). After
+    ///                    unstickRecoveryDelay, begins a sustained upward push
     ///                    window via ApplyUnstickForce.
     ///
     ///   Flip recovery:   contacting ground AND flipped AND slow.
@@ -443,8 +454,16 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         // --- Upright unstick path ---
-        // Gate: contacting ground AND upright. Speed intentionally not gated.
-        if (IsContactingGround && !isFlipped)
+        // Gate: contacting ground AND upright AND vertically settled.
+        // Horizontal speed is intentionally NOT gated (unstick must work after
+        // any landing). Vertical speed IS gated: a genuinely stuck craft has
+        // settled vertically, while a dynamic belly scrape has not. Without
+        // this gate, sustained scrapes received a lift pulse every
+        // unstickRecoveryDelay on top of working hover springs (a ~5Hz kick
+        // train at default tuning).
+        bool verticallySettled = Mathf.Abs(rb.linearVelocity.y) < F.unstickMaxVerticalSpeed;
+
+        if (IsContactingGround && !isFlipped && verticallySettled)
         {
             unstickTimer += Time.fixedDeltaTime;
 
