@@ -46,10 +46,10 @@ MonoBehaviour:
     boostSpeedMultiplier: 1.5
     boostBlendSeconds: 0.35
     boostEnergyPerSecond: 20
-    dodgeForce: 700
+    dodgeForce: 1000
     dodgeDuration: 0.1
     dodgeEnergyCost: 15
-    dodgeCooldown: 0.2
+    dodgeCooldown: 1
     enableJump: 1
     jumpImpulseMin: 15
     jumpImpulseMax: 40
@@ -84,3 +84,13 @@ MonoBehaviour:
   health:
     maxHealth: 100
     startingHealth: 100
+  shield:
+    enableShield: 1
+    shieldDuration: 2
+    shieldEnergyCost: 35
+  emp:
+    enableEmp: 1
+    empEnergyCost: 70
+    empFreezeDuration: 2.5
+    empScanRange: 50
+    empScanConeAngle: 25
