@@ -28781,10 +28781,18 @@ PrefabInstance:
       propertyPath: EmissionModule.rateOverTime.scalar
       value: 8
       objectReference: {fileID: 0}
+    - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: drawDebug
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 948721441313247371, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 1102521362177438387, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: muzzlePoint
+      value: 
+      objectReference: {fileID: 1504178126}
     - target: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -28808,6 +28816,10 @@ PrefabInstance:
     - target: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: lockTargetLayers.m_Bits
+      value: 128
       objectReference: {fileID: 0}
     - target: {fileID: 2715742177400560942, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_IsActive
@@ -28885,6 +28897,14 @@ PrefabInstance:
       propertyPath: Lens.FieldOfView
       value: 55
       objectReference: {fileID: 0}
+    - target: {fileID: 7415180910227742868, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: landingDustPrefab
+      value: 
+      objectReference: {fileID: 100006, guid: 7c442b9b6852b8a4f93306f3d154d471, type: 3}
+    - target: {fileID: 7415180910227742868, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: landingDustHeavyPrefab
+      value: 
+      objectReference: {fileID: 100008, guid: 06736895ea0a4ff408d25e6684dce797, type: 3}
     - target: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_Name
       value: HoverCar_Prototype
@@ -36315,6 +36335,11 @@ MonoBehaviour:
   m_SelectedFaces: 
   m_SelectedEdges: []
   m_SelectedVertices: 
+--- !u!4 &1504178126 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 8507562749603942535, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+  m_PrefabInstance: {fileID: 1266020441}
+  m_PrefabAsset: {fileID: 0}
 --- !u!43 &1525478444
 Mesh:
   m_ObjectHideFlags: 0

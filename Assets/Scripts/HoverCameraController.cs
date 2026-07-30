@@ -3,7 +3,25 @@ using Unity.Cinemachine;
 using Unity.Cinemachine.TargetTracking;
 
 /// <summary>
-/// HoverCameraController v1.1
+/// HoverCameraController v1.2
+/// ------------------------------------------------
+/// v1.2 changes:
+///   • Heading stabilization proxy. The drive cam no longer follows the vehicle
+///     transform directly: LockToTargetWithWorldUp derives yaw from the vehicle
+///     rotation, and that decomposition flips 180 degrees when the nose pitches
+///     through vertical (air-control flips), swinging the camera around the
+///     vehicle. The drive cam now follows a runtime "CameraHeadingProxy" that
+///     copies vehicle position but carries yaw only: read from the transform
+///     while the vehicle is upright within maxStableTilt, integrated from the
+///     Rigidbody's world-Y angular velocity while tilted past it. Pure flips and
+///     barrel rolls have ~zero world-Y angular velocity, so the camera holds its
+///     heading while the vehicle rotates in front of it; deliberate mid-air yaw
+///     still tracks. LookAt stays on the real vehicle so flips remain centered.
+///     While air control is active (Propulsion.AirControlWeight), heading
+///     tracking fades to zero entirely — mixed roll+pitch input wanders the
+///     nose off-axis and would otherwise sway the camera sideways mid-roll;
+///     the stunt gets a stable frame and heading reconverges on release.
+///     Strafe cam is unaffected (air control is suppressed in strafe mode).
 /// ------------------------------------------------
 /// v1.1 changes:
 ///   • Drive cam damping values now cached from Inspector in Awake (_drivePositionDamping,
@@ -127,6 +145,22 @@ public class HoverCameraController : MonoBehaviour
     [Range(1f, 15f)]
     [SerializeField] private float shoulderShiftLerpSpeed = 8f;
 
+    // ── Drive Mode: Heading Stabilization ─────────────────────────────────
+
+    [Header("Drive Mode — Heading Stabilization")]
+    [Tooltip("Vehicle tilt (degrees from upright) beyond which the drive camera stops reading yaw " +
+             "directly from the transform and integrates the vehicle's yaw rate instead. Prevents " +
+             "the 180-degree camera swing when the nose pitches through vertical during flips. " +
+             "Try 45 to 75.")]
+    [Range(30f, 85f)]
+    [SerializeField] private float maxStableTilt = 60f;
+
+    [Tooltip("How fast the stabilized heading re-converges to the vehicle's true yaw while upright " +
+             "(per second). High enough to be imperceptible in normal driving, low enough to avoid " +
+             "a snap after a flip lands with a changed heading. Try 8 to 15.")]
+    [Range(1f, 30f)]
+    [SerializeField] private float headingSyncSpeed = 12f;
+
     // ── Strafe Mode: Zoom ─────────────────────────────────────────────────
 
     [Header("Strafe Mode — Zoom")]
@@ -170,6 +204,13 @@ public class HoverCameraController : MonoBehaviour
     private Vector3 _drivePositionDamping;
     private Vector3 _driveRotationDamping;
 
+    // Heading stabilization proxy — the drive cam's actual Follow target.
+    // Copies vehicle position each LateUpdate; rotation is yaw only.
+    private Transform _headingProxy;
+    private float     _headingYaw;    // degrees, world yaw of the proxy
+    private float     _minStableUpY;  // cos(maxStableTilt), cached in Awake
+    private Rigidbody _vehicleRb;     // yaw-rate source while tilted past stable range
+
     // ── Unity Lifecycle ───────────────────────────────────────────────────
 
     private void Awake()
@@ -203,8 +244,21 @@ public class HoverCameraController : MonoBehaviour
                              "Shoulder shift via driftLerp will be disabled.", this);
         }
 
-        // Assign follow/look targets on both VCams
-        vcamDrive.Follow  = vehicleTarget;
+        // Heading proxy: the drive cam follows this instead of the vehicle so
+        // its yaw frame stays stable through air-control flips (see v1.2 notes).
+        _minStableUpY = Mathf.Cos(maxStableTilt * Mathf.Deg2Rad);
+        _vehicleRb    = vehicleTarget.GetComponent<Rigidbody>();
+
+        _headingProxy = new GameObject("CameraHeadingProxy").transform;
+        _headingProxy.position = vehicleTarget.position;
+        _headingYaw            = vehicleTarget.eulerAngles.y;
+        _headingProxy.rotation = Quaternion.Euler(0f, _headingYaw, 0f);
+
+        // Assign follow/look targets. Drive cam follows the stable-yaw proxy but
+        // still LOOKS at the real vehicle, so flips stay centered on screen.
+        // Strafe cam keeps the vehicle for both: it must pitch with the nose,
+        // and air control is suppressed in strafe mode so it can never flip.
+        vcamDrive.Follow  = _headingProxy;
         vcamDrive.LookAt  = vehicleTarget;
         vcamStrafe.Follow = vehicleTarget;
         vcamStrafe.LookAt = vehicleTarget;
@@ -263,6 +317,8 @@ public class HoverCameraController : MonoBehaviour
     {
         if (_input == null) return;
 
+        UpdateHeadingProxy();
+
         bool strafing = _input.StrafeHeld;
 
         // ── Mode transitions ──────────────────────────────────────────────
@@ -280,6 +336,52 @@ public class HoverCameraController : MonoBehaviour
             UpdateDriveShoulderShift();
         }
         // Strafe cam is fully static relative to vehicle — no per-frame adjustments needed
+    }
+
+    // ── Drive Mode: Heading Stabilization ─────────────────────────────────
+
+    /// <summary>
+    /// Keeps the heading proxy on the vehicle's position with a yaw that stays
+    /// well-behaved through flips. Yaw read directly from the transform is only
+    /// well-conditioned while the vehicle is reasonably upright; past
+    /// maxStableTilt (nose through vertical mid-flip) the euler decomposition
+    /// flips 180 degrees — exactly the camera swing this proxy prevents.
+    /// </summary>
+    private void UpdateHeadingProxy()
+    {
+        _headingProxy.position = vehicleTarget.position;
+
+        // While air control is active, the camera should NOT track heading at
+        // all: mixed roll+pitch input makes the nose wander off-axis, and once
+        // rolled toward 90 degrees, pitch input rotates about a near-vertical
+        // axis — real world-Y angular velocity the integrator would faithfully
+        // follow, swinging the camera sideways mid-roll. A stunt wants a stable
+        // frame. Authority fades tracking to zero at full air control and
+        // restores it as the blend releases (drift release or landing); any
+        // heading change made mid-stunt is then caught up via the converge path.
+        float trackAuthority = 1f - (propulsion != null ? propulsion.AirControlWeight : 0f);
+
+        bool uprightEnough = vehicleTarget.up.y >= _minStableUpY;
+
+        if (uprightEnough)
+        {
+            // Exponential converge: error is ~0 in normal driving so tracking is
+            // effectively instant; after a flip lands with a changed heading it
+            // catches up smoothly instead of snapping.
+            float t = 1f - Mathf.Exp(-headingSyncSpeed * trackAuthority * Time.deltaTime);
+            _headingYaw = Mathf.LerpAngle(_headingYaw, vehicleTarget.eulerAngles.y, t);
+        }
+        else if (_vehicleRb != null)
+        {
+            // Tilted past the stable range: integrate the true yaw rate instead.
+            // A pure pitch flip or barrel roll has ~zero world-Y angular
+            // velocity, so the heading holds; yaw during non-air-control tumbles
+            // (EMP hits) still tracks.
+            _headingYaw += _vehicleRb.angularVelocity.y * Mathf.Rad2Deg * trackAuthority * Time.deltaTime;
+        }
+        // No Rigidbody on the target: heading simply holds while tilted.
+
+        _headingProxy.rotation = Quaternion.Euler(0f, _headingYaw, 0f);
     }
 
     // ── Drive Mode: Camera Pitch ──────────────────────────────────────────
@@ -401,6 +503,13 @@ public class HoverCameraController : MonoBehaviour
         s.PositionDamping = Vector3.zero;
         s.RotationDamping = Vector3.zero;
         _strafeTransposer.TrackerSettings = s;
+    }
+
+    private void OnDestroy()
+    {
+        // The heading proxy is a runtime-created scene object; clean it up with us.
+        if (_headingProxy != null)
+            Destroy(_headingProxy.gameObject);
     }
 
     // ── Public API ────────────────────────────────────────────────────────

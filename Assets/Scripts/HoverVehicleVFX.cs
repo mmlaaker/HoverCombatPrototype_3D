@@ -97,9 +97,30 @@ public class HoverVehicleVFX : MonoBehaviour
     [SerializeField] private float throttleBlendSpeed = 8f;
 
     // -------------------------------------------------------------------------
+    // Landing Dust
+    // -------------------------------------------------------------------------
+    // One-shot Instantiate rather than mounted slots: the WarFX prefabs are
+    // authored as play-on-awake one-shots with auto-destruct, same pattern as
+    // RocketProjectile's explosionPrefab.
+    [Header("Landing Dust")]
+    [Tooltip("One-shot dust prefab spawned at the ground on any hard landing. Try WFX_ExplosiveSmokeGround Small.")]
+    [SerializeField] private GameObject landingDustPrefab;
+
+    [Tooltip("Bigger one-shot spawned instead when severity meets Heavy Severity Threshold. Try WFX_ExplosiveSmokeGround Big.")]
+    [SerializeField] private GameObject landingDustHeavyPrefab;
+
+    [Tooltip("Severity (0..1) at or above which the heavy dust prefab is used instead of the standard one.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float heavySeverityThreshold = 0.6f;
+
+    [Tooltip("Layers used to find the ground point under the vehicle for dust placement. Match Foundation's Ground Layers.")]
+    [SerializeField] private LayerMask dustGroundLayers = ~0;
+
+    // -------------------------------------------------------------------------
     // Runtime
     // -------------------------------------------------------------------------
     private HoverController_Propulsion propulsion;
+    private HoverController_Foundation foundation;
     private IHoverInputProvider        input;
     private float                      smoothedThrottle;
 
@@ -109,6 +130,7 @@ public class HoverVehicleVFX : MonoBehaviour
     private void Awake()
     {
         propulsion = GetComponent<HoverController_Propulsion>();
+        foundation = GetComponent<HoverController_Foundation>();
         input      = GetComponent<IHoverInputProvider>();
     }
 
@@ -116,12 +138,18 @@ public class HoverVehicleVFX : MonoBehaviour
     {
         if (propulsion != null)
             propulsion.OnDodge += HandleDodge;
+
+        if (foundation != null)
+            foundation.OnHardLanding += HandleHardLanding;
     }
 
     private void OnDisable()
     {
         if (propulsion != null)
             propulsion.OnDodge -= HandleDodge;
+
+        if (foundation != null)
+            foundation.OnHardLanding -= HandleHardLanding;
     }
 
     private void Start()
@@ -175,6 +203,30 @@ public class HoverVehicleVFX : MonoBehaviour
             PlayAll(leftDodge);
             PlayAll(rightDodge);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Hard landing handler
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Called by Foundation.OnHardLanding. Spawns a one-shot dust burst at the
+    /// ground point below the vehicle; heavy prefab at high severity.
+    /// </summary>
+    private void HandleHardLanding(float severity)
+    {
+        GameObject prefab = severity >= heavySeverityThreshold && landingDustHeavyPrefab != null
+            ? landingDustHeavyPrefab
+            : landingDustPrefab;
+
+        if (prefab == null)
+            return;
+
+        Vector3 spawnPos = Physics.Raycast(transform.position, Vector3.down, out RaycastHit hit, 15f,
+                                           dustGroundLayers, QueryTriggerInteraction.Ignore)
+            ? hit.point
+            : transform.position + Vector3.down * 3f;
+
+        Instantiate(prefab, spawnPos, Quaternion.identity);
     }
 
     // -------------------------------------------------------------------------

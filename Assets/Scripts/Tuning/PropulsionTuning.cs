@@ -186,6 +186,20 @@ public class PropulsionTuning
     public float bankLerpSpeed = 8f;
 
     // -------------------------------------------------------------------------
+    // 🛩 Air Control
+    // -------------------------------------------------------------------------
+    [Header("🛩 Air Control")]
+    [Tooltip("Master switch for airborne air control. While airborne and holding drift, left stick Y pitches " +
+             "(up = nose down) and left stick X rolls; right stick X stays yaw. Torque authority and damping " +
+             "live in Foundation: Air Control.")]
+    public bool enableAirControl = true;
+
+    [Tooltip("How long air control authority ramps in and out on drift press / release or takeoff / landing. " +
+             "Matches Drift Blend Seconds so a hop out of a drift hands off cleanly. Try 0.1 to 0.25.")]
+    [Min(0.01f)]
+    public float airControlBlendSeconds = 0.15f;
+
+    // -------------------------------------------------------------------------
     // 🎯 Strafe Mode
     // -------------------------------------------------------------------------
     [Header("🎯 Strafe Mode")]

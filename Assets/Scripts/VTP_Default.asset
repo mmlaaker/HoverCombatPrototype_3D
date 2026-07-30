@@ -23,6 +23,9 @@ MonoBehaviour:
     pitchRollDamping: 8
     aimPitchTrackingStrength: 150
     aimPitchDamping: 8
+    airPitchTorque: 14
+    airRollTorque: 24
+    airControlDamping: 4
     unstickRecoveryDelay: 0.2
     unstickMaxVerticalSpeed: 1
     unstickLiftForce: 60
@@ -33,6 +36,11 @@ MonoBehaviour:
     flipRecoverySpeedThreshold: 0.5
     extraGravityMultiplier: 3
     extraAirGravity: 3
+    enableHardLanding: 1
+    hardLandingMinSpeed: 45
+    hardLandingMaxSpeed: 70
+    hardLandingSuppressStrength: 0.9
+    hardLandingSuppressDuration: 0.35
   propulsion:
     maxForwardAccel: 50
     topSpeed: 50
@@ -69,6 +77,8 @@ MonoBehaviour:
     maxBankAngle: 12
     passiveBankAngle: 3
     bankLerpSpeed: 8
+    enableAirControl: 1
+    airControlBlendSeconds: 0.15
     enableStrafe: 1
     strafeTopSpeed: 30
     strafeAccel: 25

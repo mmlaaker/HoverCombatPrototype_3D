@@ -1,7 +1,19 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v1.0
+/// HoverController_Foundation v1.2
+///
+/// v1.2: Air control torque. Propulsion pushes airborne pitch/roll intent via
+///       SetAirControl(pitch, roll, weight) while drift is held airborne;
+///       per-axis torque authority (roll runs hotter than pitch), and
+///       pitch/roll damping crossfades toward airControlDamping by the weight
+///       so sustained rotation is actually reachable. Still the single
+///       attitude authority: Propulsion applies no attitude torque itself.
+///
+/// v1.1: Hard landing spring give. On an airborne-to-grounded edge above a speed
+///       threshold, spring forces are suppressed for a short front-loaded window
+///       so the chassis slams onto its collider before popping back to ride
+///       height. Fires OnHardLanding(severity). Feel only; no damage, no lockout.
 ///
 /// Holds the chassis at hover height via per-point spring-dampers, levels it to
 /// the ground normal, damps tilt, and runs two recovery paths:
@@ -120,17 +132,38 @@ public class HoverController_Foundation : MonoBehaviour
     // (negative = nose up). Weight is the strafe blend (0 = no target).
     private float aimPitchDegrees;
     private float aimPitchWeight;
+
+    // Air control intent, written by Propulsion via SetAirControl each
+    // FixedUpdate while airborne with drift held. Inputs are raw stick -1..1;
+    // weight is the air-control blend already suppressed by strafe precedence
+    // (0 = inactive).
+    private float airControlPitchInput;
+    private float airControlRollInput;
+    private float airControlWeight;
     private float   unstickFiredFlashTimer;  // drives the fired-impulse gizmo
     private bool    rightingAuthorized;      // true after flip timer threshold; cleared when craft rights
     private bool    recoveryEnabled = true;
     private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
     private Vector3 unstickForceDir;         // direction cached at trigger time, held for duration
+    private float   hardLandingTimer;        // counts down while hard-landing spring suppression is active
+    private float   hardLandingSeverity;     // 0..1, cached at detection so the taper scales with impact
 
     /// <summary>True when at least one hover point has a ground hit this frame.</summary>
     public bool IsHoverGrounded { get; private set; }
 
     /// <summary>Average ground normal this frame (Vector3.up when airborne).</summary>
     public Vector3 AverageGroundNormal { get; private set; }
+
+    // -------------------------------------------------------------------------
+    // 📢 Events
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fired once when the vehicle lands harder than hardLandingMinSpeed.
+    /// Parameter is severity 0..1 mapping min..max impact speed. Pure feel hook
+    /// today (VFX, camera punch); gameplay consequences can subscribe later.
+    /// </summary>
+    public event System.Action<float> OnHardLanding;
 
     // -------------------------------------------------------------------------
     // Public API
@@ -151,6 +184,23 @@ public class HoverController_Foundation : MonoBehaviour
     {
         aimPitchDegrees = degrees;
         aimPitchWeight  = Mathf.Clamp01(weight);
+    }
+
+    /// <summary>
+    /// Sets the airborne pitch/roll control intent. Called by Propulsion every
+    /// FixedUpdate (weight = air-control blend, strafe-suppressed), and with
+    /// (0, 0, 0) when inactive or on EMP freeze.
+    ///
+    /// Sign conventions (applied here, not by the caller):
+    ///   pitchInput +1 (stick up)    = nose down (+local X), arcade car standard.
+    ///   rollInput  +1 (stick right) = roll right (-local Z), matching the
+    ///   chassis-bank convention in Propulsion.
+    /// </summary>
+    public void SetAirControl(float pitchInput, float rollInput, float weight)
+    {
+        airControlPitchInput = Mathf.Clamp(pitchInput, -1f, 1f);
+        airControlRollInput  = Mathf.Clamp(rollInput,  -1f, 1f);
+        airControlWeight     = Mathf.Clamp01(weight);
     }
 
     /// <summary>
@@ -234,6 +284,7 @@ public class HoverController_Foundation : MonoBehaviour
         ApplyHoverForces();
         ApplyExtraGravity();
         ApplyLevelingTorque();
+        ApplyAirControlTorque();
         ApplyPitchRollDamping();
         HandleRecovery();
         ApplyUnstickForce();
@@ -253,8 +304,23 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     private void ApplyHoverForces()
     {
+        bool wasHoverGrounded = IsHoverGrounded;
+
         IsHoverGrounded     = false;
         AverageGroundNormal = Vector3.up;
+
+        // Hard landing: tick the suppression window (front-loaded taper, same
+        // idiom as unstick). liftFactor is exactly 1 when the timer is idle, so
+        // the normal hot path pays one comparison.
+        if (hardLandingTimer > 0f)
+            hardLandingTimer = Mathf.Max(0f, hardLandingTimer - Time.fixedDeltaTime);
+
+        float liftFactor = 1f;
+        if (hardLandingTimer > 0f)
+        {
+            float progress = hardLandingTimer / Mathf.Max(0.01f, F.hardLandingSuppressDuration);
+            liftFactor = 1f - F.hardLandingSuppressStrength * hardLandingSeverity * progress;
+        }
 
         Vector3 normalSum     = Vector3.zero;
         int     groundedCount = 0;
@@ -287,6 +353,10 @@ public class HoverController_Foundation : MonoBehaviour
             // jump feel — without it the damping term would fight jump takeoff.
             springForce = Mathf.Max(springForce, 0f);
 
+            // Hard landing spring give: momentum carries the chassis through
+            // hover height onto its collider while the taper restores strength.
+            springForce *= liftFactor;
+
             // ForceMode.Acceleration: mass independent, like every other force in
             // the controllers (jump, dodge, unstick, gravity, all torques).
             // liftStrength/liftDamping are accelerations, so one tuning profile
@@ -306,7 +376,38 @@ public class HoverController_Foundation : MonoBehaviour
         {
             IsHoverGrounded     = true;
             AverageGroundNormal = (normalSum / groundedCount).normalized;
+
+            if (!wasHoverGrounded)
+                DetectHardLanding();
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // 💥 Hard Landing Detection
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Called on the airborne-to-grounded edge. Samples descent speed along the
+    /// ground normal (rb.linearVelocity is pre-integration here, so this frame's
+    /// spring forces have not contaminated the read) and, above the threshold,
+    /// arms the spring-suppression window and fires OnHardLanding.
+    /// </summary>
+    private void DetectHardLanding()
+    {
+        if (!F.enableHardLanding)
+            return;
+
+        float impactSpeed = -Vector3.Dot(rb.linearVelocity, AverageGroundNormal);
+
+        if (impactSpeed < F.hardLandingMinSpeed)
+            return;
+
+        hardLandingSeverity = Mathf.InverseLerp(F.hardLandingMinSpeed, F.hardLandingMaxSpeed, impactSpeed);
+        hardLandingTimer    = F.hardLandingSuppressDuration;
+
+        OnHardLanding?.Invoke(hardLandingSeverity);
+
+        if (ShouldDrawDebug)
+            Debug.Log($"[Foundation] Hard landing: {impactSpeed:F1} m/s, severity {hardLandingSeverity:F2}", this);
     }
 
     // -------------------------------------------------------------------------
@@ -385,6 +486,38 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
+    // 🛩 Air Control Torque (airborne pitch/roll from Propulsion intent)
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Applies pitch/roll torque from the air-control intent set by Propulsion
+    /// (drift held while airborne). Independent per-axis authority: roll runs
+    /// hotter than pitch so a car-shaped craft barrel rolls faster than it flips.
+    ///
+    /// Steady-state rate per axis is torque / airControlDamping (both are
+    /// angular accelerations); ApplyPitchRollDamping lerps its damping toward
+    /// airControlDamping by this weight so the rates are actually reachable.
+    ///
+    /// No grounded gate needed: airborne, leveling baseStrength is already 0 so
+    /// nothing fights this; on landing the weight decays over the blend window
+    /// (~0.15s) and grounded leveling wins immediately. No enable check here:
+    /// enableAirControl gates at the intent source in Propulsion, same as
+    /// enableStrafe gates SetAimPitch.
+    /// </summary>
+    private void ApplyAirControlTorque()
+    {
+        if (airControlWeight <= 0.001f)
+            return;
+
+        Vector3 torqueLocal = new Vector3(
+             airControlPitchInput * F.airPitchTorque,   // +X = nose down
+            0f,
+            -airControlRollInput * F.airRollTorque      // -Z = roll right
+        ) * airControlWeight;
+
+        rb.AddRelativeTorque(torqueLocal, ForceMode.Acceleration);
+    }
+
+    // -------------------------------------------------------------------------
     // ⚙️ Torque-Based Pitch/Roll Damping
     // -------------------------------------------------------------------------
     private void ApplyPitchRollDamping()
@@ -395,9 +528,20 @@ public class HoverController_Foundation : MonoBehaviour
         // globally would stiffen terrain response too. This keeps the two
         // tunable independently: ride damping vs aim settle.
         float pitchDamping = F.pitchRollDamping + F.aimPitchDamping * aimPitchWeight;
+        float rollDamping  = F.pitchRollDamping;
 
-        // pitchDamping >= pitchRollDamping always, so this covers both axes.
-        if (pitchDamping <= 0f)
+        // Air control needs sustained rotation; ride damping (8) would cap roll
+        // at half the intended rate and double the effective torque cost. Lerp
+        // toward the dedicated air-control damping by air-control weight. Safe
+        // against double-dip with aim damping: strafe precedence in Propulsion
+        // makes aimPitchWeight and airControlWeight complementary, never both high.
+        if (airControlWeight > 0f)
+        {
+            pitchDamping = Mathf.Lerp(pitchDamping, F.airControlDamping, airControlWeight);
+            rollDamping  = Mathf.Lerp(rollDamping,  F.airControlDamping, airControlWeight);
+        }
+
+        if (pitchDamping <= 0f && rollDamping <= 0f)
             return;
 
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
@@ -405,7 +549,7 @@ public class HoverController_Foundation : MonoBehaviour
         Vector3 dampingLocal = new Vector3(
             -localAngVel.x * pitchDamping,
             0f,
-            -localAngVel.z * F.pitchRollDamping
+            -localAngVel.z * rollDamping
         );
 
         rb.AddRelativeTorque(dampingLocal, ForceMode.Acceleration);

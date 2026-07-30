@@ -73,6 +73,30 @@ public class FoundationTuning
     public float aimPitchDamping = 8f;
 
     // -------------------------------------------------------------------------
+    // 🛩 Air Control
+    // -------------------------------------------------------------------------
+    [Header("🛩 Air Control")]
+    [Tooltip("Pitch torque while air control is active (drift held airborne). Stick up = nose down. " +
+             "Steady flip rate is this divided by Air Control Damping: 14 over 4 = ~200 deg/s, a full flip " +
+             "in about 2 seconds. Keep below Air Roll Torque: a car-shaped craft flips slower than it rolls. " +
+             "Try 10 to 20.")]
+    [Range(0f, 60f)]
+    public float airPitchTorque = 14f;
+
+    [Tooltip("Roll torque while air control is active. Stick right = roll right. Steady roll rate is this " +
+             "divided by Air Control Damping: 24 over 4 = ~344 deg/s, a full barrel roll in just over a second. " +
+             "Try 18 to 32.")]
+    [Range(0f, 60f)]
+    public float airRollTorque = 24f;
+
+    [Tooltip("Pitch/roll damping while air control is active, replacing Pitch Roll Damping as the air-control " +
+             "blend rises. Sets both the rotation ceiling (rate = torque / this) and stop precision on stick " +
+             "release (~95% stopped in 3 / this seconds). Lower spins faster but drifts past the release point; " +
+             "higher stops on a dime but needs more torque. Try 3 to 6.")]
+    [Range(0f, 30f)]
+    public float airControlDamping = 4f;
+
+    // -------------------------------------------------------------------------
     // 📌 Ground Unstick
     // -------------------------------------------------------------------------
     [Header("📌 Ground Unstick")]
@@ -133,4 +157,36 @@ public class FoundationTuning
              "Reduces hangtime after jumps and ramps without affecting grounded feel.")]
     [Range(0f, 30f)]
     public float extraAirGravity = 0f;
+
+    // -------------------------------------------------------------------------
+    // 💥 Hard Landing
+    // -------------------------------------------------------------------------
+    [Header("💥 Hard Landing")]
+    [Tooltip("Master switch for hard landing impacts. When on, falls faster than Hard Landing Min Speed " +
+             "make the hover springs give way so the chassis slams the ground before popping back to ride " +
+             "height. Feel only: no damage, no control loss.")]
+    public bool enableHardLanding = true;
+
+    [Tooltip("Downward speed (m/s along the ground normal) at the moment the hover sensors first see ground " +
+             "that counts as a hard landing. Keep this above the fastest jump return speed (~38 from a " +
+             "max-charge jump, ~43 with an air jump stacked, at default gravity tuning) so ordinary jumps " +
+             "never trigger it. Try 42 to 50.")]
+    [Min(0f)]
+    public float hardLandingMinSpeed = 45f;
+
+    [Tooltip("Downward speed at which the crash reads at full severity. Roughly a 60m drop at default " +
+             "gravity tuning. Try 65 to 80.")]
+    [Min(0f)]
+    public float hardLandingMaxSpeed = 70f;
+
+    [Tooltip("How much of the hover spring gives way at full severity. 1 cuts the springs out completely " +
+             "so the chassis free-falls onto its collider; 0.5 is a heavy sag. Try 0.8 to 1.")]
+    [Range(0f, 1f)]
+    public float hardLandingSuppressStrength = 0.9f;
+
+    [Tooltip("How long the springs stay weakened after a hard landing. Front-loaded: weakest on the first " +
+             "frame, tapering back to full strength. Longer reads heavier but delays the pop back to ride " +
+             "height. Keep under ~0.5 so ground unstick never arms during the slam. Try 0.25 to 0.5.")]
+    [Min(0.05f)]
+    public float hardLandingSuppressDuration = 0.35f;
 }

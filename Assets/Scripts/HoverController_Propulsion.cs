@@ -1,7 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.0
+/// HoverController_Propulsion v1.1
+///
+/// v1.1: Airborne air control. While airborne with drift held, left stick Y = pitch
+///       (up = nose down, arcade car convention) and left stick X = roll; right
+///       stick X stays yaw via the existing airborne turning path. Intent is
+///       handed to Foundation via SetAirControl (no torque here, same pattern as
+///       strafe pitch). Strafe-aim wins airborne: effective weight is scaled by
+///       (1 - strafe blend). Reuses the Drift bool, which is free airborne.
 ///
 /// Drives the chassis forward, back, sideways, and up. Owns turning, drag, drift,
 /// boost, dodge, jump, and strafe-mode authority.
@@ -107,6 +114,12 @@ public class HoverController_Propulsion : MonoBehaviour
     private float _strafePitchAccum; // accumulated FPS-style pitch angle (degrees)
 
     // -------------------------------------------------------------------------
+    // 🛩 Air control runtime state
+    // -------------------------------------------------------------------------
+    private float _airControlBlend;  // 0..1, managed by ApplyAirControl
+    private float _airControlWeight; // effective authority after strafe suppression
+
+    // -------------------------------------------------------------------------
     // Public read-only state
     // -------------------------------------------------------------------------
 
@@ -133,6 +146,12 @@ public class HoverController_Propulsion : MonoBehaviour
     /// Read by HoverController_Aim to scale aim pitch in sync with strafe entry/exit.
     /// </summary>
     public float StrafeModeBlend => _strafeModeBlend;
+
+    /// <summary>
+    /// Current air-control authority (0 = none, 1 = full pitch/roll authority).
+    /// Already suppressed by strafe mode. For future camera/VFX/HUD hooks.
+    /// </summary>
+    public float AirControlWeight => _airControlWeight;
 
     // -------------------------------------------------------------------------
     // 📢 Events
@@ -246,11 +265,14 @@ public class HoverController_Propulsion : MonoBehaviour
         airJumpAvailable   = false;
         boostHeldLastFrame = false;
         jumpHeldLastFrame  = false;
+        _airControlBlend   = 0f;
+        _airControlWeight  = 0f;
 
         // Clear the aim pitch target held by Foundation. Foundation skips all
         // torques during the freeze, but a stale target must not snap the nose
-        // when the freeze lifts.
+        // when the freeze lifts. Same for the air-control intent.
         foundation.SetAimPitch(0f, 0f);
+        foundation.SetAirControl(0f, 0f, 0f);
 
         if (meshRoot != null)
             meshRoot.localRotation = Quaternion.identity;
@@ -287,6 +309,7 @@ public class HoverController_Propulsion : MonoBehaviour
         ApplyDrag();
         ApplyOverSpeedBleed(effectiveTopSpeed);
         ApplyStrafePitch();
+        ApplyAirControl(grounded);
         HandleJump(grounded);
         HandleDodge(grounded);
         ApplyDodgeForce();
@@ -946,6 +969,54 @@ public class HoverController_Propulsion : MonoBehaviour
 
         // Weight = strafe blend, so aim authority ramps in/out with strafe mode.
         foundation.SetAimPitch(_strafePitchAccum, _strafeModeBlend);
+    }
+
+    // -------------------------------------------------------------------------
+    // 🛩 Air Control (drift-held pitch/roll while airborne)
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// While airborne and holding Drift, left stick Y = pitch (up = nose down,
+    /// arcade car convention) and left stick X = roll (right = roll right).
+    /// Right stick X stays pure yaw via ApplyTurning's airborne path, so this
+    /// completes 3-axis air control without touching turning.
+    ///
+    /// Intent gating only: the Drift bool is free airborne (ApplyDriftBlend
+    /// requires grounded), so no interface changes and no situational gating.
+    /// Hops never engage it because drift is a deliberate held input, and a
+    /// neutral stick produces zero rotation via the deadzone.
+    ///
+    /// Pattern mirrors ApplyStrafePitch: this method computes intent and hands
+    /// it to Foundation via SetAirControl; Foundation is the single attitude
+    /// authority and applies the torque. Strafe-aim wins airborne: effective
+    /// weight is scaled by (1 - _strafeModeBlend) so partial blends crossfade
+    /// rather than pop.
+    /// </summary>
+    private void ApplyAirControl(bool grounded)
+    {
+        bool active = P.enableAirControl && input.Drift && !grounded;
+
+        float target = active ? 1f : 0f;
+        float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.airControlBlendSeconds);
+        _airControlBlend = Mathf.MoveTowards(_airControlBlend, target, step);
+
+        _airControlWeight = _airControlBlend * (1f - _strafeModeBlend);
+
+        if (_airControlWeight <= 0f)
+        {
+            foundation.SetAirControl(0f, 0f, 0f);
+            return;
+        }
+
+        float pitch = input.ThrottleInput;
+        float roll  = input.StrafeX;
+
+        // Center deadzone, same 0.1 idiom as ApplyStrafePitch. Load-bearing:
+        // the input layer's 0.05 deadzone still passes stick drift that would
+        // otherwise produce ~20 deg/s of phantom roll at default tuning.
+        if (Mathf.Abs(pitch) < 0.1f) pitch = 0f;
+        if (Mathf.Abs(roll)  < 0.1f) roll  = 0f;
+
+        foundation.SetAirControl(pitch, roll, _airControlWeight);
     }
 
 }

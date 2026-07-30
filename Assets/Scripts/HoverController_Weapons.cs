@@ -755,9 +755,13 @@ public class HoverController_Weapons : MonoBehaviour
     // 🎨 Debug Gizmos
     // =========================================================================
 #if UNITY_EDITOR
+    // Editor-only buffer for the soft-homing preview scan in OnDrawGizmos.
+    // Separate from _lockScanBuffer so gizmo passes never touch live lock state.
+    private readonly Collider[] _gizmoScanBuffer = new Collider[16];
+
     private void OnDrawGizmos()
     {
-        if (!drawDebug || !Application.isPlaying) return;
+        if (!ShouldDrawDebug || !Application.isPlaying) return;
 
         var slot = ActiveSlot;
         if (slot?.definition == null) return;
@@ -787,15 +791,30 @@ public class HoverController_Weapons : MonoBehaviour
         if (slot.definition.type == WeaponType.Missile && slot.definition.missileFireMode != MissileFireMode.Dumbfire)
         {
             var def = slot.definition;
-            Color coneColor = CurrentLockState switch
-            {
-                MissileLockState.Scanning => Color.yellow,
-                MissileLockState.Locked   => Color.green,
-                _                         => new Color(1f, 1f, 1f, 0.2f)
-            };
+            bool softHoming = def.missileFireMode == MissileFireMode.SoftHoming;
 
-            Gizmos.color = coneColor;
-            Gizmos.DrawRay(transform.position, transform.forward * def.lockRange);
+            // SoftHoming holds no lock state between shots (LockTarget is cleared
+            // right after firing), so preview what a shot fired this frame would
+            // home on. Same scan the fire path runs, into a gizmo-only buffer.
+            Transform previewTarget = null;
+            if (softHoming)
+                previewTarget = TargetingScan.PickBestInCone(
+                    transform,
+                    def.lockRange,
+                    def.lockConeAngle,
+                    lockTargetLayers,
+                    _gizmoScanBuffer);
+
+            Color coneColor = softHoming
+                ? (previewTarget != null ? Color.cyan : new Color(1f, 1f, 1f, 0.2f))
+                : CurrentLockState switch
+                {
+                    MissileLockState.Scanning => Color.yellow,
+                    MissileLockState.Locked   => Color.green,
+                    _                         => new Color(1f, 1f, 1f, 0.2f)
+                };
+
+            DrawLockCone(def.lockRange, def.lockConeAngle, coneColor);
 
             if (LockTarget != null)
             {
@@ -803,11 +822,19 @@ public class HoverController_Weapons : MonoBehaviour
                 Gizmos.DrawLine(transform.position, LockTarget.position);
                 Gizmos.DrawWireSphere(LockTarget.position, 0.5f);
             }
+            else if (previewTarget != null)
+            {
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawLine(transform.position, previewTarget.position);
+                Gizmos.DrawWireSphere(previewTarget.position, 0.5f);
+            }
 
             UnityEditor.Handles.color = coneColor;
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 3.5f,
-                $"LOCK [{CurrentLockState}] {LockProgress * 100f:F0}%"
+                softHoming
+                    ? $"TRACK [{(previewTarget != null ? previewTarget.root.name : "no target")}]"
+                    : $"LOCK [{CurrentLockState}] {LockProgress * 100f:F0}%"
             );
         }
 
@@ -819,6 +846,36 @@ public class HoverController_Weapons : MonoBehaviour
             $"| CD {slot.cooldownRemaining:F2}s" +
             (energy.IsEmpFrozen ? " [EMP FROZEN]" : "")
         );
+    }
+
+    /// <summary>
+    /// Draws the lock acquisition cone: center ray plus four edge rays around
+    /// the vehicle's up and right axes. Same visual language as the EMP cone.
+    /// </summary>
+    private void DrawLockCone(float range, float halfAngleDegrees, Color color)
+    {
+        Vector3 origin = transform.position;
+        Vector3 fwd    = transform.forward;
+
+        Gizmos.color = color;
+        Gizmos.DrawLine(origin, origin + fwd * range);
+
+        Quaternion lRot = Quaternion.AngleAxis(-halfAngleDegrees, transform.up);
+        Quaternion rRot = Quaternion.AngleAxis( halfAngleDegrees, transform.up);
+        Quaternion uRot = Quaternion.AngleAxis(-halfAngleDegrees, transform.right);
+        Quaternion dRot = Quaternion.AngleAxis( halfAngleDegrees, transform.right);
+
+        Gizmos.DrawLine(origin, origin + lRot * fwd * range);
+        Gizmos.DrawLine(origin, origin + rRot * fwd * range);
+        Gizmos.DrawLine(origin, origin + uRot * fwd * range);
+        Gizmos.DrawLine(origin, origin + dRot * fwd * range);
+
+        // Cone base circle so the width reads at a glance in the Game view.
+        UnityEditor.Handles.color = color;
+        UnityEditor.Handles.DrawWireDisc(
+            origin + fwd * range,
+            fwd,
+            range * Mathf.Tan(halfAngleDegrees * Mathf.Deg2Rad));
     }
 #endif
 }

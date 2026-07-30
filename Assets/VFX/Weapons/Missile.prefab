@@ -190,7 +190,7 @@ MonoBehaviour:
   speed: 70
   lifetime: 6
   armingDelay: 0.05
-  splashRadius: 6
+  splashRadius: 10
   splashFalloff:
     serializedVersion: 2
     m_Curve:
@@ -206,23 +206,23 @@ MonoBehaviour:
     - serializedVersion: 3
       time: 1
       value: 0
-      inSlope: 0
-      outSlope: 0
+      inSlope: -2.231292
+      outSlope: -2.231292
       tangentMode: 0
       weightedMode: 0
-      inWeight: 0
+      inWeight: 0.058333337
       outWeight: 0
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  directHitImpactForce: 40
-  splashImpactForce: 25
+  directHitImpactForce: 100000
+  splashImpactForce: 50000
   damageLayers:
     serializedVersion: 2
     m_Bits: 193
-  explosionPrefab: {fileID: 0}
+  explosionPrefab: {fileID: 100008, guid: 1dbc518224e49f34095aab42fe05751a, type: 3}
   turnRate: 0
-  drawDebug: 0
+  drawDebug: 1
 --- !u!1 &7776605814818324861
 GameObject:
   m_ObjectHideFlags: 0
