@@ -215,8 +215,6 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  directHitImpactForce: 100000
-  splashImpactForce: 50000
   damageLayers:
     serializedVersion: 2
     m_Bits: 193

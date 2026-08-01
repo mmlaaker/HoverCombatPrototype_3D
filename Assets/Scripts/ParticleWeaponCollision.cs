@@ -27,6 +27,21 @@ public class ParticleWeaponCollision : MonoBehaviour
              "weapon's WeaponSlot on the vehicle. Damage value is read from here.")]
     [SerializeField] private WeaponDefinition weaponDefinition;
 
+    [Header("🛠 Debug")]
+    [Tooltip("Shared debug asset. When assigned, its master toggle overrides the local flag below. " +
+             "Leave empty to use the local flag.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    [Tooltip("Mark every particle contact point in the Scene view, coloured by what the pellet " +
+             "found: green hit something damageable, yellow hit a Rigidbody only, red hit plain " +
+             "geometry and was absorbed.\n" +
+             "Red clusters on flat ground while accelerating are the 'bullets eaten' symptom: the " +
+             "emitter is colliding with the firer's own hull or the ground ahead of it. Also shows " +
+             "the shotgun's spread pattern, which is what makes destabilizeFraction 1 work.")]
+    [SerializeField] private bool drawDebug = false;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+
     private ParticleSystem ps;
 
     // Pre-allocated list reused every OnParticleCollision call — avoids per-frame GC allocation.
@@ -68,6 +83,8 @@ public class ParticleWeaponCollision : MonoBehaviour
     {
         int count = ParticlePhysicsExtensions.GetCollisionEvents(ps, other, collisionEvents);
 
+        bool debug = ShouldDrawDebug;
+
         // NOTE (pooling debt): GetComponentInParent walks the hierarchy on every hit.
         // At high machine gun emission rates this accumulates. When projectile pooling
         // is introduced, cache IDamageable and Rigidbody on the pooled object at
@@ -78,13 +95,27 @@ public class ParticleWeaponCollision : MonoBehaviour
             var damageable = other.GetComponentInParent<IDamageable>();
             damageable?.TakeDamage(weaponDefinition != null ? weaponDefinition.damage : 0f);
 
-            // Apply impact force if a Rigidbody is present.
+            // Apply impact force if a Rigidbody is present. intersection is the world-space
+            // contact point, already available here, so destabilizeFraction has a real lever
+            // arm to work with. Shared with the projectile path via WeaponImpact so both
+            // destabilize identically for the same fraction.
             var rb = other.GetComponentInParent<Rigidbody>();
-            if (rb != null && weaponDefinition != null && weaponDefinition.impactForce > 0f)
-            {
-                Vector3 forceDir = collisionEvents[i].velocity.normalized;
-                rb.AddForce(forceDir * weaponDefinition.impactForce, ForceMode.Impulse);
-            }
+            if (weaponDefinition != null)
+                WeaponImpact.Apply(rb,
+                                   collisionEvents[i].velocity,
+                                   collisionEvents[i].intersection,
+                                   weaponDefinition.impactForce,
+                                   weaponDefinition.destabilizeFraction,
+                                   1f,
+                                   debug);
+
+            // Drawn for every contact, including the ones that found nothing to damage. Those
+            // are the interesting ones when pellets are going missing.
+            if (debug)
+                WeaponDebugDraw.ParticleContact(collisionEvents[i].intersection,
+                                                collisionEvents[i].velocity,
+                                                rb != null,
+                                                damageable != null);
         }
     }
 }

@@ -13,8 +13,10 @@ using UnityEngine;
 /// the rocket steers toward it with turn-rate limited correction; otherwise
 /// it flies straight.
 ///
-/// Damage value is supplied by the firing weapon via IProjectileDamageCarrier.
-/// Everything else is tuned per-prefab on this script.
+/// Damage arrives from the firing weapon via IProjectileDamageCarrier, and knockback via
+/// IProjectileImpactCarrier. What stays tuned per-prefab on this script is flight (speed,
+/// lifetime, arming, turn rate) and blast geometry (splashRadius, splashFalloff,
+/// damageLayers), which has to match the explosion VFX.
 ///
 /// Prefab setup:
 ///   Rigidbody: Use Gravity OFF, Collision Detection: Continuous Dynamic, Drag 0
@@ -24,7 +26,7 @@ using UnityEngine;
 ///   Explosion Prefab: a self-destructing VFX prefab spawned at impact point
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
-public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHomingTarget
+public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjectileImpactCarrier, IHomingTarget
 {
     // -------------------------------------------------------------------------
     // ✈️ Flight
@@ -54,13 +56,15 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
              "force multiplier (0 to 1). Default: smooth falloff to zero at the edge.")]
     [SerializeField] private AnimationCurve splashFalloff = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
 
-    [Tooltip("Knockback applied to a directly hit Rigidbody, along the rocket's flight direction. " +
-             "Tune this big enough to visibly punt a vehicle.")]
-    [SerializeField] private float directHitImpactForce = 40f;
-
-    [Tooltip("Knockback applied to Rigidbodies caught in splash. Pushed outward from the centre. " +
-             "Scaled by the falloff curve.")]
-    [SerializeField] private float splashImpactForce = 25f;
+    // Knockback (directHitImpactForce, splashImpactForce, destabilizeFraction) is NOT authored
+    // here. It arrives from the firing WeaponDefinition via IProjectileImpactCarrier, so the
+    // three missile variants can differ in knockback without needing three prefab overrides.
+    //
+    // Blast geometry above (splashRadius, splashFalloff, damageLayers) is the one thing that did
+    // not move, because the radius has to agree with whatever the explosion VFX draws. That is a
+    // constraint of the current placeholder VFX rather than a real design boundary: when the final
+    // explosions land, this should follow the forces onto the WeaponDefinition and leave the prefab
+    // as pure delivery.
 
     [Tooltip("Layers that take splash damage and force. Set to enemy vehicle layers. " +
              "Terrain doesn't need to be in here; the rocket already explodes on terrain hit.")]
@@ -88,8 +92,22 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
     // 🛠 Debug
     // -------------------------------------------------------------------------
     [Header("🛠 Debug")]
-    [Tooltip("Draw the splash radius as a wire sphere around the rocket in the Scene view.")]
+    [Tooltip("Shared debug asset. When assigned, its master toggle overrides the local flag below, " +
+             "so one switch controls every debug visual in the project. Leave empty to use the " +
+             "local flag.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
+    [Tooltip("Draw the splash radius in flight, plus the blast sphere, splash falloff per victim, " +
+             "and the impulse split at each impact. Impact draws persist for a few seconds so you " +
+             "can inspect them after the rocket is gone.")]
     [SerializeField] private bool drawDebug = true;
+
+    [Tooltip("Also log one line per splash victim with the exact distance, falloff scale, and " +
+             "damage dealt. The Scene view draws show the shape of a blast; this gives the numbers " +
+             "when you need to compare two shots precisely.")]
+    [SerializeField] private bool logSplash = false;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
 
     // -------------------------------------------------------------------------
     // Runtime
@@ -100,12 +118,26 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
     private bool  exploded;
     private Transform homingTarget;
 
+    // Supplied by the spawning WeaponDefinition via IProjectileImpactCarrier. Default to 0 so a
+    // prefab dropped straight into a scene is inert rather than silently using stale tuning.
+    private float directHitImpactForce;
+    private float splashImpactForce;
+    private float destabilizeFraction;
+
     // Reused per-explosion to dedupe IDamageable hits across a vehicle's
     // multiple child colliders. Static is safe: Explode is fully synchronous.
     private static readonly HashSet<IDamageable> _splashedThisExplosion = new();
 
     /// <summary>Receives the damage value from the spawning WeaponDefinition.</summary>
     public void SetDamage(float dmg) => damage = dmg;
+
+    /// <summary>Receives knockback values from the spawning WeaponDefinition.</summary>
+    public void SetImpact(float directHitForce, float splashForce, float destabilize)
+    {
+        directHitImpactForce = directHitForce;
+        splashImpactForce    = splashForce;
+        destabilizeFraction  = destabilize;
+    }
 
     /// <summary>Receives the homing target from the spawning weapon. Null = dumbfire.</summary>
     public void SetTarget(Transform target) => homingTarget = target;
@@ -169,6 +201,10 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
 
         _splashedThisExplosion.Clear();
 
+        // Cached: ShouldDrawDebug walks a null check per call and Explode is a hot burst.
+        bool debug = ShouldDrawDebug;
+        if (debug) WeaponDebugDraw.Blast(epicenter, splashRadius);
+
         // Direct hit
         if (directHitCollider != null)
         {
@@ -180,8 +216,8 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
             }
 
             var directRb = directHitCollider.GetComponentInParent<Rigidbody>();
-            if (directRb != null && directHitImpactForce > 0f)
-                directRb.AddForce(transform.forward * directHitImpactForce, ForceMode.Impulse);
+            WeaponImpact.Apply(directRb, transform.forward, epicenter,
+                               directHitImpactForce, destabilizeFraction, 1f, debug);
         }
 
         // Splash
@@ -192,17 +228,41 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
             if (damageable == null || _splashedThisExplosion.Contains(damageable)) continue;
             _splashedThisExplosion.Add(damageable);
 
-            float dist  = Vector3.Distance(hit.transform.position, epicenter);
+            var hitRb = hit.GetComponentInParent<Rigidbody>();
+
+            // Measure from the centre of mass, not the collider's own transform. A vehicle
+            // is a compound collider whose children all resolve to one IDamageable, so only
+            // the first collider OverlapSphere happens to return survives the dedupe above.
+            // Keying off that collider's transform made both the falloff scale and the push
+            // direction depend on iteration order: the wheel rims sit ~2.9m apart, which
+            // swung splash damage and force by 3x between otherwise identical shots.
+            Vector3 reference = hitRb != null ? hitRb.worldCenterOfMass : hit.transform.position;
+
+            float dist  = Vector3.Distance(reference, epicenter);
             float t     = Mathf.Clamp01(dist / splashRadius);
             float scale = splashFalloff.Evaluate(t);
 
             damageable.TakeDamage(damage * scale);
 
-            var hitRb = hit.GetComponentInParent<Rigidbody>();
+            // The measured-from point is what silently broke before: children of a compound
+            // collider all resolve to one IDamageable, so whichever collider OverlapSphere
+            // returned first used to decide both falloff and push direction.
+            if (debug) WeaponDebugDraw.SplashVictim(epicenter, reference, scale);
+
+            if (logSplash)
+                Debug.Log($"[Splash] {hit.transform.root.name} via '{hit.name}'  " +
+                          $"dist={dist:F2}m / {splashRadius:F1}m  falloff={scale:F3}  " +
+                          $"damage={damage * scale:F1}  force={splashImpactForce * scale:F0}", this);
+
             if (hitRb != null && splashImpactForce > 0f)
             {
-                Vector3 dir = (hit.transform.position - epicenter).normalized;
-                hitRb.AddForce(dir * splashImpactForce * scale, ForceMode.Impulse);
+                // Applied at the surface nearest the blast, so a blast off one flank shoves
+                // that flank. ClosestPointOnBounds rather than Collider.ClosestPoint: the
+                // latter returns the input unchanged for non-convex mesh colliders, which
+                // these vehicles use.
+                Vector3 dir = reference - epicenter;
+                WeaponImpact.Apply(hitRb, dir, hitRb.ClosestPointOnBounds(epicenter),
+                                   splashImpactForce, destabilizeFraction, scale, debug);
             }
         }
 
@@ -215,7 +275,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IHoming
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (!drawDebug) return;
+        if (!ShouldDrawDebug) return;
         Gizmos.color = new Color(1f, 0.5f, 0f, 0.5f);
         Gizmos.DrawWireSphere(transform.position, splashRadius);
 

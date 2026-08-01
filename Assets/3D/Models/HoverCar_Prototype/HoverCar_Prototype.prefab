@@ -697,6 +697,10 @@ PrefabInstance:
       propertyPath: profile
       value: 
       objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+    - target: {fileID: 5763857629899291177, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: weaponDefinition
+      value: 
+      objectReference: {fileID: 11400000, guid: bafd3c3d389d65945ad1be2e80005961, type: 2}
     - target: {fileID: 5927693998371741120, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
       value: 0
@@ -903,3 +907,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverLandingCameraImpulse
   maxImpulseVelocity: 2
+  testSeverity: 1

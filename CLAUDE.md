@@ -40,7 +40,12 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 | `VehicleHUD.cs` | v1.2 | Event-driven; `SyncAll()` in Start; trailing `_wasRegenerating` flag |
 | `HoverCameraController.cs` | v1.2 | Cinemachine 3.1.6; strafe cam uses `LockToTargetNoRoll`. v1.2: drive cam follows a runtime `CameraHeadingProxy` (position + stable yaw only) instead of the vehicle -- yaw read from the transform while upright within `maxStableTilt`, integrated from Rigidbody world-Y angular velocity while tilted, so air-control flips no longer swing the camera 180 degrees; heading tracking fades to zero entirely while `Propulsion.AirControlWeight` > 0 (stable frame during stunts, reconverges on release); LookAt stays on the vehicle |
 | `HoverLandingCameraImpulse.cs` | Active | Cinemachine impulse camera punch on `Foundation.OnHardLanding`, scaled by severity. Impulse shape/duration authored on the `CinemachineImpulseSource`; listeners on both vcams (strafe gain lower -- zero-damping cam reads impulse harder) |
-| `ParticleWeaponCollision.cs` | Active | Particle-based weapon hits; implements `IDamageable` |
+| `WeaponDebugDraw.cs` | v1.0 | Scene-view draws for the impact half of the weapon system (the targeting half is covered by gizmos on `HoverController_Weapons`). Three draws: **impulse split** (contact point, centre of mass, the lever arm between them in magenta, and the two impulse shares as scaled arrows) so `destabilizeFraction` is tuned against its actual mechanism; **splash attribution** (blast sphere, plus a line per victim to the point falloff was measured from, coloured green-to-red by the resulting scale) which makes the compound-collider class of bug self-evident; **particle contacts** colour-coded green/yellow/red by whether the pellet found something damageable, a Rigidbody, or plain geometry. Uses `Debug.DrawLine` with a duration, not `OnDrawGizmos`: impacts are instantaneous and need to linger, and `RocketProjectile` destroys itself at the end of `Explode`. Every method is `[Conditional("UNITY_EDITOR")]`, so calls and their arguments compile out of player builds. No text labels: `Handles.Label` only works from `OnDrawGizmos`/`OnGUI` and these run from collision code, so magnitudes are encoded as colour and length, with `RocketProjectile.logSplash` for exact numbers |
+| `WeaponImpact.cs` | v1.0 | Static helper. The single implementation of "apply a knockback impulse split between the contact point and the centre of mass". Both delivery paths call it, so a particle hit and a rocket hit destabilize identically for the same `destabilizeFraction`. Also guards the degenerate cases the old inline copies did not: null rigidbody, and a blast centred exactly on the centre of mass (zero direction, which would otherwise normalize to NaN) |
+| `IProjectileImpactCarrier.cs` | v1.0 | `SetImpact(directHitForce, splashForce, destabilizeFraction)`. Sibling of `IProjectileDamageCarrier`; lets a `WeaponDefinition` own knockback and push it onto the spawned prefab. Called once in `FireAllMuzzles` right after `SetDamage`, before the projectile's first tick |
+| `ParticleWeaponCollision.cs` | v1.3 | Particle-based weapon hits. v1.3: gained a debug flag (it had none) plus `HoverDebugSettings` wiring, and marks every particle contact point colour-coded by what it found. v1.1: off-centre impact via `AddForceAtPosition` at `ParticleCollisionEvent.intersection`, so hits rotate the target. v1.2: the old `destabilizeOnImpact` bool became the shared `destabilizeFraction` (0..1) and the inline force code became a `WeaponImpact.Apply` call. **Keep at 0 for sustained fire** (per-bullet torque accumulates every frame); Shotgun runs at 1, where 40 pellets at 40 contact points across a 20-degree cone supply the rotation from spread geometry |
+| `RocketProjectile.cs` | v1.4 | Dumbfire/homing rocket, splash with falloff. v1.4: debug draws. Now honours `HoverDebugSettings` like the hover scripts instead of a local flag only; draws the blast sphere, per-victim splash attribution, and the impulse split on every hit. Optional `logSplash` prints distance, falloff scale, damage, and force per victim, for comparing two shots precisely. v1.3: knockback is no longer authored here. `directHitImpactForce`, `splashImpactForce`, and `destabilizeFraction` stopped being `[SerializeField]` and now arrive from the `WeaponDefinition` via `IProjectileImpactCarrier`; the private `ApplyImpact` helper moved to the shared `WeaponImpact`. Flight and blast geometry stay per-prefab. v1.2: impact destabilization. `destabilizeFraction` (0..1) splits the impact impulse between the contact point and the centre of mass, so hit location determines rotation while total knockback stays fixed and the two tune independently. `AddForce` alone is centre-of-mass by definition, so lever arm and angular velocity were always exactly zero. Splash now measures falloff distance and push direction from `hitRb.worldCenterOfMass`, not the hit collider's transform: children of a compound collider all resolve to one `IDamageable`, so iteration order previously decided both and swung splash damage/force by 3x |
+| `Editor/WeaponDefinitionEditor.cs` | v1.0 | Custom inspector for `WeaponDefinition`. Draws only fields the selected `WeaponType`/`ProjectileMode` actually read: wind-up is Automatic only, lock settings are Missile only (`lockAcquireTime` HardLock only, range/cone hidden for Dumbfire), `startingAmmo` hidden when `maxAmmo` is 0, and `splashImpactForce` shown for Instantiated mode only. Section headings come from the existing `[Header]` attributes, which `PropertyField` draws with their field, so a heading hides along with its group. Hiding is view-only; serialized values are untouched. Also surfaces validation: null `projectilePrefab` in Instantiated mode, `damage: 0`, `startingAmmo > maxAmmo`, `destabilizeFraction` above 0 on a sustained-fire weapon, and impact forces set on a projectile prefab that doesn't implement `IProjectileImpactCarrier` |
 | `PickupManager.cs` | Planned | Not yet implemented |
 | AI FSM | Planned | Phase 2; chase/evade/shoot |
 
@@ -51,12 +56,13 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 - **Energy → Propulsion/Weapons/Shield:** Propulsion calls `TryConsume` per frame for boost (continuous) and once for jump/dodge (instantaneous). Shield calls `TryConsume` once on activation. Weapons only reads `IsEmpFrozen` -- no energy is spent on firing.
 - **Shield → Health:** `VehicleHealth.TakeDamage` short-circuits when `_shield.IsActive`. Shield owns its own invulnerability state; the existing `_isInvulnerable` flag remains for post-respawn grace.
 - **Energy → Shield:** `EmpProjectile.Consume` calls `Shield.TryAbsorbEmp` on hit; if true the freeze is skipped. Shield also subscribes to `Energy.OnEmpFreezeApplied` as a defensive fallback. New activation is blocked while `IsEmpFrozen`.
+- **Weapons → projectiles (spawn-time push):** `FireAllMuzzles` hands the freshly instantiated prefab three optional interfaces in order: `IProjectileDamageCarrier.SetDamage`, `IProjectileImpactCarrier.SetImpact`, `IHomingTarget.SetTarget`. All are null-conditional, so a prefab implements only what it needs. This is why weapon tuning lives on the `WeaponDefinition` and not on projectile prefabs: the definition is the single author, the prefab is the delivery mechanism.
 - **Weapons → Aim:** Weapons calls `aim.NotifySlotChanged(slot)` on slot change. Aim caches the new `vfxMount`.
 - **Propulsion → Foundation (aim pitch):** Propulsion calls `foundation.SetAimPitch(accumulatedDegrees, strafeBlend)` every FixedUpdate; `(0, 0)` on strafe exit and EMP freeze. Foundation's leveling torque drives toward the target (`aimPitchTrackingStrength`, pitch axis only); Propulsion never applies pitch torque itself. One attitude authority, no competing forces.
 - **Propulsion → Aim:** Aim reads `transform.eulerAngles` directly (actual vehicle orientation); no reference to Propulsion needed.
 - **Propulsion → Foundation (air control):** Propulsion calls `foundation.SetAirControl(pitchInput, rollInput, weight)` every FixedUpdate; weight = air-control blend x (1 - strafe blend) so strafe-aim wins airborne; `(0,0,0)` when inactive and on EMP freeze. Foundation applies the torque and crossfades pitch/roll damping toward `airControlDamping`. One attitude authority, no competing forces.
 - **Foundation → VFX/Camera (hard landing):** `Foundation.OnHardLanding(severity)` fires on the airborne-to-grounded edge above `hardLandingMinSpeed`. `HoverVehicleVFX` spawns a one-shot ground dust burst (heavy prefab at severity >= threshold); `HoverLandingCameraImpulse` generates a downward Cinemachine impulse. Both subscribe via GetComponent in Awake, paired OnEnable/OnDisable.
-- **`HoverDebugSettings` ScriptableObject:** Optional global gizmo toggle. All four scripts check it first, then fall back to their local `drawDebug` bool.
+- **`HoverDebugSettings` ScriptableObject:** Optional global gizmo toggle. The four hover scripts plus `RocketProjectile` and `ParticleWeaponCollision` check it first, then fall back to their local `drawDebug` bool. Assign it on `Missile.prefab` and the weapon emitters to bring impact draws under the same switch as everything else.
 
 ---
 
@@ -71,11 +77,17 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 ---
 
 ## Known Issues & Pending Tuning
-- Bullets eaten on flat ground during acceleration -- suspected particle collision layer mask issue (emitters hitting vehicle's own collider). Cyan debug ray confirmed stable and level; not a pitch problem.
+- Bullets eaten on flat ground during acceleration -- suspected particle collision layer mask issue (emitters hitting vehicle's own collider). Cyan debug ray confirmed stable and level; not a pitch problem. **Next step:** enable `drawDebug` on the emitter's `ParticleWeaponCollision`. Contacts draw red when a pellet hits geometry with nothing damageable on it, so a red cluster near the hull confirms the self-collision theory and its position says which collider is eating them.
 - Raise `strafeTopSpeed` toward 45 to better match forward top speed of 60. Since lateral damp now excludes intended strafe velocity, this needs no `strafeAccel` compensation; the knob works directly.
 - Playtest tune: `aimPitchTrackingStrength` (150, pitch axis only) with `aimPitchDamping` (8; aim-only settle damping, independent of `pitchRollDamping` ride stiffness); `unstickMaxVerticalSpeed` (1).
 - Hover springs sag ~1m below `hoverHeight` at rest (weight accel ~39 m/s^2 vs spring accel 40/m at 4 points); pre-existing, documented in the liftStrength tooltip. Gravity feedforward is a possible future fix.
+- **`damage: 0` on `WD_Missile`, `WD_SoftHomingMissile`, `WD_HardLockMissile`, `WD_Shotgun`.** These four apply knockback but never reduce health. Not cosmetic: `HoverController_Weapons` passes `def.damage` to the projectile via `SetDamage`, and `ParticleWeaponCollision` reads it directly, so both delivery paths are live and both are being handed zero. Only `WD_ChainGun` (1) and `WD_MachineGuns` (0.5) deal damage today. Needs a damage pass, not a one-line fix. The inspector now warns on any definition sitting at 0.
+- **Blast geometry still lives on the projectile prefab.** `splashRadius`, `splashFalloff`, and `damageLayers` did not move to `WeaponDefinition` with the impact forces, because splash radius has to match what the explosion VFX draws and those VFX are placeholder. Blocked on final explosion art, not on design. When it moves, `RocketProjectile` keeps only flight values and `IProjectileImpactCarrier` grows the extra parameters.
+- `WD_Shotgun` serializes `missileFireMode: 2` (HardLock). Meaningless on a `SingleShot` weapon and never read; it is the C# default landing in YAML after the `useMissileLock` rename. Now hidden by the custom inspector. Left as-is rather than hand-editing a serialized value.
 - Resolved: `driftLateralDamp` already 0 in VTP_Default; Fixed Timestep already 0.01 (normalized the rational count to exact).
+- Resolved: weapon/tuning assets moved from `Assets/Scripts/` to `Assets/Data/`, matching Workspace Conventions. All seven via `AssetDatabase.MoveAsset`, GUIDs preserved.
+- Resolved: stale `useMissileLock` key (removed from the class in the `missileFireMode` rename) was still serialized in `WD_MachineGuns`. Cleared with `AssetDatabase.ForceReserializeAssets` across `Assets/Data/`.
+- Resolved: impact force no longer lives in two places. `WeaponDefinition` now owns `impactForce`, `splashImpactForce`, and `destabilizeFraction` for both delivery paths, pushing them onto spawned projectiles via `IProjectileImpactCarrier`. Migration preserved behaviour: the three missile definitions were seeded with the values `Missile.prefab` held (100000 / 50000 / 0.15), and `WD_Shotgun`'s `destabilizeOnImpact: true` became `destabilizeFraction: 1`, which is the same thing. Verified live by instantiating each missile prefab and reading back the private fields after the interface call.
 
 ---
 
@@ -138,20 +150,29 @@ All vehicles share the full roster. Vehicle identity = handling profile + one un
 | 13 | Special | n/a | One unique per vehicle. Allowed to bend shared rules; provides spectacle |
 
 #### Weapon Implementation Status
-| Weapon | Status |
-|---|---|
-| Machine Gun | Stubbed |
-| Minigun | Stubbed |
-| Shotgun | Stubbed |
-| Rocket Launcher | Stubbed |
-| Soft Homing Projectile | Stubbed |
-| Hard Lock Projectile | Stubbed |
-| Sniper / Lightning Bolt | Planned |
-| Laser Cannon | Planned |
-| Gravity Well / Repulsor | Planned |
-| Bouncing Disc Blade | Planned |
-| Floating Proximity Mine | Planned |
-| Directional Remote Mine | Planned |
+Definition assets are `Assets/Data/WD_*.asset`, alongside `VTP_Default.asset`. Moved there from `Assets/Scripts/` via `AssetDatabase.MoveAsset`, so GUIDs and every existing reference are intact.
+
+| Weapon | Status | Definition asset | Delivery |
+|---|---|---|---|
+| Machine Gun | Implemented | `WD_MachineGuns` | Particle emitter + `ParticleWeaponCollision` |
+| Minigun ("Chain Gun") | Implemented | `WD_ChainGun` | Particle emitter + `ParticleWeaponCollision` |
+| Shotgun | Implemented | `WD_Shotgun` | Particle emitter, 40-pellet burst, `destabilizeOnImpact` ON |
+| Rocket Launcher | Implemented | `WD_Missile` | `Missile.prefab` + `RocketProjectile` |
+| Soft Homing Projectile | Implemented | `WD_SoftHomingMissile` | `SoftHomingMissile.prefab`, variant of `Missile.prefab` |
+| Hard Lock Projectile | Implemented | `WD_HardLockMissile` | `HardLockMissile.prefab`, variant of `Missile.prefab` |
+| Sniper / Lightning Bolt | Planned | | |
+| Laser Cannon | Planned | | |
+| Gravity Well / Repulsor | Planned | | |
+| Bouncing Disc Blade | Planned | | |
+| Floating Proximity Mine | Planned | | |
+| Directional Remote Mine | Planned | | |
+
+The three missile prefabs are a base plus two variants. The split of authority is:
+
+- **`WeaponDefinition` (per weapon):** damage, `impactForce`, `splashImpactForce`, `destabilizeFraction`. Pushed onto the spawned projectile via `IProjectileImpactCarrier`. All three currently carry identical values (100000 / 50000 / 0.15) because that is what the prefab used to impose on all of them; they are now free to diverge, which the GDD wants (soft homing is specified as "low damage and force").
+- **Prefab (per projectile):** flight (`speed`, `lifetime`, `armingDelay`, `turnRate`) and blast geometry (`splashRadius` 10, `splashFalloff`, `damageLayers`), which must stay matched to the explosion VFX. Only `turnRate` differs per variant (0 / 90 / 120); everything else is inherited from `Missile.prefab`.
+
+Blast geometry is the one weapon-shaped thing the definition does not own, and that is a workaround, not a boundary. It stays on the prefab only because splash radius has to agree with whatever the explosion VFX draws, and the current explosions are strictly placeholder. When the real VFX land it should move onto the `WeaponDefinition` with the forces, leaving the prefab as pure delivery.
 
 ### Pickups
 Ammo (restores secondary ammo), Energy Cell (rapid recharge), Health Repair.

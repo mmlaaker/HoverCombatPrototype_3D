@@ -638,6 +638,8 @@ public class HoverController_Weapons : MonoBehaviour
                 if (muzzle == null) continue;
                 var proj = Instantiate(def.projectilePrefab, muzzle.position, muzzle.rotation);
                 proj.GetComponent<IProjectileDamageCarrier>()?.SetDamage(def.damage);
+                proj.GetComponent<IProjectileImpactCarrier>()?
+                    .SetImpact(def.impactForce, def.splashImpactForce, def.destabilizeFraction);
                 proj.GetComponent<IHomingTarget>()?.SetTarget(LockTarget);
                 if (ShouldDrawDebug) Debug.DrawRay(muzzle.position, muzzle.forward * 3f, Color.red, 0.2f);
             }

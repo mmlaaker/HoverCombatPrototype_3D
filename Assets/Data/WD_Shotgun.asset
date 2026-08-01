@@ -10,19 +10,21 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 263fe2f37e21b0a4f907b89632462d12, type: 3}
-  m_Name: WD_ChainGun
+  m_Name: WD_Shotgun
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDefinition
-  type: 1
-  displayName: Chain Gun
+  type: 0
+  displayName: Shotgun
   projectileMode: 1
   projectilePrefab: {fileID: 0}
-  damage: 1
+  damage: 0
   maxAmmo: 0
   startingAmmo: 0
-  fireRate: 20
-  impactForce: 200
-  useWindUp: 1
-  windUpDuration: 3
+  fireRate: 1.5
+  impactForce: 3000
+  splashImpactForce: 0
+  destabilizeFraction: 1
+  useWindUp: 0
+  windUpDuration: 1.5
   windUpCurve:
     serializedVersion: 2
     m_Curve:
@@ -30,7 +32,7 @@ MonoBehaviour:
       time: 0
       value: 0
       inSlope: 0
-      outSlope: 0
+      outSlope: 1
       tangentMode: 0
       weightedMode: 0
       inWeight: 0
@@ -38,7 +40,7 @@ MonoBehaviour:
     - serializedVersion: 3
       time: 1
       value: 1
-      inSlope: 0
+      inSlope: 1
       outSlope: 0
       tangentMode: 0
       weightedMode: 0
@@ -47,8 +49,8 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  windDownDuration: 1
+  windDownDuration: 0.5
   missileFireMode: 2
-  lockAcquireTime: 0.01
-  lockRange: 1
-  lockConeAngle: 1
+  lockAcquireTime: 1.5
+  lockRange: 80
+  lockConeAngle: 15

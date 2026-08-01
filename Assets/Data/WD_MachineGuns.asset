@@ -10,17 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 263fe2f37e21b0a4f907b89632462d12, type: 3}
-  m_Name: WD_Missile
+  m_Name: WD_MachineGuns
   m_EditorClassIdentifier: Assembly-CSharp::WeaponDefinition
-  type: 2
-  displayName: Dumbfire Missile
-  projectileMode: 0
-  projectilePrefab: {fileID: 2681037672598450986, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
-  damage: 0
+  type: 1
+  displayName: Machine Gun
+  projectileMode: 1
+  projectilePrefab: {fileID: 0}
+  damage: 0.5
   maxAmmo: 0
   startingAmmo: 0
-  fireRate: 1.5
-  impactForce: 2000
+  fireRate: 0.01
+  impactForce: 200
+  splashImpactForce: 0
+  destabilizeFraction: 0
   useWindUp: 0
   windUpDuration: 1.5
   windUpCurve:
@@ -48,7 +50,7 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   windDownDuration: 0.5
-  missileFireMode: 0
-  lockAcquireTime: 0.01
-  lockRange: 1
-  lockConeAngle: 1
+  missileFireMode: 2
+  lockAcquireTime: 1.5
+  lockRange: 80
+  lockConeAngle: 15
