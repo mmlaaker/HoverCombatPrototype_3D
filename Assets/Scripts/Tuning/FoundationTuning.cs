@@ -12,47 +12,48 @@ public class FoundationTuning
     // 🚀 Hover Lift
     // -------------------------------------------------------------------------
     [Header("🚀 Hover Lift")]
-    [Tooltip("How far above the ground the chassis floats at rest. Higher values lift the body further off the surface.")]
-    public float hoverHeight = 3f;
+    [Tooltip("How far above the ground the chassis floats at rest, measured from the hover points. " +
+             "Gravity is fed forward per point, so this is the LITERAL resting height on flat ground " +
+             "and on slopes: the springs no longer have to compress to hold the craft up, and the old " +
+             "roughly 1m sag below this value is gone.")]
+    public float hoverHeight = 7f;
 
-    [Tooltip("How far the hover rays look down for ground. Set this generous enough that the chassis can drop a small distance before losing lift.")]
-    public float sensorRange = 5f;
+    [Tooltip("How far the hover rays look down for ground. Must stay comfortably above Hover Height so " +
+             "the chassis can drop before losing lift.\n" +
+             "This also defines GROUNDED, which is the part that bites. Between Hover Height and this " +
+             "value the springs produce no lift at all, but the craft still counts as grounded: leveling " +
+             "torque and drag keep applying and air control stays off. So this is really 'how far can it " +
+             "rise before it stops being a ground vehicle'. Keep the gap to Hover Height tight, around " +
+             "2 to 3 metres, or leaving the ground stops reading cleanly.")]
+    public float sensorRange = 9.5f;
 
     [Tooltip("Stiffness of the hover spring, PER HOVER POINT. Higher values make the chassis correct height " +
              "faster and feel firmer; push too high and the vehicle starts bouncing.\n" +
              "Force is applied as mass-independent acceleration and every hover point contributes its own, " +
              "so the stiffness the chassis actually feels is this value times the number of hover points. " +
-             "At 4 points and 10 that is 40 m/s^2 per metre of compression. This is why the number looks small.\n" +
-             "It also sets the resting sag: the springs settle where lift balances weight, so " +
-             "sag = total gravity / total stiffness. At default gravity tuning (39.24) and 40 that is " +
-             "0.98m below Hover Height. Raising this reduces sag proportionally.")]
-    public float liftStrength = 10f;
+             "At 4 points and 16 that is 64 m/s^2 per metre of compression. This is why the number looks small.\n" +
+             "It no longer sets resting height. Gravity is fed forward per point, so the springs hold the " +
+             "craft at Hover Height regardless of what this is set to, and this controls only how hard the " +
+             "chassis resists being pushed off that height. Tune it purely for that: lower is easier to " +
+             "shove around with weapons and collisions, higher is more composed.")]
+    public float liftStrength = 16f;
 
     [Tooltip("Damping on the hover spring, PER HOVER POINT. Absorbs bounce after landings and slope transitions.\n" +
              "This and Lift Strength together set how the chassis settles. Damping ratio is " +
              "(points x this) / (2 x sqrt(points x Lift Strength)). Below 1 the craft overshoots and bobs; " +
              "at 1 it settles without ever crossing the target.\n" +
-             "At 4 points, Lift Strength 10 and this at 1.5 the ratio is 0.47: about 18% overshoot and " +
-             "1.3s to settle, which reads as a soft float. Around 2.2 gives a firmer 0.7 ratio; " +
-             "3.2 removes the bounce entirely. Retune whenever Lift Strength changes.")]
-    public float liftDamping = 1.5f;
+             "At 4 points, Lift Strength 16 and this at 2.2 the ratio is 0.55: about 13% overshoot and " +
+             "0.9s to settle. That is the intended sedan feel, loose enough to visibly rock when something " +
+             "hits it, quick enough to stay drivable. Drop toward 1.6 for more wallow, push toward 3.2 to " +
+             "remove the bounce entirely. Retune whenever Lift Strength changes, since the ratio depends " +
+             "on both.")]
+    public float liftDamping = 2.2f;
 
-    // -------------------------------------------------------------------------
-    // 🧮 Slope Lift Compensation
-    // -------------------------------------------------------------------------
-    [Header("🧮 Slope Lift Compensation")]
-    [Tooltip("Adds extra lift on slopes so the chassis doesn't sag into hills. Recommended on for any non-flat terrain.")]
-    public bool enableSlopeLiftCompensation = true;
-
-    [Tooltip("How much extra lift the slope correction adds AT A VERTICAL WALL. " +
-             "1.0 disables the boost, 1.3 is subtle, 1.6 is strong.\n" +
-             "Read the range carefully: this is the value at 90 degrees, and the ramp toward it is not " +
-             "linear in angle. It scales on (1 - normal.y), which is only 0.13 at a 30 degree slope and " +
-             "0.29 at 45. So a setting of 1.15 delivers just 1.02x on a 30 degree hill, which is " +
-             "effectively nothing. If you want a real effect on the slopes you actually drive, this has " +
-             "to sit well above the value you have in mind for them.")]
-    [Range(1f, 2f)]
-    public float slopeLiftMultiplier = 1.3f;
+    // Slope lift compensation used to live here. Removed: the gravity feedforward in
+    // ApplyHoverForces is scaled by the ground normal, so it already supports exactly the
+    // slope-adjusted share of the weight (G*cos0) and holds ride height on any incline
+    // without compressing the spring. Verified at 7.000m on a 30 degree slope with the
+    // old multiplier already neutralised to 1.0, where the spring-only model sagged 0.53m.
 
     // -------------------------------------------------------------------------
     // ⚖️ Leveling
@@ -163,9 +164,14 @@ public class FoundationTuning
     public float flipRecoveryTorque = 60f;
 
     [Tooltip("Speed below which flip recovery is allowed to start. " +
-             "Prevents recovery from firing while the chassis is still tumbling. Try 0.5.")]
+             "Prevents recovery from firing while the chassis is still tumbling.\n" +
+             "Set this by how still a STUCK craft actually is, not by how still you imagine it is. " +
+             "The timer resets the instant this is exceeded, so a hull that comes to rest on a curved " +
+             "face and micro-rocks will keep resetting and never recover, which looks identical to " +
+             "recovery being broken. 0.5 was too tight for this chassis; 2 is the current guess and " +
+             "is unconfirmed. Try 1 to 3.")]
     [Min(0f)]
-    public float flipRecoverySpeedThreshold = 0.5f;
+    public float flipRecoverySpeedThreshold = 2f;
 
     // -------------------------------------------------------------------------
     // 🌎 Gravity
@@ -175,10 +181,26 @@ public class FoundationTuning
     [Range(0f, 5f)]
     public float extraGravityMultiplier = 0f;
 
-    [Tooltip("Extra downward pull that only applies while airborne. " +
-             "Reduces hangtime after jumps and ramps without affecting grounded feel.")]
-    [Range(0f, 30f)]
-    public float extraAirGravity = 0f;
+    // A symmetric extraAirGravity used to sit here, applying to the rise and the fall
+    // equally. Removed: it only ever shortened the whole arc, which is the same trade as
+    // raising gravity outright, and the anti-float job it existed for is done better and
+    // asymmetrically by extraFallGravity below.
+
+    [Tooltip("Extra downward pull applied ONLY while airborne and descending. " +
+             "This is the anti-float knob.\n" +
+             "Raising gravity globally kills float, but it also flattens jump arcs and " +
+             "forces big jump impulses to win the height back. Putting the weight on the " +
+             "descent only lets the rise stay generous, which is where air tricks live, " +
+             "while the landing still reads as decisive. Rise time goes up, fall time " +
+             "comes down, total hangtime barely moves.\n" +
+             "At 13 with the default gravity tuning, a max-charge jump rises for 1.02s and " +
+             "falls for 0.88s. Try 8 to 20.\n" +
+             "IMPORTANT: this breaks the rule that a jump lands at the speed it launched " +
+             "with, because the fall is now faster than the rise. Hard Landing Min Speed " +
+             "has to be derived from the descent, not from Jump Impulse Max. Recheck it " +
+             "whenever you move this.")]
+    [Range(0f, 40f)]
+    public float extraFallGravity = 13f;
 
     // -------------------------------------------------------------------------
     // 💥 Hard Landing
@@ -192,20 +214,26 @@ public class FoundationTuning
     [Tooltip("Downward speed (m/s along the ground normal) at the moment the hover sensors first see ground " +
              "that counts as a hard landing. Keep this above the fastest jump return speed so ordinary jumps " +
              "never trigger it.\n" +
-             "Jumps write velocity directly, so there is no guesswork and gravity does not enter into it. " +
-             "A jump returns to the ground at exactly the speed it launched with: Jump Impulse Max. Stacking " +
-             "an air jump at the peak lands at sqrt(Jump Impulse Max^2 + Air Jump Impulse^2).\n" +
-             "At the current 40 and 25 that is 40 m/s for a max-charge jump and 47.2 m/s for a stacked one, " +
-             "so this sitting at 45 IS crossed by the stacked jump. Severity comes out around 0.09, which " +
-             "reads as a faint dust puff rather than a slam, but it is a false positive: set this above 48 " +
-             "to clear it. Recheck the sqrt whenever you retune either jump impulse.")]
+             "Jumps write velocity directly, so landing speed is computable rather than guesswork:\n" +
+             "  launch = sqrt(Jump Impulse Max^2 + Air Jump Impulse^2)   [drop the second term for a plain jump]\n" +
+             "  landing = launch x sqrt(fall gravity / rise gravity)\n" +
+             "Because Extra Fall Gravity makes the descent heavier than the ascent, a jump no longer lands " +
+             "at the speed it launched with. It lands FASTER, by that square root.\n" +
+             "At the current tuning (rise 39.24, fall 52.24, so the ratio is 1.154) a max-charge jump lands " +
+             "at 46.2 m/s and a stacked air jump at 54.4. This sitting at 58 clears both with margin.\n" +
+             "Those two figures are the speed at RIDE HEIGHT. The check actually samples on the " +
+             "airborne-to-grounded edge, which happens at Sensor Range, so the measured value is a few " +
+             "percent lower again (about 43 and 52 here). The formula therefore over-estimates slightly, " +
+             "which is the safe direction. It also means raising Sensor Range makes hard landings " +
+             "LESS likely, because the edge fires higher up where the craft is still slower.\n" +
+             "Recheck it whenever you move either jump impulse, Extra Fall Gravity, OR Sensor Range.")]
     [Min(0f)]
-    public float hardLandingMinSpeed = 45f;
+    public float hardLandingMinSpeed = 58f;
 
     [Tooltip("Downward speed at which the crash reads at full severity. Roughly a 60m drop at default " +
              "gravity tuning. Try 65 to 80.")]
     [Min(0f)]
-    public float hardLandingMaxSpeed = 70f;
+    public float hardLandingMaxSpeed = 85f;
 
     [Tooltip("How much of the hover spring gives way at full severity. 1 cuts the springs out completely " +
              "so the chassis free-falls onto its collider; 0.5 is a heavy sag. Try 0.8 to 1.")]

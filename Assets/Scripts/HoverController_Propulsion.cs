@@ -660,10 +660,23 @@ public class HoverController_Propulsion : MonoBehaviour
             {
                 // Suppress reverse drive if already at or below reverse top speed.
                 // reverseTopSpeed is independent of strafe mode by design (reverse
-                // and strafe share the same speed budget), so no blending here.
-                if (currentFwd > -P.reverseTopSpeed)
-                    rawAccel = Mathf.Max(throttle * P.maxReverseAccel,
-                                         (-P.reverseTopSpeed - currentFwd) / Time.fixedDeltaTime);
+                // and strafe share the same speed budget), so no strafe blending here.
+                //
+                // Boost DOES apply, though. The boost gate in ApplyBoostBlend accepts
+                // reverse throttle (|throttle| >= 0.15), so holding boost in reverse was
+                // already draining energy every tick -- it just had no effect here,
+                // because this branch read the raw tuning values while only the forward
+                // branch used the boost-scaled ones. Paying for nothing is worse than
+                // not being able to boost at all, so scale both by the same ratios the
+                // forward path uses.
+                float boostAccelRatio = effectiveForwardAccel / P.maxForwardAccel;
+                float boostSpeedRatio = effectiveTopSpeed     / P.topSpeed;
+                float reverseAccel    = P.maxReverseAccel * boostAccelRatio;
+                float reverseCap      = P.reverseTopSpeed * boostSpeedRatio;
+
+                if (currentFwd > -reverseCap)
+                    rawAccel = Mathf.Max(throttle * reverseAccel,
+                                         (-reverseCap - currentFwd) / Time.fixedDeltaTime);
             }
         }
         else
@@ -789,21 +802,39 @@ public class HoverController_Propulsion : MonoBehaviour
         if (driftLerp > 0f)
             return;
 
+        // Match the cap ApplyDrive actually clamps against. Drive stops pushing at the
+        // strafe-blended top speed, so bleeding against the unblended one left a band
+        // (strafeTopSpeed..topSpeed) where drive was suppressed for being over cap, drag
+        // was suppressed for held throttle, and the bleed had not engaged yet -- nothing
+        // acted on the chassis and it coasted there indefinitely. Same expression as
+        // ApplyDrive so the two can never disagree again.
+        float strafeEffectiveTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
+        float blendedTopSpeed = Mathf.Lerp(effectiveTopSpeed, strafeEffectiveTopSpeed, _strafeModeBlend);
+
         // Use forward-axis speed only. Total magnitude includes lateral, which is
         // irrelevant to the forward top-speed cap.
         float forwardSpeed = _cachedLocalVel.z;
 
-        if (forwardSpeed > effectiveTopSpeed)
+        if (forwardSpeed > blendedTopSpeed)
         {
-            float excess = forwardSpeed - effectiveTopSpeed;
+            float excess = forwardSpeed - blendedTopSpeed;
             rb.AddForce(-transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
         }
-        else if (forwardSpeed < -P.reverseTopSpeed)
+        else
         {
             // Mirror bleed for reverse. Catches dodge burst overshoot and any other
-            // impulse that pushes past reverseTopSpeed backward.
-            float excess = -P.reverseTopSpeed - forwardSpeed;
-            rb.AddForce(transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
+            // impulse that pushes past the reverse cap backward.
+            //
+            // Boost-scaled to match the cap ApplyDrive clamps reverse against, for the
+            // same reason as the forward axis above: bleeding at the unboosted cap while
+            // drive pushes to the boosted one puts the two in direct opposition.
+            float reverseCap = P.reverseTopSpeed * (effectiveTopSpeed / P.topSpeed);
+
+            if (forwardSpeed < -reverseCap)
+            {
+                float excess = -reverseCap - forwardSpeed;
+                rb.AddForce(transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
+            }
         }
     }
 

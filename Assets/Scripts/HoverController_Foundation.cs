@@ -322,6 +322,11 @@ public class HoverController_Foundation : MonoBehaviour
             liftFactor = 1f - F.hardLandingSuppressStrength * hardLandingSeverity * progress;
         }
 
+        // Total downward acceleration the springs have to hold against: Unity's own
+        // gravity plus the extraGravityMultiplier added in ApplyExtraGravity. Hoisted
+        // out of the loop; every point feeds forward an equal share of it.
+        float gravityMagnitude = Physics.gravity.magnitude * (1f + F.extraGravityMultiplier);
+
         Vector3 normalSum     = Vector3.zero;
         int     groundedCount = 0;
 
@@ -341,13 +346,24 @@ public class HoverController_Foundation : MonoBehaviour
 
             float compression         = F.hoverHeight - hit.distance;
             float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), hit.normal);
-            float springForce         = compression * F.liftStrength - velocityAlongNormal * F.liftDamping;
 
-            if (F.enableSlopeLiftCompensation)
-            {
-                float slopeFactor = Mathf.Clamp01(1f - hit.normal.y);
-                springForce *= Mathf.Lerp(1f, F.slopeLiftMultiplier, slopeFactor);
-            }
+            // Gravity feedforward: each point carries its share of the chassis weight,
+            // so the spring term only has to correct ERROR instead of also holding the
+            // craft up. Without this the springs must compress until k*x equals weight,
+            // which parked ride height a fixed gravity/stiffness below hoverHeight
+            // (0.98m at the old 39.24 / 40). Now hoverHeight is literal, and liftStrength
+            // is free to be tuned purely for how hard the chassis resists being pushed
+            // around -- height and looseness stop being the same knob inverted.
+            //
+            // Scaled by hit.normal.y so it supports exactly the NORMAL component of
+            // weight (G*cos0) and leaves the tangential component unopposed. Feeding it
+            // forward along world up instead would cancel gravity outright and glue the
+            // chassis to slopes.
+            float gravityShare = gravityMagnitude * hit.normal.y / hoverPoints.Length;
+
+            float springForce = compression * F.liftStrength
+                              - velocityAlongNormal * F.liftDamping
+                              + gravityShare;
 
             // Clamp at zero: the spring only pushes, never pulls. Load-bearing for
             // jump feel — without it the damping term would fight jump takeoff.
@@ -416,8 +432,11 @@ public class HoverController_Foundation : MonoBehaviour
     /// <summary>
     /// extraGravityMultiplier always applies. It increases the effective weight of the
     /// chassis and helps it sit firmly on the hover springs.
-    /// extraAirGravity only applies airborne. It pulls the chassis down faster after
-    /// jumps and ramps without affecting grounded feel.
+    /// extraFallGravity applies only while airborne AND DESCENDING. Gravity is otherwise
+    /// symmetric, so the only way to kill float used to be raising it globally -- which
+    /// also flattened jump arcs and forced the large jump impulses that compensate for it.
+    /// Weighting the descent alone lets the ascent stay generous (air-trick window) while
+    /// the landing still reads as decisive.
     /// Both are tuning knobs for physical character, not player input.
     /// </summary>
     private void ApplyExtraGravity()
@@ -425,8 +444,15 @@ public class HoverController_Foundation : MonoBehaviour
         if (F.extraGravityMultiplier > 0f)
             rb.AddForce(Physics.gravity * F.extraGravityMultiplier, ForceMode.Acceleration);
 
-        if (!IsHoverGrounded && F.extraAirGravity > 0f)
-            rb.AddForce(Vector3.down * F.extraAirGravity, ForceMode.Acceleration);
+        if (IsHoverGrounded)
+            return;
+
+        // World-space Y, matching the world-up jump impulse. Reading the body axis here
+        // would flip the sign mid-flip and yank the chassis upward during air control.
+        float airGravity = rb.linearVelocity.y < 0f ? F.extraFallGravity : 0f;
+
+        if (airGravity > 0f)
+            rb.AddForce(Vector3.down * airGravity, ForceMode.Acceleration);
     }
 
     // -------------------------------------------------------------------------
@@ -730,6 +756,41 @@ public class HoverController_Foundation : MonoBehaviour
                 transform.position + Vector3.up * 1.5f,
                 $"Unstick {unstickTimer:F2} / {F.unstickRecoveryDelay:F2}s"
             );
+        }
+
+        // --- Flip recovery diagnostics ---
+        // Shown whenever the craft is tilted enough to care, not only while the timer is
+        // already running, because the interesting failure is the timer NOT starting (or
+        // resetting). Every gate is printed with its live value so a stuck craft says
+        // exactly which condition is blocking it instead of leaving it to guesswork.
+        if (profile != null && Application.isPlaying)
+        {
+            float tiltNow = Vector3.Angle(transform.up, Vector3.up);
+            if (tiltNow >= F.flipRecoveryAngleThreshold * 0.5f)
+            {
+                bool  flippedNow = tiltNow >= F.flipRecoveryAngleThreshold;
+                float speedNow   = rb.linearVelocity.magnitude;
+                bool  slowNow    = speedNow < F.flipRecoverySpeedThreshold;
+                bool  contactNow = IsContactingGround;
+
+                string blocker =
+                      !contactNow  ? "BLOCKED: no ground contact"
+                    : !flippedNow  ? "BLOCKED: tilt below threshold"
+                    : !slowNow     ? "BLOCKED: moving too fast"
+                    : IsHoverGrounded && rightingAuthorized ? "BLOCKED: hover grounded revoked authority"
+                    : rightingAuthorized ? "RIGHTING" : "counting up";
+
+                UnityEditor.Handles.color = rightingAuthorized ? Color.magenta
+                                          : (contactNow && flippedNow && slowNow) ? new Color(1f, 0.6f, 0f)
+                                          : Color.red;
+                UnityEditor.Handles.Label(
+                    transform.position + Vector3.up * 2.6f,
+                    $"FLIP {flipTimer:F2}/{F.flipRecoveryDelay:F2}s  {blocker}\n" +
+                    $"  tilt {tiltNow:F0}deg (need {F.flipRecoveryAngleThreshold:F0})\n" +
+                    $"  speed {speedNow:F2} (need < {F.flipRecoverySpeedThreshold:F2})\n" +
+                    $"  contact {contactNow}   hoverGrounded {IsHoverGrounded}   authorized {rightingAuthorized}"
+                );
+            }
         }
 
         // --- Flip recovery timer bar (orange) ---

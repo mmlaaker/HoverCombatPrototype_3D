@@ -12,17 +12,28 @@ public class PropulsionTuning
     // 🚀 Drive
     // -------------------------------------------------------------------------
     [Header("🚀 Drive")]
-    [Tooltip("How hard the chassis accelerates forward at full throttle, before boost.")]
+    [Tooltip("How hard the chassis accelerates forward at full throttle, before boost.\n" +
+             "Cannot be 0: boost scaling for the reverse path is expressed as a ratio against this, " +
+             "so a zero here would divide by zero and push NaN into the rigidbody.")]
+    [Min(0.01f)]
     public float maxForwardAccel = 25f;
 
-    [Tooltip("Forward top speed before boost.")]
+    [Tooltip("Forward top speed before boost. Also the reference the strafe and reverse caps are " +
+             "scaled against, so it can never be 0.")]
+    [Min(0.01f)]
     public float topSpeed = 40f;
 
     [Tooltip("How hard the chassis accelerates in reverse at full throttle.")]
     public float maxReverseAccel = 15f;
 
-    [Tooltip("Reverse top speed. Independent of forward top speed. " +
-             "Tune this alongside Max Reverse Accel and Strafe Top Speed; they should feel like a matched budget.")]
+    [Tooltip("Reverse top speed. Independent of forward top speed as a base value, but boost now " +
+             "scales it by Boost Speed Multiplier the same way it scales the forward cap, so " +
+             "boosting in reverse really does go faster.\n" +
+             "Tune this alongside Max Reverse Accel and Strafe Top Speed; they should feel like a " +
+             "matched budget. Note Max Reverse Accel doubles as the BRAKE: pulling reverse while " +
+             "moving forward decelerates at that rate, so it is set by how fast you want to stop, " +
+             "not by how fast you want to reverse.")]
+    [Min(0.01f)]
     public float reverseTopSpeed = 20f;
 
     // -------------------------------------------------------------------------

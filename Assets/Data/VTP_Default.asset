@@ -13,18 +13,16 @@ MonoBehaviour:
   m_Name: VTP_Default
   m_EditorClassIdentifier: Assembly-CSharp::VehicleTuningProfile
   foundation:
-    hoverHeight: 5
-    sensorRange: 7
-    liftStrength: 10
-    liftDamping: 1.5
-    enableSlopeLiftCompensation: 1
-    slopeLiftMultiplier: 1.15
+    hoverHeight: 7
+    sensorRange: 9.5
+    liftStrength: 16
+    liftDamping: 2.2
     levelingTorqueStrength: 12
     pitchRollDamping: 8
-    aimPitchTrackingStrength: 150
-    aimPitchDamping: 8
-    airPitchTorque: 14
-    airRollTorque: 24
+    aimPitchTrackingStrength: 200
+    aimPitchDamping: 10
+    airPitchTorque: 20
+    airRollTorque: 35
     airControlDamping: 4
     unstickRecoveryDelay: 0.2
     unstickMaxVerticalSpeed: 1
@@ -33,31 +31,31 @@ MonoBehaviour:
     flipRecoveryAngleThreshold: 80
     flipRecoveryDelay: 1
     flipRecoveryTorque: 60
-    flipRecoverySpeedThreshold: 0.5
+    flipRecoverySpeedThreshold: 2
     extraGravityMultiplier: 3
-    extraAirGravity: 3
+    extraFallGravity: 13
     enableHardLanding: 1
-    hardLandingMinSpeed: 45
-    hardLandingMaxSpeed: 70
+    hardLandingMinSpeed: 58
+    hardLandingMaxSpeed: 85
     hardLandingSuppressStrength: 0.9
     hardLandingSuppressDuration: 0.35
   propulsion:
-    maxForwardAccel: 50
-    topSpeed: 50
-    maxReverseAccel: 25
-    reverseTopSpeed: 30
-    yawAccel: 7
-    yawDamping: 6
+    maxForwardAccel: 65
+    topSpeed: 60
+    maxReverseAccel: 50
+    reverseTopSpeed: 40
+    yawAccel: 13
+    yawDamping: 8
     airTurnMultiplier: 0.5
     enableBoost: 1
     boostAccelMultiplier: 1.5
     boostSpeedMultiplier: 1.5
     boostBlendSeconds: 0.35
     boostEnergyPerSecond: 20
-    dodgeForce: 1000
-    dodgeDuration: 0.1
+    dodgeForce: 650
+    dodgeDuration: 0.16
     dodgeEnergyCost: 15
-    dodgeCooldown: 1
+    dodgeCooldown: 0.8
     enableJump: 1
     jumpImpulseMin: 15
     jumpImpulseMax: 40
@@ -72,18 +70,18 @@ MonoBehaviour:
     driftForwardDamp: 1
     driftYawMultiplier: 1.5
     driftTurnThreshold: 0.5
-    minDriftSpeed: 25
+    minDriftSpeed: 40
     driftBlendSeconds: 0.15
     maxBankAngle: 12
-    passiveBankAngle: 3
+    passiveBankAngle: 5
     bankLerpSpeed: 8
     enableAirControl: 1
     airControlBlendSeconds: 0.15
     enableStrafe: 1
-    strafeTopSpeed: 30
-    strafeAccel: 25
-    strafePitchLimit: 20
-    strafePitchSensitivity: 90
+    strafeTopSpeed: 40
+    strafeAccel: 35
+    strafePitchLimit: 25
+    strafePitchSensitivity: 150
     strafeModeBlendSeconds: 0.2
     strafeLateralCapStrength: 3
   energy:

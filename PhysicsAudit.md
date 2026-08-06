@@ -4,6 +4,19 @@
 **Commit at audit:** `4a34f21`
 **Purpose:** Establish what the current numbers actually do, ahead of a deep tuning pass.
 
+> ## ⚠ Point-in-time snapshot. Values here are superseded.
+>
+> This documents the state at `4a34f21`, **before** the sedan tuning pass. The *derivations, formulas and method* are all still valid and worth reading. The *values* are not: ride height, damping, top speed, turn rate, jump, dodge and gravity have all moved since.
+>
+> - For current state and open work, read **`HANDOFF.md`**.
+> - For current values, read **`Assets/Data/VTP_Default.asset`**. Never trust a number copied into a doc.
+>
+> Two things in this document have since been resolved and are corrected in `HANDOFF.md`:
+> - The **spin-ceiling open question** is closed. The tooltip's claim was correct.
+> - The **"bullets eaten" section** correctly records that the layer-mask theory was disproved, but the cause remains open.
+>
+> Superseded by this pass: the 1 m sag (eliminated by gravity feedforward), the strafe forward dead band (fixed), the underdamped hover (retuned), and slope compensation (removed as redundant).
+
 ## How to read this
 
 Every number here is **derived from source code and serialized asset values**, not measured at runtime. The formulas were traced line by line through `HoverController_Foundation.cs` and `HoverController_Propulsion.cs`; the values come from `Assets/Data/VTP_Default.asset`, the `WD_*.asset` weapon definitions, the emitter prefabs, and `ProjectSettings/`.
