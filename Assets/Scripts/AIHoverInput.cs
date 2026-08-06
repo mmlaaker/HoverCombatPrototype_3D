@@ -60,7 +60,9 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     // -------------------------------------------------------------------------
     [Header("🎯 Target Selection")]
     [Tooltip("How often (seconds) to rescan for the nearest enemy. " +
-             "Avoids FindObjectsByType every frame. Recommended: 0.5–1.0.")]
+             "Searching every frame is expensive, so the AI reuses its last pick in between. " +
+             "Longer intervals are cheaper but leave the AI chasing a stale target for longer. " +
+             "Try 0.5 to 1.0.")]
     [Min(0.1f)]
     [SerializeField] private float targetRescanInterval = 0.5f;
 
@@ -92,8 +94,10 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     [Min(1f)]
     [SerializeField] private float fireRange = 30f;
 
-    [Tooltip("Dot product threshold for firing. 1 = dead ahead only, 0 = 90 degrees. " +
-             "Recommended: 0.7 (roughly 45 degree half-cone).")]
+    [Tooltip("How close to dead ahead the target must be before the AI opens fire. " +
+             "1 means it will only shoot at something directly in front of it, 0 lets it shoot at " +
+             "anything within 90 degrees to either side. Lower values make the AI trigger-happy " +
+             "and spray while turning. Try 0.7, which is roughly a 45 degree cone to each side.")]
     [Range(0f, 1f)]
     [SerializeField] private float fireArcDot = 0.7f;
 
@@ -114,8 +118,11 @@ public class AIHoverInput : MonoBehaviour, IHoverInputProvider
     // 🕹 Steering
     // -------------------------------------------------------------------------
     [Header("🕹 Steering")]
-    [Tooltip("How sharply the AI turns toward its target heading. " +
-             "This is a signed dot-to-turn multiplier — 1 is fully responsive, lower values are lazier.")]
+    [Tooltip("How hard the AI commits to a turn once it knows which way it wants to go. " +
+             "1 means it steers as hard as the vehicle allows and snaps onto its heading; lower values " +
+             "make it lazier and wider through corners, which reads as a less alert driver. " +
+             "This scales steering only. It does not change the vehicle's actual turn rate, which is " +
+             "Yaw Accel on the tuning profile.")]
     [Range(0.1f, 1f)]
     [SerializeField] private float turnResponsiveness = 0.8f;
 

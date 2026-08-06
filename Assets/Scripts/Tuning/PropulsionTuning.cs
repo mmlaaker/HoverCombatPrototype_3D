@@ -68,7 +68,14 @@ public class PropulsionTuning
     // 💨 Strafe Dodge
     // -------------------------------------------------------------------------
     [Header("💨 Strafe Dodge")]
-    [Tooltip("Peak strength of the dodge burst. Front-loaded and tapers to zero. Mass independent.")]
+    [Tooltip("Peak strength of the dodge burst. Front-loaded and tapers to zero. Mass independent.\n" +
+             "Tune this by the speed it adds, not by the number itself. The burst tapers linearly, so the " +
+             "dodge adds this x Dodge Duration / 2 metres per second sideways. At 1000 over 0.1s that is " +
+             "50 m/s, which is a full top speed of lateral velocity delivered in a tenth of a second.\n" +
+             "Compare the result against Strafe Top Speed: anything above it is over-cap and bleeds off " +
+             "through Strafe Lateral Cap Strength rather than being sustainable. A burst worth 30 to 60% " +
+             "of Strafe Top Speed reads as a sharp sidestep; at or above 100% it reads as a teleport and " +
+             "gets hard to follow at speed. Try 300 to 700 at a 0.2s duration.")]
     [Min(0f)]
     public float dodgeForce = 120f;
 
@@ -162,8 +169,12 @@ public class PropulsionTuning
     public float driftTurnThreshold = 0.4f;
 
     [Tooltip("Minimum forward speed required to start a drift. " +
-             "Once drifting, speed is no longer checked: you own the drift until the button releases. " +
-             "Aligns naturally with Strafe Top Speed: outpacing strafe means you can drift.")]
+             "Once drifting, speed is no longer checked: you own the drift until the button releases.\n" +
+             "The intent is that this MATCHES Strafe Top Speed, so that outpacing strafe is exactly what " +
+             "earns you the drift and the two modes divide the speed range cleanly between them. That is a " +
+             "relationship to maintain by hand, not something the code enforces: they are currently 25 " +
+             "against a Strafe Top Speed of 30, so there is a band where neither rule applies. " +
+             "Move this whenever you move Strafe Top Speed.")]
     [Min(0f)]
     public float minDriftSpeed = 20f;
 
@@ -208,8 +219,13 @@ public class PropulsionTuning
 
     [Tooltip("Maximum speed sustainable in strafe mode. This is the REAL lateral ceiling: lateral damp excludes " +
              "intended strafe velocity, so raising this needs no Strafe Accel compensation. " +
-             "Entry speed above this bleeds off naturally via the soft cap. " +
-             "Cannot be re-built above this threshold once in strafe.")]
+             "Cannot be re-built above this threshold once in strafe.\n" +
+             "SIDEWAYS, entry speed above this bleeds off on its own through Strafe Lateral Cap Strength.\n" +
+             "FORWARD it does not, and this is worth knowing before you tune around it. Drive stops pushing " +
+             "at this speed, but the forward over-speed bleed does not start until the full Top Speed, and " +
+             "forward drag only applies below 0.15 throttle. Hold the stick forward in strafe anywhere " +
+             "between this and Top Speed (30 to 50 today) and nothing acts on you at all: the craft coasts " +
+             "there for as long as you hold it. Widening the gap between the two speeds widens that band.")]
     [Min(1f)]
     public float strafeTopSpeed = 20f;
 

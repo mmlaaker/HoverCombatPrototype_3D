@@ -18,13 +18,24 @@ public class FoundationTuning
     [Tooltip("How far the hover rays look down for ground. Set this generous enough that the chassis can drop a small distance before losing lift.")]
     public float sensorRange = 5f;
 
-    [Tooltip("Stiffness of the hover spring. Higher values make the chassis correct height faster and feel firmer. " +
-             "Push too high and the vehicle starts bouncing.")]
-    public float liftStrength = 50000f;
+    [Tooltip("Stiffness of the hover spring, PER HOVER POINT. Higher values make the chassis correct height " +
+             "faster and feel firmer; push too high and the vehicle starts bouncing.\n" +
+             "Force is applied as mass-independent acceleration and every hover point contributes its own, " +
+             "so the stiffness the chassis actually feels is this value times the number of hover points. " +
+             "At 4 points and 10 that is 40 m/s^2 per metre of compression. This is why the number looks small.\n" +
+             "It also sets the resting sag: the springs settle where lift balances weight, so " +
+             "sag = total gravity / total stiffness. At default gravity tuning (39.24) and 40 that is " +
+             "0.98m below Hover Height. Raising this reduces sag proportionally.")]
+    public float liftStrength = 10f;
 
-    [Tooltip("Damping on the hover spring. Higher values absorb bounce after landings or slope transitions. " +
-             "Pair with Lift Strength.")]
-    public float liftDamping = 5000f;
+    [Tooltip("Damping on the hover spring, PER HOVER POINT. Absorbs bounce after landings and slope transitions.\n" +
+             "This and Lift Strength together set how the chassis settles. Damping ratio is " +
+             "(points x this) / (2 x sqrt(points x Lift Strength)). Below 1 the craft overshoots and bobs; " +
+             "at 1 it settles without ever crossing the target.\n" +
+             "At 4 points, Lift Strength 10 and this at 1.5 the ratio is 0.47: about 18% overshoot and " +
+             "1.3s to settle, which reads as a soft float. Around 2.2 gives a firmer 0.7 ratio; " +
+             "3.2 removes the bounce entirely. Retune whenever Lift Strength changes.")]
+    public float liftDamping = 1.5f;
 
     // -------------------------------------------------------------------------
     // 🧮 Slope Lift Compensation
@@ -33,8 +44,13 @@ public class FoundationTuning
     [Tooltip("Adds extra lift on slopes so the chassis doesn't sag into hills. Recommended on for any non-flat terrain.")]
     public bool enableSlopeLiftCompensation = true;
 
-    [Tooltip("How much extra lift the slope correction adds at the steepest angle. " +
-             "1.0 disables the boost, 1.3 is subtle, 1.6 is strong.")]
+    [Tooltip("How much extra lift the slope correction adds AT A VERTICAL WALL. " +
+             "1.0 disables the boost, 1.3 is subtle, 1.6 is strong.\n" +
+             "Read the range carefully: this is the value at 90 degrees, and the ramp toward it is not " +
+             "linear in angle. It scales on (1 - normal.y), which is only 0.13 at a 30 degree slope and " +
+             "0.29 at 45. So a setting of 1.15 delivers just 1.02x on a 30 degree hill, which is " +
+             "effectively nothing. If you want a real effect on the slopes you actually drive, this has " +
+             "to sit well above the value you have in mind for them.")]
     [Range(1f, 2f)]
     public float slopeLiftMultiplier = 1.3f;
 
@@ -113,9 +129,11 @@ public class FoundationTuning
     public float unstickMaxVerticalSpeed = 1f;
 
     [Tooltip("Strength of the upward push that frees a stuck chassis. " +
-             "Front-loaded and fades over the lift window. Mass independent. Try 40 to 80.")]
+             "Front-loaded and fades over the lift window. Mass independent. Try 40 to 80.\n" +
+             "The push tapers linearly to zero, so the speed it actually adds is " +
+             "this x Unstick Lift Duration / 2. At 60 over 0.15s that is 4.5 m/s.")]
     [Min(0f)]
-    public float unstickLiftForce = 25f;
+    public float unstickLiftForce = 60f;
 
     [Tooltip("How long the unstick lift lasts as it tapers to zero. " +
              "Longer reads as a gentle bump, shorter is a quick snap. Try 0.1 to 0.25.")]
@@ -136,9 +154,13 @@ public class FoundationTuning
     public float flipRecoveryDelay = 1.0f;
 
     [Tooltip("Strength of the righting torque that flips the chassis upright. " +
-             "Must be stronger than Leveling Torque Strength to win at extreme angles. Try 20 to 40.")]
-    [Range(0f, 250f)]
-    public float flipRecoveryTorque = 28f;
+             "Must be stronger than Leveling Torque Strength to win at extreme angles. Try 30 to 70.\n" +
+             "Unlike leveling, this torque is constant regardless of how far over the craft is, so it does " +
+             "not ease off as the chassis comes back up. The righting speed it settles at is this divided by " +
+             "Pitch Roll Damping: 60 over 8 is about 430 deg/s, so the flip itself is near instant and " +
+             "Flip Recovery Delay is what the player actually feels as the setback.")]
+    [Range(0f, 100f)]
+    public float flipRecoveryTorque = 60f;
 
     [Tooltip("Speed below which flip recovery is allowed to start. " +
              "Prevents recovery from firing while the chassis is still tumbling. Try 0.5.")]
@@ -168,9 +190,15 @@ public class FoundationTuning
     public bool enableHardLanding = true;
 
     [Tooltip("Downward speed (m/s along the ground normal) at the moment the hover sensors first see ground " +
-             "that counts as a hard landing. Keep this above the fastest jump return speed (~38 from a " +
-             "max-charge jump, ~43 with an air jump stacked, at default gravity tuning) so ordinary jumps " +
-             "never trigger it. Try 42 to 50.")]
+             "that counts as a hard landing. Keep this above the fastest jump return speed so ordinary jumps " +
+             "never trigger it.\n" +
+             "Jumps write velocity directly, so there is no guesswork and gravity does not enter into it. " +
+             "A jump returns to the ground at exactly the speed it launched with: Jump Impulse Max. Stacking " +
+             "an air jump at the peak lands at sqrt(Jump Impulse Max^2 + Air Jump Impulse^2).\n" +
+             "At the current 40 and 25 that is 40 m/s for a max-charge jump and 47.2 m/s for a stacked one, " +
+             "so this sitting at 45 IS crossed by the stacked jump. Severity comes out around 0.09, which " +
+             "reads as a faint dust puff rather than a slam, but it is a false positive: set this above 48 " +
+             "to clear it. Recheck the sqrt whenever you retune either jump impulse.")]
     [Min(0f)]
     public float hardLandingMinSpeed = 45f;
 

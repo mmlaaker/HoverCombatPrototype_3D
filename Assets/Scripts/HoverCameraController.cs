@@ -103,10 +103,13 @@ public class HoverCameraController : MonoBehaviour
     [SerializeField] private Transform vehicleTarget;
 
     [Header("Input + Modules")]
-    [Tooltip("MonoBehaviour implementing IHoverInputProvider.")]
+    [Tooltip("Whatever is driving this vehicle, so the camera can read look input from the same source. " +
+             "Drag the vehicle's PlayerHoverInput here (any component implementing IHoverInputProvider works, " +
+             "which is what lets an AI-driven vehicle be spectated with the same camera).")]
     [SerializeField] private MonoBehaviour inputProvider;
 
-    [Tooltip("Propulsion module — read driftLerp for shoulder shift.")]
+    [Tooltip("The vehicle's Propulsion component. The camera watches how far into a drift the vehicle is " +
+             "and uses it to swing to the outside shoulder, so without this the shoulder shift stays flat.")]
     [SerializeField] private HoverController_Propulsion propulsion;
 
     // ── Drive Mode: Camera Pitch ──────────────────────────────────────────

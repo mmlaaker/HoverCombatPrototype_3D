@@ -49,7 +49,10 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     // -------------------------------------------------------------------------
     [Header("💥 Impact")]
     [Tooltip("Splash radius in metres. Anything inside takes damage scaled by the falloff curve. " +
-             "Halo-style: 5 to 8.")]
+             "Halo-style is 5 to 8; the missile prefabs currently ship 10, which is wider than that " +
+             "and worth a look during a tuning pass.\n" +
+             "This has to agree with what the explosion VFX actually draws, which is why it still lives " +
+             "on the prefab instead of on the WeaponDefinition with the impact forces.")]
     [SerializeField] private float splashRadius = 6f;
 
     [Tooltip("Maps distance from the explosion centre (0 = centre, 1 = edge) to a damage and " +
