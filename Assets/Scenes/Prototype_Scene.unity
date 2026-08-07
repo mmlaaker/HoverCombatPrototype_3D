@@ -1643,6 +1643,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6056019813642530629, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: lockTargetLayers.m_Bits
+      value: 64
+      objectReference: {fileID: 0}
     - target: {fileID: 8427285393085644911, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_Enabled
       value: 0

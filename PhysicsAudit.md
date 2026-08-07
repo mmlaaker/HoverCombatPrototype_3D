@@ -8,12 +8,16 @@
 >
 > This documents the state at `4a34f21`, **before** the sedan tuning pass. The *derivations, formulas and method* are all still valid and worth reading. The *values* are not: ride height, damping, top speed, turn rate, jump, dodge and gravity have all moved since.
 >
-> - For current state and open work, read **`HANDOFF.md`**.
+> - For what the systems currently are and why, read **`CLAUDE.md`** (Resolved Work & Standing Decisions).
+> - For open work, read **`TODO.md`**. There is no handoff document.
 > - For current values, read **`Assets/Data/VTP_Default.asset`**. Never trust a number copied into a doc.
 >
-> Two things in this document have since been resolved and are corrected in `HANDOFF.md`:
+> This file is **frozen and not maintained.** Nothing here should be corrected in place; if a
+> derivation below is superseded, the current answer belongs in `CLAUDE.md`.
+>
+> Two things in this document have since been resolved, and `CLAUDE.md` carries the corrections:
 > - The **spin-ceiling open question** is closed. The tooltip's claim was correct.
-> - The **"bullets eaten" section** correctly records that the layer-mask theory was disproved, but the cause remains open.
+> - The **"bullets eaten" section** correctly records that the layer-mask theory was disproved. The symptom is no longer reproducing and the item is closed.
 >
 > Superseded by this pass: the 1 m sag (eliminated by gravity feedforward), the strafe forward dead band (fixed), the underdamped hover (retuned), and slope compensation (removed as redundant).
 >

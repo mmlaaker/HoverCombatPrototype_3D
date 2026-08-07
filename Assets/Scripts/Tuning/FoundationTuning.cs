@@ -104,13 +104,15 @@ public class FoundationTuning
              "design where Propulsion's pitch torque fought leveling (competing forces = jitter). " +
              "Applies to the PITCH AXIS ONLY: ground-normal alignment (roll, bump following) stays at Leveling " +
              "Torque Strength, so cranking this for FPS-snappy aim does not stiffen the ride over bumps. " +
-             "Pitch Roll Damping kills the overshoot; raise it if the nose oscillates.")]
+             "Pitch Roll Damping kills the overshoot; raise it if the nose oscillates. Live value is 200.")]
     [Range(0f, 300f)]
     public float aimPitchTrackingStrength = 150f;
 
     [Tooltip("EXTRA pitch-rate damping applied only while aiming, on top of Pitch Roll Damping, scaled by the " +
-             "strafe blend. Lets aim settle be tuned independently of ride stiffness. With tracking strength 150: " +
-             "Pitch Roll Damping 8 alone = ~35% overshoot on a flick; +8 here (16 total) = lands clean with snap. " +
+             "strafe blend. Lets aim settle be tuned independently of ride stiffness. The overshoot figures were " +
+             "characterised at tracking strength 150: Pitch Roll Damping 8 alone = ~35% overshoot on a flick, " +
+             "+8 here (16 total) = lands clean with snap. Both have since moved (live 200 and 10), so those " +
+             "percentages are indicative, not current. " +
              "More damping also slows the approach slightly; raise tracking strength to compensate if it feels heavy.")]
     [Range(0f, 30f)]
     public float aimPitchDamping = 8f;
@@ -120,15 +122,17 @@ public class FoundationTuning
     // -------------------------------------------------------------------------
     [Header("🛩 Air Control")]
     [Tooltip("Pitch torque while air control is active (drift held airborne). Stick up = nose down. " +
-             "Steady flip rate is this divided by Air Control Damping: 14 over 4 = ~200 deg/s, a full flip " +
-             "in about 2 seconds. Keep below Air Roll Torque: a car-shaped craft flips slower than it rolls. " +
-             "Try 10 to 20.")]
+             "Steady flip rate is this divided by Air Control Damping: at the live 20 over 4 that is " +
+             "~286 deg/s, a full flip in about 1.3 seconds. Keep below Air Roll Torque: a car-shaped craft " +
+             "flips slower than it rolls. Try 10 to 20.")]
     [Range(0f, 60f)]
     public float airPitchTorque = 14f;
 
     [Tooltip("Roll torque while air control is active. Stick right = roll right. Steady roll rate is this " +
-             "divided by Air Control Damping: 24 over 4 = ~344 deg/s, a full barrel roll in just over a second. " +
-             "Try 18 to 32.")]
+             "divided by Air Control Damping: at the live 35 over 4 that is ~501 deg/s, a full barrel roll in " +
+             "about three quarters of a second. That 501 is the figure the flip-recovery bypass was measured " +
+             "against, so moving it changes how much authority a downed craft would regain if the IsDowned " +
+             "gate ever came off. Try 18 to 35.")]
     [Range(0f, 60f)]
     public float airRollTorque = 24f;
 
@@ -229,7 +233,16 @@ public class FoundationTuning
     // 🌎 Gravity
     // -------------------------------------------------------------------------
     [Header("🌎 Gravity")]
-    [Tooltip("Extra gravity applied at all times. Pulls the chassis down harder onto the hover springs for a heavier feel. 0 disables.")]
+    [Tooltip("Extra gravity applied at all times, as a MULTIPLE of Unity's gravity added on top of it. " +
+             "Pulls the chassis down harder onto the hover springs for a heavier feel. 0 disables.\n" +
+             "This is the most load-bearing number in the profile and it does not look like it. The live " +
+             "value is 3, so effective downward acceleration is 9.81 x (1 + 3) = 39.24 m/s^2, and that 39.24 " +
+             "is the 'rise gravity' every jump, hang-time and hard-landing derivation in the docs is built on. " +
+             "It also feeds the hover spring directly: ApplyHoverForces feeds forward " +
+             "9.81 x (1 + this) x normal.y per point, so changing it silently rescales the gravity " +
+             "feedforward that makes Hover Height literal.\n" +
+             "Moving this invalidates, at minimum: Hard Landing Min Speed, both jump impulses, and the " +
+             "Extra Fall Gravity balance. Recheck all of them.")]
     [Range(0f, 5f)]
     public float extraGravityMultiplier = 0f;
 

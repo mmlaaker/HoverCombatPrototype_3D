@@ -80,11 +80,24 @@ public static class ProjectileSweep
     /// before the solver ever gets to deflect it.
     /// </summary>
     /// <param name="self">Projectile root, used to reject its own colliders.</param>
+    /// <param name="owner">
+    /// Firing vehicle's root, rejected the same way as <paramref name="self"/>. May be null.
+    ///
+    /// Load-bearing now that projectiles sit on their own layer. That layer deliberately still
+    /// COLLIDES with both vehicle layers, because the mask this sweep uses is derived from the
+    /// collision matrix and making it ignore vehicles would mean projectiles pass straight through
+    /// their targets. So the matrix keeps direct hits working and the owner is filtered here
+    /// instead, which is the only place that can tell the shooter apart from a legitimate target.
+    ///
+    /// Without this the arming delay is the sole protection against detonating on your own hull,
+    /// and that protection is incidental: it holds only while speed x armingDelay happens to
+    /// exceed the muzzle's clearance over the chassis. Lower a missile's speed and it evaporates.
+    /// </param>
     /// <param name="from">Position at the end of the previous physics step.</param>
     /// <param name="current">Position now, before this step is simulated.</param>
     /// <param name="step">Displacement this step will apply, ie. velocity * fixedDeltaTime.</param>
     /// <returns>True if something was hit, with the contact point and collider.</returns>
-    public static bool TryHit(Transform self, Vector3 from, Vector3 current, Vector3 step,
+    public static bool TryHit(Transform self, Transform owner, Vector3 from, Vector3 current, Vector3 step,
                               float radius, int mask, out Vector3 point, out Collider collider)
     {
         point    = current;
@@ -110,6 +123,7 @@ public static class ProjectileSweep
                 var hit = _hits[i];
                 if (hit.collider == null) continue;
                 if (hit.collider.transform.IsChildOf(self)) continue;
+                if (owner != null && hit.collider.transform.IsChildOf(owner)) continue;
 
                 if (hit.distance < best)
                 {
@@ -137,6 +151,7 @@ public static class ProjectileSweep
             var c = _overlaps[i];
             if (c == null) continue;
             if (c.transform.IsChildOf(self)) continue;
+            if (owner != null && c.transform.IsChildOf(owner)) continue;
 
             collider = c;
             point    = c.ClosestPoint(current);

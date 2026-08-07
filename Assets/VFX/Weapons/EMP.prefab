@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 7178296397519035441}
   - component: {fileID: 956429703882624066}
   - component: {fileID: 32803824828021196}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Placeholder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4906,7 +4906,7 @@ GameObject:
   - component: {fileID: 8908782372257021890}
   - component: {fileID: 5025327250390175234}
   - component: {fileID: 3059917445592799278}
-  m_Layer: 6
+  m_Layer: 8
   m_Name: EMP
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5006,7 +5006,7 @@ GameObject:
   - component: {fileID: 7578978800647644777}
   - component: {fileID: 5157313254720783367}
   - component: {fileID: 1848731527280794677}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: VFX_EMP
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -12,8 +12,12 @@ using UnityEngine;
 /// weapons that only hit the opposing team).
 ///
 /// Requires layers "PlayerVehicle" and "AIVehicle" to exist in the Tag Manager.
-/// DefaultExecutionOrder(-20) ensures this runs before Foundation (-15),
-/// Health (-10), and all other vehicle systems.
+/// DefaultExecutionOrder(-20) makes this the earliest thing on the vehicle. It is
+/// the lowest order in the project: VehicleHealth is -10 and everything else is
+/// the default 0, so the layer is settled before any Awake that reads it. The
+/// consumers that depend on that ordering are ParticleWeaponCollision (strips the
+/// firer's own layer from the emitter collision mask) and VehicleHUD (strips it
+/// from the reticle aim raycast).
 /// </summary>
 [DefaultExecutionOrder(-20)]
 public class VehicleLayerAssigner : MonoBehaviour

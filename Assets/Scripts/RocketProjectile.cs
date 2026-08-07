@@ -58,12 +58,26 @@ using UnityEngine;
 /// Prefab setup:
 ///   Rigidbody: Use Gravity OFF, Collision Detection: Continuous Dynamic, Drag 0
 ///   Collider:  convex (Capsule or Box), NOT a trigger
-///   Layer:     a Projectile layer that doesn't collide with the firer's vehicle layer
+///   Layer:     Projectile (8), on the ROOT and every child. See the note below.
 ///   Damage Layers: enemy vehicle layers (and any other splash targets)
 ///   Explosion Prefab: a self-destructing VFX prefab spawned at impact point
+///
+/// On the Projectile layer, and why it still collides with vehicles:
+///   An earlier version of this comment asked for "a Projectile layer that doesn't collide with
+///   the firer's vehicle layer". That is the wrong shape, and it cannot work here. ProjectileSweep
+///   DERIVES its mask from the collision matrix, deliberately, so the sweep and the physics engine
+///   can never disagree about what is solid. Make the matrix ignore vehicles and the sweep ignores
+///   them too, and projectiles fly straight through their targets.
+///   So the matrix keeps Projectile colliding with Default and both vehicle layers, and the firer
+///   is filtered by IDENTITY instead: the owner Transform arrives via IProjectileOwner and is
+///   rejected in ProjectileSweep.TryHit and in OnCollisionEnter. Projectile ignores itself (a
+///   volley must not detonate itself), Ignore Raycast, TransparentFX, Water and UI.
+///   Before this, the only thing stopping a rocket detonating on its own launcher was arming
+///   delay, and that protection was incidental: it held solely because speed x armingDelay
+///   happened to exceed the muzzle's 0.08m clearance over the chassis.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
-public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHomingTarget
+public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHomingTarget, IProjectileOwner
 {
     // -------------------------------------------------------------------------
     // Tuning
@@ -106,6 +120,11 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     private float age;
     private bool  exploded;
     private Transform homingTarget;
+
+    // The vehicle that fired this, pushed at spawn by FireAllMuzzles. Null is legal
+    // and simply means "nothing to exclude" (a projectile spawned by something that
+    // is not a vehicle, or an older prefab wired before IProjectileOwner existed).
+    private Transform owner;
 
     // The whole tuning surface, handed over at spawn by FireAllMuzzles. Read live, never copied.
     private WeaponDefinition def;
@@ -150,6 +169,12 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
 
     /// <summary>Receives the homing target from the spawning weapon. Null = dumbfire.</summary>
     public void SetTarget(Transform target) => homingTarget = target;
+
+    /// <summary>
+    /// Receives the firing vehicle's root. Used only to give the firer its own case
+    /// in the splash loop: no self-damage ever, and a separately scaled shove.
+    /// </summary>
+    public void SetOwner(Transform owner) => this.owner = owner;
 
     // -------------------------------------------------------------------------
     // Unity lifecycle
@@ -298,7 +323,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
         // it here detonates on approach instead of after the solver has deflected the rocket.
         Vector3 step = rb.linearVelocity * dt;
 
-        if (ProjectileSweep.TryHit(transform, sweepFrom, now, step, sweepRadius, sweepMask,
+        if (ProjectileSweep.TryHit(transform, owner, sweepFrom, now, step, sweepRadius, sweepMask,
                                    out Vector3 point, out Collider col))
         {
             Explode(point, col);
@@ -321,6 +346,13 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     private void OnCollisionEnter(Collision col)
     {
         if (exploded || age < FL.armingDelay)
+            return;
+
+        // Same owner filter the sweep applies. The Projectile layer collides with both vehicle
+        // layers on purpose (see ProjectileSweep.TryHit), so the firer's own hull can reach this
+        // callback, and detonating on it would be exactly the failure the layer split exists to
+        // prevent.
+        if (owner != null && col.collider.transform.IsChildOf(owner))
             return;
 
         Vector3 hitPoint = col.contactCount > 0 ? col.GetContact(0).point : transform.position;
@@ -346,19 +378,35 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
         bool debug = ShouldDrawDebug;
         if (debug) WeaponDebugDraw.Blast(epicenter, B.splashRadius);
 
+        // The firer, resolved once. Reference comparison is enough: every collider on
+        // a vehicle resolves through GetComponentInParent to the same VehicleHealth
+        // instance, which is the same one this finds from the root.
+        IDamageable ownerDamageable = owner != null
+            ? owner.GetComponentInChildren<IDamageable>()
+            : null;
+
         // Direct hit
         if (directHitCollider != null)
         {
             var directDamageable = directHitCollider.GetComponentInParent<IDamageable>();
+            bool directIsOwner   = directDamageable != null && directDamageable == ownerDamageable;
+
             if (directDamageable != null)
             {
-                directDamageable.TakeDamage(C.damage);
+                // Unreachable in practice at the shipped arming delay, which keeps the
+                // rocket from detonating inside its own launcher. Guarded anyway so the
+                // "you never damage yourself" rule holds on every path, not just splash.
+                if (!directIsOwner)
+                    directDamageable.TakeDamage(C.damage);
+
                 _splashedThisExplosion.Add(directDamageable);
             }
 
             var directRb = directHitCollider.GetComponentInParent<Rigidbody>();
+            float directForce = directIsOwner ? I.impactForce * I.selfImpactScale : I.impactForce;
+
             WeaponImpact.Apply(directRb, transform.forward, epicenter,
-                               I.impactForce, I.destabilizeFraction, 1f, debug);
+                               directForce, I.destabilizeFraction, 1f, debug);
         }
 
         // Splash
@@ -383,19 +431,30 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
             float t     = Mathf.Clamp01(dist / B.splashRadius);
             float scale = B.splashFalloff.Evaluate(t);
 
-            damageable.TakeDamage(C.damage * scale);
+            // The firer gets its own case. Never damaged by its own blast; shoved by a
+            // separately authored fraction, which is what makes the rocket jump a dial
+            // rather than an accident. selfImpactScale 0 excludes it outright, since
+            // WeaponImpact.Apply early-outs on a zero magnitude.
+            bool isOwner = damageable == ownerDamageable;
+
+            if (!isOwner)
+                damageable.TakeDamage(C.damage * scale);
 
             // The measured-from point is what silently broke before: children of a compound
             // collider all resolve to one IDamageable, so whichever collider OverlapSphere
             // returned first used to decide both falloff and push direction.
             if (debug) WeaponDebugDraw.SplashVictim(epicenter, reference, scale);
 
-            if (logSplash)
-                Debug.Log($"[Splash] {hit.transform.root.name} via '{hit.name}'  " +
-                          $"dist={dist:F2}m / {B.splashRadius:F1}m  falloff={scale:F3}  " +
-                          $"damage={C.damage * scale:F1}  force={I.splashImpactForce * scale:F0}", this);
+            float splashForce = isOwner
+                ? I.splashImpactForce * I.selfImpactScale
+                : I.splashImpactForce;
 
-            if (hitRb != null && I.splashImpactForce > 0f)
+            if (logSplash)
+                Debug.Log($"[Splash] {hit.transform.root.name} via '{hit.name}'{(isOwner ? " [SELF]" : "")}  " +
+                          $"dist={dist:F2}m / {B.splashRadius:F1}m  falloff={scale:F3}  " +
+                          $"damage={(isOwner ? 0f : C.damage * scale):F1}  force={splashForce * scale:F0}", this);
+
+            if (hitRb != null && splashForce > 0f)
             {
                 // Applied at the surface nearest the blast, so a blast off one flank shoves
                 // that flank. ClosestPointOnBounds rather than Collider.ClosestPoint: the
@@ -403,7 +462,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
                 // these vehicles use.
                 Vector3 dir = reference - epicenter;
                 WeaponImpact.Apply(hitRb, dir, hitRb.ClosestPointOnBounds(epicenter),
-                                   I.splashImpactForce, I.destabilizeFraction, scale, debug);
+                                   splashForce, I.destabilizeFraction, scale, debug);
             }
         }
 

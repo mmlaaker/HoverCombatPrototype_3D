@@ -1,6 +1,19 @@
 # 🕹️ Hover Combat Prototype
 *A ground-level aerial dogfighting game inspired by **Twisted Metal** and **Rocket League.***
 
+> **This document is design intent.** It describes what the game should be, and stays valid whether
+> a thing is built yet or not. It deliberately carries no implementation status and no open task
+> list, so that it never has to be corrected when code changes.
+>
+> | Question | Document |
+> |---|---|
+> | What should this be? Why? | **`GameDesignDocument.md`** (this file) |
+> | What exists, how does it work, why is it built that way? | `CLAUDE.md` |
+> | What is not done? | `TODO.md` |
+> | How were the physics numbers derived? | `PhysicsAudit.md` (frozen at `4a34f21`; method current, values not) |
+>
+> Live tuning values come from `Assets/Data/*.asset`, never from any document.
+
 ---
 
 ## 1. Project Overview
@@ -92,15 +105,18 @@ Human-origin vehicles tend toward physical weapons: bullets, explosions, kinetic
 | Thrust Forward | `W` / Left Stick Up | Standard acceleration |
 | Reverse / Brake | `S` / Left Stick Down | Reduces forward momentum |
 | Turn Left / Right | `A` / `D` / Left Stick X | Yaw rotation |
-| Strafe Left / Right | `Q` / `E` or Right Stick X | Lateral movement |
-| Jump | `Spacebar` / Face Button | Consumes energy |
-| Boost | `Left Shift` / Trigger | Short acceleration burst |
-| Fire Primary | `Left Mouse` / RT | Infinite ammo |
-| Fire Secondary | `Right Mouse` / LT | Requires pickup ammo |
-| Activate Shield | `F` / Face Button | Energy cost, brief invulnerability |
-| Fire EMP | *unbound* / D-pad Up | Tap; ~70-80% energy cost. Keyboard binding not yet wired |
-| Camera Orbit | Mouse / Right Stick | Free rotation around vehicle |
-| Reset Orientation | `R` | Upright correction if flipped |
+| Strafe Left / Right | Left Stick X, while Strafe Mode is held | Lateral movement. Same stick as throttle: the `Hover/Throttle` action is read as a full Vector2 (Y = throttle, X = strafe) |
+| Strafe / Aim Mode | `Hover/Strafe` — L2 / Left Trigger | Held, not toggled. Blends in lateral authority and free-aim pitch |
+| Jump | `Hover/Jump` — Spacebar / Cross | Hold to charge, fires on release. One air jump per landing. Consumes energy |
+| Boost | `Hover/Boost` — Left Shift / L3 | Continuous drain while held. In Strafe Mode without forward throttle it fires a dodge burst instead |
+| Drift / Air Control | `Hover/Drift` — L1 | Grounded: drift. Airborne: 3-axis air control (left stick = pitch/roll) |
+| Fire | `Hover/Fire` — Left Mouse / R2 | One fire action for all weapons. Weapon behaviour is per-slot, not per-button |
+| Cycle Weapon | `Hover/CycleWeaponNext` / `Prev` — E / Q, D-Pad Right / Left | There is no separate primary/secondary fire; the roster is a cycled slot list |
+| Activate Shield | `Hover/Shield` — F / Face Button | Energy cost, brief invulnerability |
+| Fire EMP | `Hover/EMP` | Tap; ~70% energy cost. The action is required — `PlayerHoverInput` disables itself if it is missing from the asset |
+| Camera Pitch | Right Stick Y | Drive Mode: camera pitch. Strafe Mode: vehicle nose pitch |
+
+There is no reset-orientation input. Righting a flipped craft is automatic and deliberately not player-cancellable — see Flip Recovery.
 
 ---
 
@@ -222,7 +238,7 @@ Crucially, the flare costs no accuracy: the missile aims at a point *beside* its
 | 3 | Shotgun | Tap | Limited | Short range burst. Succeeds only when lethal proximity is achieved |
 | 4 | Rocket Launcher | Tap | Limited | High damage, blast radius, high outward force. Low fire rate. Primary momentum disruption tool |
 | 5 | Soft Homing Projectile | Tap | Limited | Homes on nearest target. High steering, low damage and force, medium fire rate. Harassment and pressure tool |
-| 6 | Hard Lock Projectile | Hold to lock, tap to fire | Limited | Single target lock-on. Single guided projectile. Expandable to multi-target cascade |
+| 6 | Hard Lock Projectile | Hold to lock, **release to fire** | Limited | **Not fully designed yet.** The intent is a volley of small, low-damage, low-impact missiles that can be distributed across a single locked target or spread over several. Currently implemented as the degenerate case: one lock, one missile. The lock commits to a target when acquisition starts and holds it, which is the primitive the multi-target version needs |
 | 7 | Sniper / Lightning Bolt | Tap | Limited | Zoom scopes view; blind outside scope. Instant hit, high damage, low fire rate. Strafe mode active during zoom |
 | 8 | Laser Cannon | Hold to charge, release | Limited | Hold to charge, release fires sustained beam. Pierces multiple targets. High damage and outward force on beam axis. Short charge = weak shot, full charge = peak damage window that tapers off |
 | 9 | Gravity Well / Repulsor | Tap to deploy | Limited | Lobbed deployable. Pulls or pushes vehicles caught in field. Drains energy of caught vehicles. Duration-limited with visible decay VFX. One active at a time. Does not affect deploying vehicle |
@@ -231,28 +247,14 @@ Crucially, the flare costs no accuracy: the missile aims at a point *beside* its
 | 12 | Directional Remote Mine | Tap to deploy, tap to trigger | Limited | Attaches to any surface. Fires projectile outward from placement angle on manual trigger. Placement orientation is the skill expression |
 | 13 | Special | None | None | One unique weapon per vehicle. Allowed to bend shared rules and provide spectacle |
 
-### Weapon Implementation Status
+### Implementation status
 
-| Weapon | Status |
-|--------|--------|
-| Machine Gun | Implemented. Particle emitter. Deals damage (0.5/pellet) |
-| Minigun ("Chain Gun") | Implemented. Particle emitter. Deals damage (1/pellet). **Not carried by the AI**, and it is the only weapon with a reasonable time to kill |
-| Shotgun | Implemented. 30-pellet burst. **Deals no damage** |
-| Rocket Launcher | Implemented. Knockback tuned and verified. **Deals no damage** |
-| Soft Homing Projectile | Implemented. Knockback, flight shape and turn rate tuned and verified. **Deals no damage** |
-| Hard Lock Projectile | Implemented. **Deals no damage.** Untuned: still carries the Rocket Launcher's full payload on a weapon that cannot miss, and its turn rate is below the threshold measured as necessary to land a hit |
-| Sniper / Lightning Bolt | Planned |
-| Laser Cannon | Planned |
-| Gravity Well / Repulsor | Planned |
-| Bouncing Disc Blade | Planned |
-| Floating Proximity Mine | Planned |
-| Directional Remote Mine | Planned |
+Deliberately not recorded here. This document is design intent; it should stay readable as the
+specification whether a weapon is built or not.
 
-**Outstanding design decisions, not engineering work:**
-
-- **Four of six implemented weapons deal zero damage.** Rocket Launcher, Soft Homing, Hard Lock and Shotgun all apply knockback and never reduce health. Only the Machine Gun and Chain Gun do damage. The current combat loop can therefore neutralise a player completely but cannot finish them, which is a coherent design if chosen on purpose and a hole if not. Needs a damage pass.
-- **Every weapon has unlimited ammo,** against a design that specifies limited pickup ammo for everything except the Machine Gun.
-- **The AI carries only the Machine Gun and Shotgun.** No missiles, and no Chain Gun, which is the only weapon with a reasonable time to kill. The AI currently cannot meaningfully threaten the player.
+- **What is built, with which asset and delivery mechanism:** `CLAUDE.md` > Weapon Implementation Status.
+- **What is not built, and the open design decisions attached to it** (the damage pass, ammo,
+  Hard Lock's multi-target shape, the knock-around split): `TODO.md`.
 
 ### Pickups
 - **Ammo Pickup:** Restores secondary ammo.  
@@ -334,7 +336,7 @@ Quake and Unreal Tournament map logic applied to vehicle scale. Hydro Thunder ro
   - `HoverController_Foundation.cs` and `HoverController_Propulsion.cs` handle hover physics and movement forces.  
   - `HoverController_Energy.cs` governs ability resource usage.  
   - `HoverController_Weapons.cs`, `HoverController_Aim.cs`, and `HoverController_Shield.cs` handle weapons, aiming, and shield activation.  
-  - `PickupManager.cs` spawns pickups (planned, not yet implemented).  
+  - `PickupManager.cs` spawns pickups.  
 
 ---
 
@@ -346,12 +348,18 @@ Quake and Unreal Tournament map logic applied to vehicle scale. Hydro Thunder ro
 ---
 
 ## 16. Implementation Priorities
-1. ✅ Establish project, repo, and IDE integration (complete).  
-2. 🚧 Implement **hovercraft movement & physics.**  
-3. 🚧 Add **camera and input control**.  
-4. 🚧 Add **energy + ability system.**  
-5. 🚧 Add **basic combat loop** (primary fire + pickups).  
-6. 🚧 Add **AI opponent.**
+
+The intended order of construction, which has not changed:
+
+1. Project, repo, and IDE integration
+2. Hovercraft movement & physics
+3. Camera and input control
+4. Energy + ability system
+5. Basic combat loop (primary fire + pickups)
+6. AI opponent
+
+**Current progress against this list is not tracked here.** See the Prototype Checklist in
+`CLAUDE.md` for where things stand, and `TODO.md` for what remains on each.
 
 ---
 

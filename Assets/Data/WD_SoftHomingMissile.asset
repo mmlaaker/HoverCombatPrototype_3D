@@ -25,6 +25,7 @@ MonoBehaviour:
     impactForce: 55000
     splashImpactForce: 28000
     destabilizeFraction: 0.15
+    selfImpactScale: 0.5
   flight:
     speed: 70
     lifetime: 6

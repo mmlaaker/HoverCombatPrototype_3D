@@ -60,4 +60,29 @@ public class WeaponImpactTuning
              "the exchange outright.")]
     [Range(0f, 1f)]
     public float destabilizeFraction = 0f;
+
+    [Tooltip("How much of Splash Impact Force lands on the vehicle that FIRED the shot, as a " +
+             "fraction. This is the rocket jump dial.\n\n" +
+             "The firer never takes splash DAMAGE regardless of this value; only the shove is " +
+             "scaled. Set it to 0 to exclude yourself from your own blast completely.\n\n" +
+             "Sizing it: the craft weighs 1000kg, so the self shove in m/s is " +
+             "Splash Impact Force x falloff x this / 1000. Because a rocket cannot arm closer than " +
+             "Speed x Arming Delay, and because it does not inherit your velocity, you close on " +
+             "your own blast while it flies. Measured on the Dumbfire (splash 50000, radius 10, " +
+             "arming 3.5m): the unscaled self shove is 21.5 m/s from a standstill and 40.1 m/s at " +
+             "full boost. So this is strongest exactly when you are already fastest, which reads " +
+             "as skill (shooting a wall you are charging) rather than noise.\n\n" +
+             "Compare against the abilities it competes with before picking a number: Air Jump " +
+             "Impulse is 25 m/s and Jump Impulse Max is 40. At 0.5 a rocket jump lands between a " +
+             "tap jump and a charged one, which keeps it a real tool without outclassing the " +
+             "energy-gated mobility.\n\n" +
+             "Destabilize Fraction applies to the self hit too, but axis-aligned blasts (dead " +
+             "ahead, straight down, square on a flank) put the contact point on the push axis " +
+             "through the centre of mass and produce exactly zero spin. Only diagonal blasts " +
+             "tumble you, peaking around 4.2 rad/s at Destabilize Fraction 0.15 -- comfortably " +
+             "under the ~10-14 rad/s where a craft commits to a flip. That headroom is linear in " +
+             "Destabilize Fraction, so self-flips become possible past roughly 0.36. Recheck this " +
+             "if you raise it.")]
+    [Range(0f, 1f)]
+    public float selfImpactScale = 0.5f;
 }

@@ -157,6 +157,7 @@ public class HoverController_EMP : MonoBehaviour
 
         var projectile = Instantiate(empProjectilePrefab, muzzlePoint.position, muzzlePoint.rotation);
         projectile.SetTarget(target);
+        projectile.SetOwner(transform);
         projectile.SetFreezeDuration(S.empFreezeDuration);
 
         OnEmpFired?.Invoke();

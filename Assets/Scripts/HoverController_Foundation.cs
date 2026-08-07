@@ -1,7 +1,26 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v1.2
+/// HoverController_Foundation v1.4
+///
+/// v1.4: Hover rays skip self-hits, flip recovery disarms on attitude only at a
+///       new lower release angle, and IsDowned is added. ApplyHoverForces uses
+///       RaycastNonAlloc and rejects hits whose attachedRigidbody is this craft:
+///       groundLayers is Everything and the chassis colliders sit on the vehicle
+///       layer, so past ~15.5 deg of bank the craft shot its own rims and read
+///       0.04m instead of 6.83m. That was the drift flip. Flip-recovery disarm
+///       dropped its "|| IsHoverGrounded" term, which was revoking righting
+///       authority mid-rotation, and righting now releases at
+///       flipRecoveryReleaseAngle rather than the arm threshold. IsDowned drives
+///       Propulsion's control lockout. Do not modify without explicit justification.
+///
+/// v1.3: Gravity feedforward. Each hover point feeds forward its share of weight
+///       along the surface normal, so the spring corrects error only instead of
+///       also holding the craft up; hoverHeight is now the literal resting height
+///       on flat ground and on slopes. Adds asymmetric extraFallGravity (airborne
+///       and descending only). Slope lift compensation removed as redundant.
+///       Ceiling duck added: ComputeEffectiveHoverHeight clamps ride height so low
+///       geometry squats the craft instead of pinning it.
 ///
 /// v1.2: Air control torque. Propulsion pushes airborne pitch/roll intent via
 ///       SetAirControl(pitch, roll, weight) while drift is held airborne;

@@ -15,6 +15,9 @@ MonoBehaviour:
   foundation:
     hoverHeight: 7
     sensorRange: 9.5
+    enableCeilingDuck: 1
+    ceilingClearance: 3
+    minDuckHoverHeight: 1.5
     liftStrength: 16
     liftDamping: 2.2
     levelingTorqueStrength: 12

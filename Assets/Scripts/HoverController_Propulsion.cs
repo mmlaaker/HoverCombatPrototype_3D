@@ -1,7 +1,25 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.1
+/// HoverController_Propulsion v1.3
+///
+/// v1.3: Downed lockout. Jump (grounded and air), all commanded torque (yaw input,
+///       air control) and all commanded thrust (ApplyDrive, ApplyStrafe, boost
+///       engagement) are suppressed while Foundation.IsDowned. Thrust is included
+///       because drive is a FORCE: it escaped a torque-only lockout and kept the
+///       downed chassis moving above flipRecoverySpeedThreshold, resetting the
+///       arming clock and more than doubling recovery time under button-mashing.
+///       Air control was gated on !IsHoverGrounded, which is not the same as
+///       airborne -- on its flank the craft's sensor rays find nothing, so it read
+///       as airborne while lying on the floor and handed back full roll authority
+///       to lever itself upright. Yaw DAMPING is deliberately still applied while
+///       downed; it is a stabilizer, not agency.
+///
+/// v1.2: Strafe forward dead band fixed (ApplyOverSpeedBleed now bleeds against the
+///       same strafe-blended cap ApplyDrive clamps to, closing a band where nothing
+///       acted on the chassis at all). Boost works in reverse: the gate always
+///       accepted reverse throttle and drained energy for no effect, so reverse
+///       accel and cap are now scaled by the same boost ratios as the forward path.
 ///
 /// v1.1: Airborne air control. While airborne with drift held, left stick Y = pitch
 ///       (up = nose down, arcade car convention) and left stick X = roll; right
@@ -139,7 +157,10 @@ public class HoverController_Propulsion : MonoBehaviour
 
     /// <summary>
     /// Maximum nose pitch (degrees) in strafe mode.
-    /// Read by HoverController_Aim to keep weapon aim range consistent with vehicle pitch range.
+    /// Currently has no callers. HoverController_Aim was expected to read this but
+    /// does not need to: it derives aim from the vehicle's actual settled euler
+    /// angles, which are already clamped by this limit upstream in ApplyStrafePitch.
+    /// Kept as a read-only accessor for HUD/reticle work that wants the range.
     /// </summary>
     public float StrafePitchLimit => profile.propulsion.strafePitchLimit;
 
@@ -297,12 +318,29 @@ public class HoverController_Propulsion : MonoBehaviour
             return;
         }
 
-        bool  grounded               = foundation.IsHoverGrounded;
-        float effectiveTopSpeed      = P.topSpeed        * Mathf.Lerp(1f, P.boostSpeedMultiplier,  boostLerp);
-        float effectiveForwardAccel  = P.maxForwardAccel * Mathf.Lerp(1f, P.boostAccelMultiplier, boostLerp);
+        bool grounded   = foundation.IsHoverGrounded;
         _cachedLocalVel = transform.InverseTransformDirection(rb.linearVelocity);
 
+        // Boost blend runs BEFORE the values derived from it, so everything in this tick
+        // reads one consistent boostLerp.
+        //
+        // It used to run after, which split the tick against itself: the cap and accel
+        // below were computed from the PREVIOUS tick's boostLerp, while ApplyDrive's
+        // airborne gate (boosting = boostLerp > 0f) read the freshly updated one. For one
+        // tick on boost entry the airborne branch therefore let drive through while
+        // handing it unboosted numbers, and the mirror happened on release. Ten
+        // milliseconds at the shipped 100Hz, so not a feel bug -- but it is exactly the
+        // kind of thing that surfaces as an unexplained sample in a tuning measurement.
         ApplyBoostBlend();
+
+        float effectiveTopSpeed     = P.topSpeed        * Mathf.Lerp(1f, P.boostSpeedMultiplier, boostLerp);
+        float effectiveForwardAccel = P.maxForwardAccel * Mathf.Lerp(1f, P.boostAccelMultiplier, boostLerp);
+
+        // Note ApplyBoostBlend reads _strafeModeBlend, which ApplyStrafeModeBlend updates
+        // further down, so the strafe-mode boost gate still runs a tick behind. Left
+        // alone deliberately: hoisting the strafe blend above boost would also move the
+        // dodge trigger's view of it, which is a behaviour change rather than a
+        // consistency fix. Revisit only with a reason.
         ApplyDriftBlend();
         ApplyStrafeModeBlend();
         ApplyDrive(grounded, effectiveTopSpeed, effectiveForwardAccel);

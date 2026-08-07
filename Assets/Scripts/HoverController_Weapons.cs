@@ -502,40 +502,55 @@ public class HoverController_Weapons : MonoBehaviour
     }
 
     /// <summary>
-    /// HardLock state machine. Hold fire to scan and acquire; release fire to launch.
+    /// HardLock state machine. Hold fire to scan and acquire; RELEASE fire to launch.
     ///
     /// Lock state transitions:
-    ///   Idle      → Scanning  : FireHeld begins while a target is in cone.
+    ///   Idle      → Scanning  : FireHeld begins while a target is in cone. That target
+    ///                           is COMMITTED at this moment and held for the whole lock.
     ///   Scanning  → Locked    : Lock timer reaches lockAcquireTime.
-    ///   Scanning  → Idle      : FireHeld released or target leaves cone.
+    ///   Scanning  → Idle      : FireHeld released, or the committed target stops being
+    ///                           lockable (destroyed, disabled, out of range or cone).
     ///   Locked    → Committed : FireHeld released while a ready slot has ammo.
-    ///   Locked    → Idle      : FireHeld released without ammo or while on cooldown.
+    ///   Locked    → Idle      : FireHeld released without ammo or while on cooldown,
+    ///                           or the committed target stops being lockable.
     ///
     /// Committed is a one-frame broadcast pulse. The event fires, missile launches,
     /// and state resets to Idle in the same Update tick. It is never entered via
     /// the switch because the transition and reset happen together in the Locked
     /// case. OnMissileLockStateChanged fires for Committed explicitly before the
     /// reset so subscribers (UI, audio) reliably receive the "missile away" signal.
+    ///
+    /// The lock COMMITS to one target and does not re-pick.
+    ///
+    /// It used to re-scan every frame while Idle or Scanning, and ScanForLockTarget
+    /// assigns LockTarget to whatever is currently closest to the nose. lockTimer kept
+    /// accumulating across that, so a second vehicle crossing nearer your centreline
+    /// partway through the acquire silently inherited the elapsed lock time: the HUD
+    /// showed an unbroken SCANNING → LOCKED and the missile launched at something you
+    /// had never tracked. Unreachable with one opponent, guaranteed with three to five.
+    ///
+    /// This is also the primitive multi-target lock needs. A cascade is "commit a
+    /// target, keep holding, commit the next", so the committed target has to be a
+    /// thing the state machine owns rather than something re-derived from cone
+    /// geometry each frame. Extending this means promoting LockTarget to a list and
+    /// looping Scanning back on itself with already-committed targets excluded from
+    /// the scan; the validity rule and the release-to-fire trigger are unchanged.
     /// </summary>
     private void TickHardLockMissile(WeaponSlot slot)
     {
         var def = slot.definition;
 
-        // Only scan when actively looking. Avoids OverlapSphere cost every frame
-        // when a missile weapon is equipped but not being used.
-        bool targetInCone = (CurrentLockState == MissileLockState.Idle ||
-                             CurrentLockState == MissileLockState.Scanning)
-                            && ScanForLockTarget(def);
-
         switch (CurrentLockState)
         {
             case MissileLockState.Idle:
-                if (input.FireHeld && targetInCone)
+                // The only place a target is chosen. Scanning past this point would
+                // let a later contender inherit the lock.
+                if (input.FireHeld && ScanForLockTarget(def))
                     TransitionLockState(MissileLockState.Scanning);
                 break;
 
             case MissileLockState.Scanning:
-                if (!input.FireHeld || !targetInCone)
+                if (!input.FireHeld || !IsLockTargetStillLockable(def))
                 {
                     ResetLockState();
                     break;
@@ -550,6 +565,16 @@ public class HoverController_Weapons : MonoBehaviour
                 break;
 
             case MissileLockState.Locked:
+                // A held lock still has to be maintained. Without this the target can
+                // die or fly behind you and the missile is still handed its transform:
+                // VehicleHealth disables the GameObject rather than destroying it, so
+                // the reference stays non-null and the missile homes onto a corpse.
+                if (!IsLockTargetStillLockable(def))
+                {
+                    ResetLockState();
+                    break;
+                }
+
                 // Release-to-fire: releasing FireHeld is the launch trigger.
                 // If we can fire (ammo + cooldown ready), commit and launch.
                 // Otherwise the lock just drops.
@@ -644,6 +669,12 @@ public class HoverController_Weapons : MonoBehaviour
                 // anything else touches it, and certainly before its first Start/FixedUpdate.
                 proj.GetComponent<IProjectileDefinitionCarrier>()?.SetDefinition(def);
 
+                // Who fired it. Without this the firer is just another collider in its own
+                // blast: full enemy-strength splash knockback, and full self-damage the moment
+                // combat.damage stops being 0. With it, the firer is a case that can be
+                // authored (never self-damaged; shove scaled by impact.selfImpactScale).
+                proj.GetComponent<IProjectileOwner>()?.SetOwner(transform);
+
                 // Legacy per-value pushes, kept so any prefab that implements only these keeps
                 // working. RocketProjectile no longer needs them.
                 proj.GetComponent<IProjectileDamageCarrier>()?.SetDamage(def.combat.damage);
@@ -728,6 +759,33 @@ public class HoverController_Weapons : MonoBehaviour
             lockTargetLayers,
             _lockScanBuffer);
         return LockTarget != null;
+    }
+
+    /// <summary>
+    /// Whether the ALREADY COMMITTED lock target still qualifies. Deliberately not a
+    /// scan: a scan answers "what is the best target right now", which is the wrong
+    /// question once a target has been committed, and answering it every frame is the
+    /// bug this replaced.
+    ///
+    /// Three ways a lock is lost, and each has bitten something in this project:
+    ///   Destroyed  - Unity's overloaded == reports a destroyed object as null.
+    ///   Disabled   - VehicleHealth DISABLES the GameObject on death rather than
+    ///                destroying it, so the reference stays genuinely non-null and only
+    ///                activeInHierarchy separates a live target from a corpse.
+    ///   Escaped    - out of lockRange, or outside lockConeAngle of our nose. Same
+    ///                geometry TargetingScan uses, so acquiring and holding agree.
+    /// </summary>
+    private bool IsLockTargetStillLockable(WeaponDefinition def)
+    {
+        if (LockTarget == null || !LockTarget.gameObject.activeInHierarchy)
+            return false;
+
+        Vector3 toTarget = LockTarget.position - transform.position;
+
+        if (toTarget.sqrMagnitude > def.weaponLock.lockRange * def.weaponLock.lockRange)
+            return false;
+
+        return Vector3.Angle(transform.forward, toTarget) < def.weaponLock.lockConeAngle;
     }
 
     private void TransitionLockState(MissileLockState newState) => CurrentLockState = newState;

@@ -183,8 +183,8 @@ public class PropulsionTuning
              "Once drifting, speed is no longer checked: you own the drift until the button releases.\n" +
              "The intent is that this MATCHES Strafe Top Speed, so that outpacing strafe is exactly what " +
              "earns you the drift and the two modes divide the speed range cleanly between them. That is a " +
-             "relationship to maintain by hand, not something the code enforces: they are currently 25 " +
-             "against a Strafe Top Speed of 30, so there is a band where neither rule applies. " +
+             "relationship to maintain by hand, not something the code enforces. They currently DO match, at " +
+             "40 each, so the split is clean; it has been out of step before. " +
              "Move this whenever you move Strafe Top Speed.")]
     [Min(0f)]
     public float minDriftSpeed = 20f;
@@ -235,7 +235,7 @@ public class PropulsionTuning
              "FORWARD it does not, and this is worth knowing before you tune around it. Drive stops pushing " +
              "at this speed, but the forward over-speed bleed does not start until the full Top Speed, and " +
              "forward drag only applies below 0.15 throttle. Hold the stick forward in strafe anywhere " +
-             "between this and Top Speed (30 to 50 today) and nothing acts on you at all: the craft coasts " +
+             "between this and Top Speed (40 to 60 today) and nothing acts on you at all: the craft coasts " +
              "there for as long as you hold it. Widening the gap between the two speeds widens that band.")]
     [Min(1f)]
     public float strafeTopSpeed = 20f;
