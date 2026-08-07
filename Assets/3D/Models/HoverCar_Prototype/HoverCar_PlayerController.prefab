@@ -10473,7 +10473,7 @@ ParticleSystem:
     serializedVersion: 6
     enabled: 1
     type: 4
-    angle: 2
+    angle: 1
     length: 5
     boxThickness: {x: 0, y: 0, z: 0}
     radiusThickness: 1
@@ -10559,7 +10559,7 @@ ParticleSystem:
     sphericalDirectionAmount: 0
     randomPositionAmount: 0
     radius:
-      value: 0.4
+      value: 0.0001
       mode: 0
       spread: 0
       speed:
@@ -10678,7 +10678,7 @@ ParticleSystem:
     rateOverTime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 20
+      scalar: 8
       minScalar: 10
       maxCurve:
         serializedVersion: 2
@@ -14657,6 +14657,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleWeaponCollision
   weaponDefinition: {fileID: 11400000, guid: d567ff3eea30af84ca1472c73a12031f, type: 2}
+  debugSettings: {fileID: 0}
+  drawDebug: 0
 --- !u!1 &2005133194715339020
 GameObject:
   m_ObjectHideFlags: 0
@@ -29761,6 +29763,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   - definition: {fileID: 11400000, guid: 985d2e7e07377ef40bc93e0f81901ad4, type: 2}
     muzzlePoints: []
     particleEmitters:
@@ -29769,6 +29772,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   - definition: {fileID: 11400000, guid: 457bd803ca13668478669bb60371081f, type: 2}
     muzzlePoints:
     - {fileID: 4481053510898385413}
@@ -29778,6 +29782,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   - definition: {fileID: 11400000, guid: dcf0e75d40a945449a8b556e0eda4535, type: 2}
     muzzlePoints:
     - {fileID: 4481053510898385413}
@@ -29787,6 +29792,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   - definition: {fileID: 11400000, guid: b1a69f4a82b9fa94180156428644e784, type: 2}
     muzzlePoints:
     - {fileID: 4481053510898385413}
@@ -29796,6 +29802,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   - definition: {fileID: 11400000, guid: bafd3c3d389d65945ad1be2e80005961, type: 2}
     muzzlePoints:
     - {fileID: 0}
@@ -29805,6 +29812,7 @@ MonoBehaviour:
     currentAmmo: 0
     cooldownRemaining: 0
     windUpProgress: 0
+    baseEmitterRates: []
   lockTargetLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -29897,6 +29905,12 @@ MonoBehaviour:
     startSpeed: 4
     startLifetime: 0.3
   throttleBlendSpeed: 8
+  landingDustPrefab: {fileID: 0}
+  landingDustHeavyPrefab: {fileID: 0}
+  heavySeverityThreshold: 0.6
+  dustGroundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!114 &6195698811811710777
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -49742,6 +49756,8 @@ MonoBehaviour:
   shoulderShiftAmount: 1.8
   shoulderLookAheadAmount: 2.5
   shoulderShiftLerpSpeed: 8
+  maxStableTilt: 60
+  headingSyncSpeed: 12
   strafeFovReduction: 5
 --- !u!1001 &471204068556280344
 PrefabInstance:
@@ -49764,8 +49780,12 @@ PrefabInstance:
       value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 10
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
@@ -49776,8 +49796,12 @@ PrefabInstance:
       value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 10
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
@@ -49916,8 +49940,12 @@ PrefabInstance:
       value: 0.8
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
-      value: 80
+      value: 100
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits

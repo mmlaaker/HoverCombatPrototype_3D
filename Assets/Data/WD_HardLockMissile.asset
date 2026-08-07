@@ -16,41 +16,96 @@ MonoBehaviour:
   displayName: Hard Lock Missile
   projectileMode: 0
   projectilePrefab: {fileID: 3012387827954422034, guid: a95dd341490101548b94da59a3c3bd8b, type: 3}
-  damage: 0
-  maxAmmo: 0
-  startingAmmo: 0
-  fireRate: 1.5
-  impactForce: 100000
-  splashImpactForce: 50000
-  destabilizeFraction: 0.15
-  useWindUp: 0
-  windUpDuration: 1.5
-  windUpCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 1
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 1
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  windDownDuration: 0.5
-  missileFireMode: 2
-  lockAcquireTime: 1.5
-  lockRange: 115
-  lockConeAngle: 45
+  combat:
+    damage: 0
+    maxAmmo: 0
+    startingAmmo: 0
+    fireRate: 1.5
+  impact:
+    impactForce: 100000
+    splashImpactForce: 50000
+    destabilizeFraction: 0.15
+  flight:
+    speed: 70
+    lifetime: 6
+    armingDelay: 0.05
+  homing:
+    turnRate: 120
+    homingDelay: 0
+    flareOffset: 0
+    flareDuration: 0
+    flareDirection: 0
+  blast:
+    splashRadius: 10
+    splashFalloff:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 0
+        inSlope: -2.231292
+        outSlope: -2.231292
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    damageLayers:
+      serializedVersion: 2
+      m_Bits: 193
+    explosionPrefab: {fileID: 0}
+  emitter:
+    emissionRate: 10
+    burstCount: 0
+    startSpeed: 150
+    startSpeedMin: 0
+    startLifetime: 0.5
+    coneAngle: 1
+    coneRadius: 0.0001
+    damageLayers:
+      serializedVersion: 2
+      m_Bits: 4294967295
+  windUp:
+    useWindUp: 0
+    windUpDuration: 1.5
+    windUpCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 1
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 1
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    windDownDuration: 0.5
+  weaponLock:
+    missileFireMode: 2
+    lockAcquireTime: 1.5
+    lockRange: 115
+    lockConeAngle: 45

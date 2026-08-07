@@ -9,7 +9,7 @@
 ///
 /// Usage:
 ///   var carrier = spawnedProjectile.GetComponent&lt;IProjectileDamageCarrier&gt;();
-///   carrier?.SetDamage(weaponDefinition.damage);
+///   carrier?.SetDamage(weaponDefinition.combat.damage);
 ///
 /// Contract:
 ///   • SetDamage is called once immediately after Instantiate, before the

@@ -16,12 +16,30 @@
 > - The **"bullets eaten" section** correctly records that the layer-mask theory was disproved, but the cause remains open.
 >
 > Superseded by this pass: the 1 m sag (eliminated by gravity feedforward), the strafe forward dead band (fixed), the underdamped hover (retuned), and slope compensation (removed as redundant).
+>
+> ### Update 2026-08-06: the weapons section was arithmetically right and physically wrong
+>
+> Every knockback figure in the Weapons section below was derived correctly from the source and the assets, and **not one of them was happening.** `RocketProjectile` detonated through `OnCollisionEnter`, which is speed-gated and never fired at the speed these projectiles actually fly. Missiles bounced off their target, drifted, and self-detonated on their lifetime timer six seconds later, splash-only. The direct-hit branch had never executed, so `impactForce` was inert and the derived "100 m/s direct hit" had never once been applied to anything.
+>
+> **This is a limitation of the method, not a slip in the arithmetic.** Deriving from source tells you what a code path computes. It cannot tell you whether that path ever runs. Any future audit written this way should pair each derivation with a single runtime confirmation that the code executes at all, which is cheap and would have caught this immediately.
+>
+> Now fixed (`ProjectileSweep`, `RocketProjectile` v1.6, `EmpProjectile` v1.1) and the figures re-derived **and measured**. See the Weapons section, which has been corrected in place.
+>
+> ### Update 2026-08-07: weapon tuning consolidated, and the emitter figures below were incomplete
+>
+> All weapon tuning now lives on the `WeaponDefinition` asset. Projectiles read it live; particle emitters have it written into them. **This changes how to audit weapons: read `Assets/Data/WD_*.asset` and nothing else.**
+>
+> That matters for this document because the emitter numbers in the Weapons section were gathered from the running scene, which was correct but not complete. The values were actually spread across four override layers (`VFX_*.prefab` → `HoverCar_PlayerController.prefab` → a prefab variant → the scene instance), and the player and AI craft had **silently drifted apart**: Machine Gun 8/sec on the player against 10/sec on the AI, muzzle velocity 150 against 100, Shotgun 150/100 against 100/80. None of that was intentional. Reconciled onto the player's values.
+>
+> Migration was verified by dumping every value before the restructure and diffing all six assets afterwards; all six matched. Behaviour was re-measured through the real fire path and is unchanged: Dumbfire 99.89 m/s, Soft Homing 54.89 m/s, flank-high 34.74 vs 7.61 rad/s over repeated trials.
 
 ## How to read this
 
 Every number here is **derived from source code and serialized asset values**, not measured at runtime. The formulas were traced line by line through `HoverController_Foundation.cs` and `HoverController_Propulsion.cs`; the values come from `Assets/Data/VTP_Default.asset`, the `WD_*.asset` weapon definitions, the emitter prefabs, and `ProjectSettings/`.
 
 Derivation is reliable for anything algebraic and less so for anything depending on the inertia tensor, which was not measured. Claims are marked where that matters.
+
+> **The method's blind spot, learned the hard way.** Derivation tells you what a code path *computes*. It cannot tell you whether that path ever *runs*. The entire weapons knockback section below was derived correctly and described a branch that had never executed once in the build. Pair every derivation with one cheap runtime check that the code fires at all. A single `Debug.Log` in the branch would have done it.
 
 **One hazard is worth stating up front:** the weapon emitters in `Prototype_Scene` carry prefab **overrides** on emission rate, burst count and collision mask, so the prefab assets and the live scene disagree. All weapon figures here were re-read from the running editor. An earlier draft of this audit trusted the prefabs and produced a wrong conclusion as a result; that correction is documented in the Fixed section below rather than quietly removed.
 
@@ -195,15 +213,35 @@ Nothing here saturates the 50 rad/s engine ceiling. Air roll runs at 6 rad/s, 12
 
 `WeaponImpact.Apply` uses `ForceMode.Impulse`, so with mass 1000, `Δv = impulse / 1000`.
 
-| Weapon | Impulse | Δv | Relative to 50 m/s top speed |
-|---|---|---|---|
-| Missile, direct hit | 100,000 | **100 m/s** | 2.0x top speed |
-| Missile, splash | 50,000 | +50 m/s | 1.0x |
-| Shotgun (30 pellets x 3000) | 90,000 | **90 m/s** | 1.8x |
-| Chain Gun (200 x 20/s) | 4,000/s | 4.0 m/s per second | small |
-| Machine Gun (200 x 16/s) | 3,200/s | **3.2 m/s per second** | negligible |
+**Corrected 2026-08-06.** Top speed is now **60 m/s**, not 50. Values below are current, and the missile figures are **measured in the running editor** rather than derived, through the real `FireAllMuzzles` path at the shipped projectile speed.
 
-A single rocket imparts twice the craft's top speed. The sustained guns impart a few m/s per second of fire. There is no weapon occupying the middle of that range.
+| Weapon | Impulse | Δv | Relative to 60 m/s top speed | Source |
+|---|---|---|---|---|
+| Rocket Launcher, direct hit | 100,000 | **100.0 m/s** | 1.67x top speed | measured (99.9 / 98.7 / 100.2 / 100.0 across four approaches) |
+| Soft Homing, direct hit | 55,000 | **55.0 m/s** | 0.92x | measured (54.2 / 55.0) |
+| Hard Lock, direct hit | 100,000 | 100 m/s | 1.67x | derived, untuned, still on the seeded value |
+| Missile splash (Rocket / Hard Lock) | 50,000 | up to +50 m/s | 0.83x | derived. **Still unmeasured**, see below |
+| Missile splash (Soft Homing) | 28,000 | up to +28 m/s | 0.47x | derived. Still unmeasured |
+| Shotgun (30 pellets x 1800) | 54,000 | 54 m/s if all connect | 0.90x | derived. Particle path unmeasured |
+| Chain Gun (200 x 20/s) | 4,000/s | 4.0 m/s per second | small | derived |
+| Machine Gun (200 x 16/s) | 3,200/s | **3.2 m/s per second** | negligible | derived |
+
+The original finding holds: there is still nothing occupying the middle of the range between a rocket and a sustained gun. Soft Homing at 0.92x top speed is now the closest thing to a middle entry, and it is the one that behaves the way the pillars ask for, since a hit at just under top speed changes your line without exceeding what you can drive out of.
+
+**A direct hit does not also splash.** The direct-hit victim is added to `_splashedThisExplosion` and skipped by the splash loop, so a rocket delivers 100,000 *or* a falloff-scaled 50,000, never both. Splash still has not been measured, because reading it requires a detonation beside a craft rather than on it.
+
+### Magnitude alone is the wrong frame: the flip threshold
+
+Measured this session, and it changes how the table above should be read. A craft left resting past **80 degrees of tilt** is locked out of jump, steering and thrust for about **1.6 seconds**, and input cannot shorten it. So knockback is not a continuous scale, it is a scale with a cliff in it.
+
+The chassis inertia is `(3293.6, 3756.1, 1091.0)`, so roll is roughly 3x easier to induce than pitch, and **where** a hit lands decides the outcome more than how hard it is. Identical flank hits 1.2m above the centre of mass, three reps each:
+
+| Weapon | Peak roll rate | Peak tilt | Downed? |
+|---|---|---|---|
+| Rocket Launcher (100,000) | 34.7 rad/s | 167 deg | Yes, every rep |
+| Soft Homing (55,000) | 7.6 rad/s | 21.6 deg | No, every rep |
+
+A square hit from the same Rocket Launcher tilts the target only 8 degrees. Note the tilt outcome is **not** linear in force: initial roll rate scales with impulse, but past roughly 10 to 14 rad/s the craft commits and one-sided hover lift drives it the rest of the way over. That is the point of no return the `destabilizeFraction` tooltip describes, and it is why halving the force more than halves the tilt.
 
 ### Four of six weapons deal no damage
 
@@ -224,9 +262,28 @@ The Chain Gun is the only weapon that kills in a reasonable time. The Machine Gu
 
 Note also that the AI vehicle carries Machine Guns and a Shotgun but **no Chain Gun**, so the AI has no access to the one weapon that meaningfully damages.
 
-### Soft Homing has not diverged
+### Soft Homing has now diverged (resolved 2026-08-06)
 
-`WD_SoftHomingMissile` carries identical impact values to the heavy missile: `impactForce` 100000, `splashImpactForce` 50000, `destabilizeFraction` 0.15. `CLAUDE.md` records that the three were seeded identically during migration and are "now free to diverge, which the GDD wants". The GDD specifies low damage and force for the harassment tool. They have not diverged.
+At audit time all three missile definitions carried identical impact values. They no longer do:
+
+| Definition | `impactForce` | `splashImpactForce` | `destabilizeFraction` |
+|---|---|---|---|
+| `WD_Missile` (Rocket Launcher) | 100000 | 50000 | 0.15 |
+| `WD_SoftHomingMissile` | **55000** | **28000** | 0.15 |
+| `WD_HardLockMissile` | 100000 | 50000 | 0.15 |
+
+That puts the low force on the harassment tool, which is what the GDD asks for, and lands the two weapons cleanly on opposite sides of the flip threshold (see above). `destabilizeFraction` was deliberately left at 0.15 on all three: its proposed change to 0.3 was reasoning about angular-velocity saturation against `maxAngularVelocity` 50, which nothing here approaches, whereas the threshold that actually governs the outcome is the 80-degree tilt, which saturates far lower.
+
+**`WD_HardLockMissile` remains untuned** and is now the outlier: the Rocket Launcher's full payload on the one weapon that cannot miss.
+
+### Missile flight shape (new 2026-08-06, unaudited)
+
+`RocketProjectile` v1.6 added per-prefab flight-shape dials that did not exist at audit time: `homingDelay`, `flareOffset`, `flareDuration`, `flareDirection`. No derivations exist for these yet. Two measured facts:
+
+- **`turnRate` is the homing accuracy dial and 90 was too low to connect.** Against a target 15m off-axis at 30m range: 90 missed by 8.9m, 120 only clipped the blast edge, 160 was the first clean direct hit. `SoftHomingMissile` is now at 160; `HardLockMissile` is still at 120.
+- **The flare costs no accuracy.** Flared and unflared shots landed the identical 55.0 m/s at the same 0.53s, because the missile homes on an offset aim point that decays onto the target rather than flying an open-loop heading.
+
+**Unmeasured and worth a pass:** missile `speed` is 70 against a top speed of 60, so a target fleeing in a straight line is closed on at only 10 m/s. No steering value fixes that; it is a `speed` question.
 
 ### Other weapon data notes
 
@@ -272,7 +329,7 @@ Stated explicitly so you do not re-derive them mid-pass. All of these check out 
 1. **Dodge Δv of 50 m/s.** Equal to full top speed. Largest readability risk.
 2. **Hover ζ 0.474.** Underdamped; 1.33 s settle will read as vague.
 3. **Weapon damage.** Four of six weapons at zero, and the AI carries none of the two that work.
-4. **Knockback spread.** 100 m/s versus 3 m/s per second, nothing between.
+4. **Knockback spread.** 100 m/s versus 3 m/s per second. Partly addressed: Soft Homing now sits at 55 m/s, giving the range a middle entry, but the Rocket Launcher is still at 1.67x top speed and Hard Lock is untuned at the same figure.
 5. **Strafe forward dead band**, 30 to 50 m/s.
 6. **Slope compensation** effectively inert at 1.15.
 7. **Unlimited ammo** on every weapon.
@@ -286,7 +343,7 @@ Stated explicitly so you do not re-derive them mid-pass. All of these check out 
 
 | Pillar | Conflict |
 |---|---|
-| *Hit disruption over flat damage* | Over-satisfied. A rocket disrupts by 2x top speed and deals no damage at all, so the ordering is not "health second", it is "health never". Only the Chain Gun expresses both halves. |
+| *Hit disruption over flat damage* | Over-satisfied, and still is. A rocket disrupts by 1.67x top speed (measured) and deals no damage at all, so the ordering is not "health second", it is "health never". Only the Chain Gun expresses both halves. Worse than the original framing: at 1.67x top speed the victim is travelling faster than they can drive, so their momentum skill is irrelevant until they stop, which reads as removal rather than disruption. Soft Homing at 0.92x is the one weapon currently satisfying the pillar as written. |
 | *Clarity at high speed* | A 50 m/s dodge in 0.1 s and a 100 m/s rocket punt are both hard to follow. |
 | *No asymmetric loadouts* | Holds. All weapons are shared. |
 | *Special weapons are exclamation points* | Untestable; no specials implemented yet. |
@@ -318,17 +375,23 @@ No gameplay-feel value in `VTP_Default.asset` or any `WD_*.asset` was touched.
 
 ---
 
-## Open question
+## Open question, now answered (2026-08-06)
 
-`WeaponDefinition.destabilizeFraction`'s tooltip states that past about 0.3, off-centre hits "run into Unity's spin speed ceiling and start looking identical". `DynamicsManager.asset:38` sets `m_DefaultMaxAngularSpeed` to **50 rad/s**, not the historical default of 7 that this claim reads as though it was calibrated against.
+`WeaponDefinition.destabilizeFraction`'s tooltip states that past about 0.3, off-centre hits "run into Unity's spin speed ceiling and start looking identical". The audit flagged that `m_DefaultMaxAngularSpeed` is **50 rad/s**, not the historical 7 the claim reads as being calibrated against, and left the question open pending a measured inertia tensor.
 
-Confirming or correcting it needs the vehicle's actual inertia tensor, which was not measured. Left in place rather than rewritten on a guess. Worth a live check with `WeaponDebugDraw`'s impulse-split visualisation during the pass.
+**Both are now measured, and the tooltip is aimed at the wrong ceiling.** Inertia is `(3293.6, 3756.1, 1091.0)`. The hardest hit available in the build, a Rocket Launcher strike high on the flank at `destabilizeFraction` 0.15, peaks at **34.7 rad/s**, so the 50 rad/s spin ceiling is never reached and cannot be what flattens hits together.
+
+The ceiling that actually matters is the **80-degree flip threshold**. Past roughly 10 to 14 rad/s of roll the craft commits and one-sided hover lift carries it the rest of the way over, so every hit above that point produces the same outcome (fully inverted, downed, ~1.6s lockout) regardless of how much harder it was hit. That is the real saturation, it sits far below 0.3, and it is a gameplay threshold rather than an engine limit.
+
+**Consequence for tuning:** raising `destabilizeFraction` toward 0.3 buys nothing useful, and for any weapon meant to disrupt rather than punish it should probably go *down* from 0.15, not up. The tooltip's advice is worth rewriting against the flip threshold rather than the spin ceiling.
 
 ---
 
 ## Stale claims in CLAUDE.md
 
-- Cites a forward top speed of **60**; `VTP_Default` has **50**. The linked suggestion to raise `strafeTopSpeed` toward 45 was proportioned against 60, so the equivalent against 50 is about 37.
-- Attributes "bullets eaten" to **self-collision**. Ruled out: the emitter's own layer bit is not set in any mask, so it cannot hit its own hull. Cause still open.
-- States drive and drag are **mutually exclusive**; they overlap in the 0.001 to 0.15 throttle band.
-- Describes the Shotgun as a **40-pellet** burst. The prefab asset says 40, but the scene instance overrides it to **30**. `WeaponDefinition.damage` and `destabilizeFraction` tooltips repeat the 40 figure and are worth reconciling.
+*Status as of 2026-08-06 marked per item.*
+
+- ~~Cites a forward top speed of **60**; `VTP_Default` has **50**.~~ **Resolved by the tuning pass, in the other direction:** `VTP_Default` now genuinely has `topSpeed` 60 and `strafeTopSpeed` 40, so CLAUDE.md was correct and the audit's figure is the stale one. Every "relative to top speed" ratio in the original weapons section was therefore computed against 50 and reads ~20% high; the corrected table above uses 60.
+- Attributes "bullets eaten" to **self-collision**. Ruled out: the emitter's own layer bit is not set in any mask, so it cannot hit its own hull. **Cause still open.**
+- States drive and drag are **mutually exclusive**; they overlap in the 0.001 to 0.15 throttle band. **Still open.**
+- ~~Describes the Shotgun as a **40-pellet** burst.~~ **Corrected in CLAUDE.md.** The scene instance is confirmed live at **30**. The `WeaponDefinition.destabilizeFraction` tooltip still repeats the 40 figure and is still worth reconciling.

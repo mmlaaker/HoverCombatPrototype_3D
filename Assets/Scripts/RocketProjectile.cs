@@ -2,7 +2,20 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// RocketProjectile v1.5
+/// RocketProjectile v2.0
+///
+/// v2.0: all tuning moved to the WeaponDefinition, and this component reads it LIVE.
+///
+/// There is nothing serialized on this script any more except debug flags. Speed, lifetime,
+/// arming, steering, the flare, blast radius, falloff, damage layers and the explosion prefab all
+/// come from the WeaponDefinition handed over at spawn via SetDefinition, and are read through
+/// shorthand properties every time they are used, exactly the way the hover controllers read
+/// VehicleTuningProfile. Nothing is copied into local fields, so the asset cannot drift out of
+/// sync with the projectile, and editing a value during play mode retunes rockets already in
+/// flight.
+///
+/// This replaces the older SetDamage / SetImpact push. Those pushed three values and left a dozen
+/// more stranded on the prefab, which meant tuning one weapon took edits in three assets.
 ///
 /// v1.5: detonation no longer depends on OnCollisionEnter.
 ///
@@ -50,70 +63,20 @@ using UnityEngine;
 ///   Explosion Prefab: a self-destructing VFX prefab spawned at impact point
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
-public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjectileImpactCarrier, IHomingTarget
+public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHomingTarget
 {
     // -------------------------------------------------------------------------
-    // ✈️ Flight
+    // Tuning
     // -------------------------------------------------------------------------
-    [Header("✈️ Flight")]
-    [Tooltip("How fast the rocket travels in metres per second. Halo-style: 60 to 90.")]
-    [SerializeField] private float speed = 70f;
-
-    [Tooltip("Maximum time the rocket can fly before self-detonating. " +
-             "Prevents stray rockets from drifting forever.")]
-    [SerializeField] private float lifetime = 6f;
-
-    [Tooltip("Short delay after spawn during which collisions are ignored. " +
-             "Prevents the rocket from exploding on the firer's own collider at the muzzle. " +
-             "Try 0.05 to 0.15.")]
-    [SerializeField] private float armingDelay = 0.05f;
-
-    // -------------------------------------------------------------------------
-    // 💥 Impact
-    // -------------------------------------------------------------------------
-    [Header("💥 Impact")]
-    [Tooltip("Splash radius in metres. Anything inside takes damage scaled by the falloff curve. " +
-             "Halo-style is 5 to 8; the missile prefabs currently ship 10, which is wider than that " +
-             "and worth a look during a tuning pass.\n" +
-             "This has to agree with what the explosion VFX actually draws, which is why it still lives " +
-             "on the prefab instead of on the WeaponDefinition with the impact forces.")]
-    [SerializeField] private float splashRadius = 6f;
-
-    [Tooltip("Maps distance from the explosion centre (0 = centre, 1 = edge) to a damage and " +
-             "force multiplier (0 to 1). Default: smooth falloff to zero at the edge.")]
-    [SerializeField] private AnimationCurve splashFalloff = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
-
-    // Knockback (directHitImpactForce, splashImpactForce, destabilizeFraction) is NOT authored
-    // here. It arrives from the firing WeaponDefinition via IProjectileImpactCarrier, so the
-    // three missile variants can differ in knockback without needing three prefab overrides.
+    // There is deliberately nothing to tune on this component. Every value the rocket uses
+    // arrives with the WeaponDefinition handed to it at spawn (see SetDefinition) and is read
+    // LIVE off that asset, exactly the way the hover controllers read VehicleTuningProfile.
+    // Nothing is copied, so nothing can drift, and editing the asset mid-flight retunes rockets
+    // already in the air.
     //
-    // Blast geometry above (splashRadius, splashFalloff, damageLayers) is the one thing that did
-    // not move, because the radius has to agree with whatever the explosion VFX draws. That is a
-    // constraint of the current placeholder VFX rather than a real design boundary: when the final
-    // explosions land, this should follow the forces onto the WeaponDefinition and leave the prefab
-    // as pure delivery.
-
-    [Tooltip("Layers that take splash damage and force. Set to enemy vehicle layers. " +
-             "Terrain doesn't need to be in here; the rocket already explodes on terrain hit.")]
-    [SerializeField] private LayerMask damageLayers = ~0;
-
-    // -------------------------------------------------------------------------
-    // 🎨 VFX
-    // -------------------------------------------------------------------------
-    [Header("🎨 VFX")]
-    [Tooltip("Spawned at the impact point on detonation. Should self-destruct after its visuals finish.")]
-    [SerializeField] private GameObject explosionPrefab;
-
-    // -------------------------------------------------------------------------
-    // 🎯 Homing
-    // -------------------------------------------------------------------------
-    [Header("🎯 Homing")]
-    [Tooltip("Maximum rotation toward the homing target in degrees per second. " +
-             "Only applies when a target is supplied via IHomingTarget.SetTarget. " +
-             "0 disables steering (rocket flies straight even with a target). " +
-             "60 to 120 feels soft; 180+ feels aggressive.")]
-    [Min(0f)]
-    [SerializeField] private float turnRate = 90f;
+    // Blast geometry used to live here on the grounds that splashRadius had to match whatever
+    // the explosion VFX drew. That dependency now runs the other way: the definition states the
+    // radius, and the VFX is authored to match it.
 
     // -------------------------------------------------------------------------
     // 🛠 Debug
@@ -140,10 +103,19 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     // Runtime
     // -------------------------------------------------------------------------
     private Rigidbody rb;
-    private float damage;
     private float age;
     private bool  exploded;
     private Transform homingTarget;
+
+    // The whole tuning surface, handed over at spawn by FireAllMuzzles. Read live, never copied.
+    private WeaponDefinition def;
+
+    // Shorthands, mirroring the `F => profile.foundation` convention the hover controllers use.
+    private WeaponCombatTuning C  => def.combat;
+    private WeaponImpactTuning I  => def.impact;
+    private WeaponFlightTuning FL => def.flight;
+    private WeaponHomingTuning H  => def.homing;
+    private WeaponBlastTuning  B  => def.blast;
 
     // Swept hit detection. See the class header for why this exists instead of relying on
     // OnCollisionEnter. sweepFrom is the position at the end of the previous physics step;
@@ -153,26 +125,28 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     private float   sweepRadius;
     private bool    sweepArmed;
 
-    // Supplied by the spawning WeaponDefinition via IProjectileImpactCarrier. Default to 0 so a
-    // prefab dropped straight into a scene is inert rather than silently using stale tuning.
-    private float directHitImpactForce;
-    private float splashImpactForce;
-    private float destabilizeFraction;
+    // Flight shape. The flare works by chasing an aim point that starts offset to one side of
+    // the target and slides onto it, so these are captured once when homing begins and the
+    // curve stays in a stable plane instead of re-deciding itself every frame.
+    private Vector3 launchForward;
+    private Vector3 flareOffsetDir;
+    private float   flareBaseRange;
+    private float   flareStartAge;
+    private bool    flareReady;
+
+    // Drives MissileFlareMode.Alternate. Static so consecutive shots from any launcher split
+    // in opposite directions, which is the whole point of alternating.
+    private static int _alternateCounter;
 
     // Reused per-explosion to dedupe IDamageable hits across a vehicle's
     // multiple child colliders. Static is safe: Explode is fully synchronous.
     private static readonly HashSet<IDamageable> _splashedThisExplosion = new();
 
-    /// <summary>Receives the damage value from the spawning WeaponDefinition.</summary>
-    public void SetDamage(float dmg) => damage = dmg;
-
-    /// <summary>Receives knockback values from the spawning WeaponDefinition.</summary>
-    public void SetImpact(float directHitForce, float splashForce, float destabilize)
-    {
-        directHitImpactForce = directHitForce;
-        splashImpactForce    = splashForce;
-        destabilizeFraction  = destabilize;
-    }
+    /// <summary>
+    /// Receives the whole tuning asset from the firing weapon. Called by FireAllMuzzles before
+    /// the projectile's first tick, and the only thing this projectile needs to function.
+    /// </summary>
+    public void SetDefinition(WeaponDefinition definition) => def = definition;
 
     /// <summary>Receives the homing target from the spawning weapon. Null = dumbfire.</summary>
     public void SetTarget(Transform target) => homingTarget = target;
@@ -188,25 +162,130 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
 
     private void Start()
     {
+        // Fail loud, like the hover controllers do on a missing profile. They disable themselves;
+        // a disabled projectile would just hang in mid-air, so this one leaves instead.
+        if (def == null)
+        {
+            Debug.LogError($"[RocketProjectile] '{name}': no WeaponDefinition. It must be supplied " +
+                           "via SetDefinition at spawn (FireAllMuzzles does this). Destroying.", this);
+            Destroy(gameObject);
+            return;
+        }
+
         // Fire-and-forget: set velocity once; no further force needed.
         // Rigidbody must have gravity off so the rocket stays level.
-        rb.linearVelocity = transform.forward * speed;
-        sweepFrom = rb.position;
+        rb.linearVelocity = transform.forward * FL.speed;
+        sweepFrom     = rb.position;
+        launchForward = transform.forward;
     }
 
     /// <summary>
-    /// Swept hit test, replacing the contact callback this projectile is too fast to receive.
-    /// Runs in FixedUpdate because that is the only place the body's position actually advances.
+    /// Picks which side this shot swings out to, as a unit vector perpendicular to the launch
+    /// heading. Called once, at the moment homing begins.
+    /// </summary>
+    private Vector3 ComputeFlareOffsetDir()
+    {
+        float roll;
+        switch (H.flareDirection)
+        {
+            case MissileFlareMode.Right:  roll = 90f;  break;
+            case MissileFlareMode.Left:   roll = 270f; break;
+            case MissileFlareMode.Up:     roll = 0f;   break;
+            case MissileFlareMode.Down:   roll = 180f; break;
+            case MissileFlareMode.Random: roll = Random.Range(0f, 360f); break;
+            default:                      roll = (_alternateCounter++ % 2 == 0) ? 90f : 270f; break;
+        }
+
+        float r = roll * Mathf.Deg2Rad;
+        return (transform.right * Mathf.Sin(r) + transform.up * Mathf.Cos(r)).normalized;
+    }
+
+    /// <summary>
+    /// Straight, then home onto a moving aim point.
+    ///
+    /// The flare is not a separate flight phase and deliberately so. An earlier version flew a
+    /// fixed "wrong" heading open-loop for a fixed number of degrees, which looked great and
+    /// missed constantly: it ignored the target completely while flaring, and it applied the
+    /// same detour whether the target was 20m or 200m away, so close shots sailed straight past.
+    ///
+    /// Instead the missile always homes, but early on it homes at a point offset to one side of
+    /// the target, and that offset shrinks to zero over flareDuration. Because the aim point
+    /// *ends* on the target, convergence is guaranteed by construction rather than by tuning,
+    /// and the curve comes for free. Scaling the offset by range makes it self-adjusting.
+    ///
+    /// Runs on the physics tick, so the path is identical at any frame rate and the turn the
+    /// missile commits to is the same turn the sweep below tests.
+    /// </summary>
+    private void Steer(float dt)
+    {
+        // Phase 1: straight out of the tube, no steering at all.
+        if (age < H.homingDelay)
+        {
+            rb.linearVelocity = transform.forward * FL.speed;
+            return;
+        }
+
+        // Dumbfire, or homing with no target: hold current heading.
+        if (homingTarget == null || H.turnRate <= 0f) return;
+
+        // Captured on the first steering tick rather than at spawn, because the firing weapon
+        // supplies the target after Instantiate and a late SetTarget would otherwise measure
+        // its range against nothing.
+        if (!flareReady)
+        {
+            flareBaseRange = Vector3.Distance(transform.position, homingTarget.position);
+            flareOffsetDir = ComputeFlareOffsetDir();
+            flareStartAge  = age;
+            flareReady     = true;
+        }
+
+        Vector3 aimPoint = homingTarget.position;
+
+        if (H.flareOffset > 0f && H.flareDuration > 0f)
+        {
+            float t = Mathf.Clamp01((age - flareStartAge) / H.flareDuration);
+
+            // SmoothStep rather than a straight lerp: the offset holds early, which is what
+            // establishes a visible arc, then eases out instead of snapping onto the target.
+            float blend = 1f - Mathf.SmoothStep(0f, 1f, t);
+            aimPoint += flareOffsetDir * (H.flareOffset * flareBaseRange * blend);
+        }
+
+        Vector3 toAim = aimPoint - transform.position;
+        if (toAim.sqrMagnitude < 1e-6f) return;
+
+        transform.rotation = Quaternion.RotateTowards(
+            transform.rotation, Quaternion.LookRotation(toAim.normalized), H.turnRate * dt);
+
+        rb.linearVelocity = transform.forward * FL.speed;
+    }
+
+    /// <summary>
+    /// Owns the whole tick: age, steering, hit detection, then the lifetime fuse.
+    ///
+    /// The order matters. Steer sets the velocity this step will actually be integrated with,
+    /// so the sweep's one-step lookahead has to be computed after it, or the missile tests a
+    /// path it is no longer on.
+    ///
+    /// This replaces the old Update-based steering. Flight now advances on the physics tick, so
+    /// the path is identical at any frame rate and the turn the missile commits to is the same
+    /// turn the sweep tests. Steering in Update while colliding in FixedUpdate is exactly the
+    /// timestep mismatch the architecture notes call out as a jitter source.
     /// </summary>
     private void FixedUpdate()
     {
         if (exploded) return;
 
+        float dt = Time.fixedDeltaTime;
+        age += dt;
+
+        Steer(dt);
+
         Vector3 now = rb.position;
 
         // Stay disarmed through armingDelay so the rocket cannot detonate on the firer's own
         // hull at the muzzle, and so the first sweep does not span the spawn point.
-        if (age < armingDelay)
+        if (age < FL.armingDelay)
         {
             sweepFrom  = now;
             sweepArmed = true;
@@ -217,7 +296,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
 
         // Lookahead is this step's displacement. FixedUpdate runs before the solver, so testing
         // it here detonates on approach instead of after the solver has deflected the rocket.
-        Vector3 step = rb.linearVelocity * Time.fixedDeltaTime;
+        Vector3 step = rb.linearVelocity * dt;
 
         if (ProjectileSweep.TryHit(transform, sweepFrom, now, step, sweepRadius, sweepMask,
                                    out Vector3 point, out Collider col))
@@ -227,25 +306,8 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
         }
 
         sweepFrom = now;
-    }
 
-    private void Update()
-    {
-        age += Time.deltaTime;
-
-        if (homingTarget != null && turnRate > 0f)
-        {
-            Vector3 toTarget = homingTarget.position - transform.position;
-            if (toTarget.sqrMagnitude > 0.0001f)
-            {
-                Quaternion desired = Quaternion.LookRotation(toTarget);
-                transform.rotation = Quaternion.RotateTowards(
-                    transform.rotation, desired, turnRate * Time.deltaTime);
-                rb.linearVelocity = transform.forward * speed;
-            }
-        }
-
-        if (!exploded && age >= lifetime)
+        if (age >= FL.lifetime)
             Explode(transform.position, null);
     }
 
@@ -258,7 +320,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     /// </summary>
     private void OnCollisionEnter(Collision col)
     {
-        if (exploded || age < armingDelay)
+        if (exploded || age < FL.armingDelay)
             return;
 
         Vector3 hitPoint = col.contactCount > 0 ? col.GetContact(0).point : transform.position;
@@ -282,7 +344,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
 
         // Cached: ShouldDrawDebug walks a null check per call and Explode is a hot burst.
         bool debug = ShouldDrawDebug;
-        if (debug) WeaponDebugDraw.Blast(epicenter, splashRadius);
+        if (debug) WeaponDebugDraw.Blast(epicenter, B.splashRadius);
 
         // Direct hit
         if (directHitCollider != null)
@@ -290,17 +352,17 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
             var directDamageable = directHitCollider.GetComponentInParent<IDamageable>();
             if (directDamageable != null)
             {
-                directDamageable.TakeDamage(damage);
+                directDamageable.TakeDamage(C.damage);
                 _splashedThisExplosion.Add(directDamageable);
             }
 
             var directRb = directHitCollider.GetComponentInParent<Rigidbody>();
             WeaponImpact.Apply(directRb, transform.forward, epicenter,
-                               directHitImpactForce, destabilizeFraction, 1f, debug);
+                               I.impactForce, I.destabilizeFraction, 1f, debug);
         }
 
         // Splash
-        var hits = Physics.OverlapSphere(epicenter, splashRadius, damageLayers);
+        var hits = Physics.OverlapSphere(epicenter, B.splashRadius, B.damageLayers);
         foreach (var hit in hits)
         {
             var damageable = hit.GetComponentInParent<IDamageable>();
@@ -318,10 +380,10 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
             Vector3 reference = hitRb != null ? hitRb.worldCenterOfMass : hit.transform.position;
 
             float dist  = Vector3.Distance(reference, epicenter);
-            float t     = Mathf.Clamp01(dist / splashRadius);
-            float scale = splashFalloff.Evaluate(t);
+            float t     = Mathf.Clamp01(dist / B.splashRadius);
+            float scale = B.splashFalloff.Evaluate(t);
 
-            damageable.TakeDamage(damage * scale);
+            damageable.TakeDamage(C.damage * scale);
 
             // The measured-from point is what silently broke before: children of a compound
             // collider all resolve to one IDamageable, so whichever collider OverlapSphere
@@ -330,10 +392,10 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
 
             if (logSplash)
                 Debug.Log($"[Splash] {hit.transform.root.name} via '{hit.name}'  " +
-                          $"dist={dist:F2}m / {splashRadius:F1}m  falloff={scale:F3}  " +
-                          $"damage={damage * scale:F1}  force={splashImpactForce * scale:F0}", this);
+                          $"dist={dist:F2}m / {B.splashRadius:F1}m  falloff={scale:F3}  " +
+                          $"damage={C.damage * scale:F1}  force={I.splashImpactForce * scale:F0}", this);
 
-            if (hitRb != null && splashImpactForce > 0f)
+            if (hitRb != null && I.splashImpactForce > 0f)
             {
                 // Applied at the surface nearest the blast, so a blast off one flank shoves
                 // that flank. ClosestPointOnBounds rather than Collider.ClosestPoint: the
@@ -341,12 +403,12 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
                 // these vehicles use.
                 Vector3 dir = reference - epicenter;
                 WeaponImpact.Apply(hitRb, dir, hitRb.ClosestPointOnBounds(epicenter),
-                                   splashImpactForce, destabilizeFraction, scale, debug);
+                                   I.splashImpactForce, I.destabilizeFraction, scale, debug);
             }
         }
 
-        if (explosionPrefab != null)
-            Instantiate(explosionPrefab, epicenter, Quaternion.identity);
+        if (B.explosionPrefab != null)
+            Instantiate(B.explosionPrefab, epicenter, Quaternion.identity);
 
         Destroy(gameObject);
     }
@@ -355,8 +417,14 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     private void OnDrawGizmos()
     {
         if (!ShouldDrawDebug) return;
+
+        // Guarded independently of Start: gizmos run on the prefab asset and in edit mode, where
+        // no weapon has handed this projectile a definition yet. Same discipline the hover
+        // controllers apply to every path that can execute before Awake.
+        if (def == null) return;
+
         Gizmos.color = new Color(1f, 0.5f, 0f, 0.5f);
-        Gizmos.DrawWireSphere(transform.position, splashRadius);
+        Gizmos.DrawWireSphere(transform.position, B.splashRadius);
 
         if (homingTarget != null)
         {

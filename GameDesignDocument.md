@@ -178,6 +178,41 @@ Governs non-damaging abilities only. Weapons never spend energy. Regenerates ove
 | Shield | Tap | Flat cost | Succeeds when timed, not spammed. Absorbs one incoming EMP hit; shield deactivates, no freeze applied |
 | EMP | Tap | ~70-80% of meter | Soft-homing electric projectile. Direct hit only, no AOE. On unshielded hit: applies energy freeze. On shielded hit: destroys shield, no freeze. Succeeds when it denies tempo, not when it deletes control |
 
+### Knockback and the Flip Threshold
+
+Measured in-engine, and it changes how weapon force should be authored.
+
+A vehicle that ends up resting past **80 degrees of tilt** is *downed*: jump, steering and thrust are all locked out for roughly **1.6 seconds**, and no amount of player input shortens it. So every knockback value implicitly picks one of two outcomes, and the gap between them is enormous:
+
+- **Below the threshold**, a hit is momentum disruption. It shoves you off your line and you drive out of it. This is what the pillars ask for.
+- **Above it**, a hit is a hard punish with a fixed timer, and the victim's skill stops mattering entirely.
+
+Two rules fall out of this:
+
+1. **Express knockback as a fraction of top speed, not as a raw number.** Vehicle top speed is 60 m/s. A hit that imparts more than that is not disruption, it is removal: the target is travelling faster than it can drive and its own momentum skill is irrelevant until it stops. Measured, the Rocket Launcher currently imparts ~100 m/s, or 1.67x top speed, and displaces a stationary craft roughly 50 metres.
+2. **Where you hit matters more than how hard.** The chassis rolls about three times more easily than it pitches, so a hit that catches a flank high tips the craft far more readily than a square hit of the same force. A centred hit at full Rocket Launcher force barely tilts the target 8 degrees; the same force landing high on the flank rolls it completely over, every time.
+
+This split is now the intended difference between the two homing weapons, verified over repeated identical shots:
+
+| Weapon | Flank hit outcome |
+|---|---|
+| Rocket Launcher | Rolls fully over, 167 degrees, downed. Hard punish |
+| Soft Homing | Rocks about 22 degrees and recovers. Pure disruption |
+
+That is the design goal reached deliberately rather than by accident, and it is the model for tuning the rest of the roster: **spectacle weapons flip, pressure weapons do not.**
+
+### Projectile Flight as Identity
+
+A missile's *path* is a design surface, not just a delivery mechanism. Three dials shape it, and they are per-weapon:
+
+- **Straight-flight delay.** How long the missile flies dumb before it starts chasing. At zero, homing shots feel cheap and unavoidable. A short delay lets the target see it coming and gives the missile a sense of weight.
+- **Flare.** How far the missile swings wide before curling onto its target, expressed as a share of the distance to the target so it looks right at every range. Direction can alternate or randomise per shot, which is what makes a volley look like a volley instead of the same animation replayed.
+- **Turn rate.** The turning circle. This is also the accuracy dial, and it is easy to set too low chasing a graceful arc.
+
+Crucially, the flare costs no accuracy: the missile aims at a point *beside* its target and that point slides onto the target as it closes, so it always converges. Spectacle and reliability are not in tension here.
+
+**Known constraint:** missiles fly at 70 m/s against a vehicle top speed of 60. A target running flat-out in a straight line is only being closed on at 10 m/s, so no amount of steering makes homing weapons reliable against a fleeing craft. Homing weapons are therefore tools for punishing players who are turning, fighting, or cornered, not for chasing down a runner. If that is not the intent, missile speed is the value to change, not turn rate.
+
 ### Weapons
 
 | # | Weapon | Input | Ammo | Notes |
@@ -200,18 +235,24 @@ Governs non-damaging abilities only. Weapons never spend energy. Regenerates ove
 
 | Weapon | Status |
 |--------|--------|
-| Machine Gun | Stubbed |
-| Minigun | Stubbed |
-| Shotgun | Stubbed |
-| Rocket Launcher | Stubbed |
-| Soft Homing Projectile | Stubbed |
-| Hard Lock Projectile | Stubbed |
+| Machine Gun | Implemented. Particle emitter. Deals damage (0.5/pellet) |
+| Minigun ("Chain Gun") | Implemented. Particle emitter. Deals damage (1/pellet). **Not carried by the AI**, and it is the only weapon with a reasonable time to kill |
+| Shotgun | Implemented. 30-pellet burst. **Deals no damage** |
+| Rocket Launcher | Implemented. Knockback tuned and verified. **Deals no damage** |
+| Soft Homing Projectile | Implemented. Knockback, flight shape and turn rate tuned and verified. **Deals no damage** |
+| Hard Lock Projectile | Implemented. **Deals no damage.** Untuned: still carries the Rocket Launcher's full payload on a weapon that cannot miss, and its turn rate is below the threshold measured as necessary to land a hit |
 | Sniper / Lightning Bolt | Planned |
 | Laser Cannon | Planned |
 | Gravity Well / Repulsor | Planned |
 | Bouncing Disc Blade | Planned |
 | Floating Proximity Mine | Planned |
 | Directional Remote Mine | Planned |
+
+**Outstanding design decisions, not engineering work:**
+
+- **Four of six implemented weapons deal zero damage.** Rocket Launcher, Soft Homing, Hard Lock and Shotgun all apply knockback and never reduce health. Only the Machine Gun and Chain Gun do damage. The current combat loop can therefore neutralise a player completely but cannot finish them, which is a coherent design if chosen on purpose and a hole if not. Needs a damage pass.
+- **Every weapon has unlimited ammo,** against a design that specifies limited pickup ammo for everything except the Machine Gun.
+- **The AI carries only the Machine Gun and Shotgun.** No missiles, and no Chain Gun, which is the only weapon with a reasonable time to kill. The AI currently cannot meaningfully threaten the player.
 
 ### Pickups
 - **Ammo Pickup:** Restores secondary ammo.  

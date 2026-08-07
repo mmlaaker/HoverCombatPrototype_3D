@@ -20152,6 +20152,12 @@ MonoBehaviour:
     startSpeed: 4
     startLifetime: 0.3
   throttleBlendSpeed: 8
+  landingDustPrefab: {fileID: 0}
+  landingDustHeavyPrefab: {fileID: 0}
+  heavySeverityThreshold: 0.6
+  dustGroundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!114 &6195698811811710777
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -40262,8 +40268,12 @@ PrefabInstance:
       value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 10
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
@@ -40274,8 +40284,12 @@ PrefabInstance:
       value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 10
+      value: 8
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
@@ -40414,8 +40428,12 @@ PrefabInstance:
       value: 0.8
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
+      propertyPath: InitialModule.startSpeed.scalar
+      value: 150
+      objectReference: {fileID: 0}
+    - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
-      value: 80
+      value: 100
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits

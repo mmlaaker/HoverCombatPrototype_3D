@@ -2,29 +2,34 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// ParticleWeaponCollision v1.0
+/// ParticleWeaponCollision v2.0
 /// ---------------------------------
-/// Attach to the same GameObject as a ParticleSystem-mode weapon emitter.
-/// Handles OnParticleCollision callbacks — applies damage and impact force to hit objects.
+/// Attach to the same GameObject as a ParticleSystem-mode weapon emitter. Handles
+/// OnParticleCollision (damage and impact force) and, as of v2.0, owns configuring the emitter.
 ///
-/// Damage is read directly from the assigned WeaponDefinition asset.
-/// Assign the same WeaponDefinition asset used in the vehicle's WeaponSlot.
-/// Changing damage on the asset updates this script and all vehicles simultaneously.
+/// v2.0: the emitter is now CONFIGURED FROM the WeaponDefinition rather than authored by hand.
 ///
-/// Requirements:
-///   • ParticleSystem Collision module must be enabled with:
-///       - Type: World
-///       - Mode: 3D
-///       - Send Collision Messages: ON  (required for OnParticleCollision to fire)
-///       - Lifetime Loss: 1             (kills particle on first hit)
-///       - Collides With: enemy layers only
-///   • Any damageable object must implement IDamageable on itself or a parent.
-///   • Any object that should receive impact force must have a Rigidbody.
+/// Emission rate, burst count, muzzle velocity, bullet lifetime, spread and the collision mask
+/// all come from `weaponDefinition.emitter`. This is the one tuning section that has to be pushed
+/// rather than read live, because Unity's particle simulation reads its settings off this
+/// ParticleSystem component and not off our asset. It is applied in Awake for play mode and from
+/// OnValidate (plus WeaponDefinition's own OnValidate) so the editor never shows a stale number.
+///
+/// Before this, those values lived four override layers deep -- VFX_*.prefab, into the vehicle
+/// prefab, into a prefab variant, into the scene instance -- and the player and AI craft had
+/// quietly drifted apart on emission rate and muzzle velocity without anyone intending it.
+///
+/// Requirements, now ENFORCED in code rather than merely documented (they were silent failure
+/// modes when an artist toggled them off):
+///   • Collision module enabled, Type World, Send Collision Messages ON, Lifetime Loss 1.
+///   • Any damageable object implements IDamageable on itself or a parent.
+///   • Any object that should receive impact force has a Rigidbody.
 /// </summary>
 public class ParticleWeaponCollision : MonoBehaviour
 {
-    [Tooltip("Shared weapon definition asset. Must be the same asset assigned to this " +
-             "weapon's WeaponSlot on the vehicle. Damage value is read from here.")]
+    [Tooltip("Shared weapon definition asset. Must be the same asset assigned to this weapon's " +
+             "WeaponSlot on the vehicle. ALL tuning is read from here, including how this emitter " +
+             "is configured, so there is nothing left to hand-author on the ParticleSystem.")]
     [SerializeField] private WeaponDefinition weaponDefinition;
 
     [Header("🛠 Debug")]
@@ -39,6 +44,9 @@ public class ParticleWeaponCollision : MonoBehaviour
              "emitter is colliding with the firer's own hull or the ground ahead of it. Also shows " +
              "the shotgun's spread pattern, which is what makes destabilizeFraction 1 work.")]
     [SerializeField] private bool drawDebug = false;
+
+    /// <summary>The definition driving this emitter. Used by WeaponDefinition's editor sync.</summary>
+    public WeaponDefinition Definition => weaponDefinition;
 
     private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
 
@@ -55,35 +63,98 @@ public class ParticleWeaponCollision : MonoBehaviour
             Debug.LogError("[ParticleWeaponCollision] No ParticleSystem found on this GameObject.", this);
 
         if (weaponDefinition == null)
-            Debug.LogError("[ParticleWeaponCollision] No WeaponDefinition assigned. " +
-                           "Damage will be 0 on all hits.", this);
+            Debug.LogError("[ParticleWeaponCollision] No WeaponDefinition assigned. This emitter is " +
+                           "unconfigured and every hit will deal 0 damage.", this);
 
-        ConfigureCollisionMask();
+        ApplyDefinitionToEmitter();
     }
 
-    /// <summary>
-    /// Sets the particle system's Collides With mask to exclude this vehicle's own layer.
-    /// VehicleLayerAssigner (execution order -20) runs before this, so the hierarchy
-    /// is already on the correct layer by the time Awake fires here.
-    /// </summary>
-    private void ConfigureCollisionMask()
+#if UNITY_EDITOR
+    private void OnValidate()
     {
-        if (ps == null) return;
+        // Delayed so we are not mutating objects mid-serialization or mid-import.
+        UnityEditor.EditorApplication.delayCall += () =>
+        {
+            if (this == null) return;
+            ApplyDefinitionToEmitter();
+        };
+    }
+#endif
 
-        int ownLayer = gameObject.layer;
+    /// <summary>
+    /// Writes the definition's emitter section into this ParticleSystem. Safe to call in the
+    /// editor or at runtime, and safe to call repeatedly.
+    ///
+    /// VehicleLayerAssigner (execution order -20) has already put this object on its vehicle's
+    /// layer by the time Awake runs here, which is what makes the self-layer strip below work.
+    /// </summary>
+    public void ApplyDefinitionToEmitter()
+    {
+        if (ps == null) ps = GetComponent<ParticleSystem>();
+        if (ps == null || weaponDefinition == null) return;
+
+        var e = weaponDefinition.emitter;
+
+        // --- rate of fire ---
+        var emission = ps.emission;
+        emission.enabled = true;
+        emission.rateOverTime = e.emissionRate;
+
+        if (e.burstCount > 0)
+        {
+            // Preserve whatever cycle/interval the VFX was authored with; only the count is tuning.
+            var existing = emission.burstCount > 0 ? emission.GetBurst(0)
+                                                   : new ParticleSystem.Burst(0f, 1, 1, 0.01f);
+            existing.count = e.burstCount;
+            emission.SetBursts(new[] { existing });
+        }
+        else
+        {
+            emission.SetBursts(new ParticleSystem.Burst[0]);
+        }
+
+        // --- bullet ---
+        var main = ps.main;
+        main.startSpeed = (e.startSpeedMin > 0f && e.startSpeedMin < e.startSpeed)
+            ? new ParticleSystem.MinMaxCurve(e.startSpeedMin, e.startSpeed)
+            : new ParticleSystem.MinMaxCurve(e.startSpeed);
+        main.startLifetime = e.startLifetime;
+
+        // --- spread ---
+        var shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle  = e.coneAngle;
+        shape.radius = e.coneRadius;
+
+        // --- collision ---
+        // These four are hard requirements, not preferences: without sendCollisionMessages the
+        // OnParticleCollision below never fires at all, and without lifetimeLoss 1 a single pellet
+        // keeps hitting and re-applying its impact force.
         var collision = ps.collision;
+        collision.enabled = true;
+        collision.type = ParticleSystemCollisionType.World;
+        collision.mode = ParticleSystemCollisionMode.Collision3D;
+        collision.sendCollisionMessages = true;
+        collision.lifetimeLoss = 1f;
 
-        // Start from current mask, strip out own layer so bullets pass through teammates.
-        int mask = collision.collidesWith;
-        mask &= ~(1 << ownLayer);
-        collision.collidesWith = mask;
+        // Author the full layer set once on the definition; strip the firer's own layer here so a
+        // single shared value yields "everyone except me" on both the player and the AI. The old
+        // code could only subtract from a hand-authored mask, which is why the mask had to be
+        // duplicated per vehicle prefab.
+        collision.collidesWith = e.damageLayers.value & ~(1 << gameObject.layer);
     }
 
     private void OnParticleCollision(GameObject other)
     {
+        if (weaponDefinition == null) return;
+
         int count = ParticlePhysicsExtensions.GetCollisionEvents(ps, other, collisionEvents);
 
         bool debug = ShouldDrawDebug;
+        float damage = weaponDefinition.combat.damage;
+        float force  = weaponDefinition.impact.impactForce;
+        float destab = weaponDefinition.impact.destabilizeFraction;
 
         // NOTE (pooling debt): GetComponentInParent walks the hierarchy on every hit.
         // At high machine gun emission rates this accumulates. When projectile pooling
@@ -93,21 +164,20 @@ public class ParticleWeaponCollision : MonoBehaviour
         {
             // Apply damage. Walk up the hierarchy — bullets typically hit child colliders.
             var damageable = other.GetComponentInParent<IDamageable>();
-            damageable?.TakeDamage(weaponDefinition != null ? weaponDefinition.damage : 0f);
+            damageable?.TakeDamage(damage);
 
             // Apply impact force if a Rigidbody is present. intersection is the world-space
             // contact point, already available here, so destabilizeFraction has a real lever
             // arm to work with. Shared with the projectile path via WeaponImpact so both
             // destabilize identically for the same fraction.
             var rb = other.GetComponentInParent<Rigidbody>();
-            if (weaponDefinition != null)
-                WeaponImpact.Apply(rb,
-                                   collisionEvents[i].velocity,
-                                   collisionEvents[i].intersection,
-                                   weaponDefinition.impactForce,
-                                   weaponDefinition.destabilizeFraction,
-                                   1f,
-                                   debug);
+            WeaponImpact.Apply(rb,
+                               collisionEvents[i].velocity,
+                               collisionEvents[i].intersection,
+                               force,
+                               destab,
+                               1f,
+                               debug);
 
             // Drawn for every contact, including the ones that found nothing to damage. Those
             // are the interesting ones when pellets are going missing.

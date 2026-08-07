@@ -84,16 +84,18 @@ public class HoverController_Weapons : MonoBehaviour
         public void Initialize()
         {
             if (definition == null) return;
-            currentAmmo       = definition.maxAmmo == 0 ? -1 : definition.startingAmmo;
+            currentAmmo       = definition.combat.maxAmmo == 0 ? -1 : definition.combat.startingAmmo;
             cooldownRemaining = 0f;
             windUpProgress    = 0f;
 
+            // The full-rate baseline comes from the definition, NOT from whatever the emitter
+            // currently reads. Sampling the emitter created an ordering trap: ParticleWeaponCollision
+            // writes the definition into the emitter in its own Awake, so whichever Awake ran second
+            // decided whether wind-up scaled against the real rate or a stale authored one.
+            // Reading the definition directly removes the ordering dependency entirely.
             baseEmitterRates.Clear();
             for (int i = 0; i < particleEmitters.Count; i++)
-            {
-                var em = particleEmitters[i];
-                baseEmitterRates.Add(em != null ? em.emission.rateOverTime.constant : 0f);
-            }
+                baseEmitterRates.Add(definition.emitter.emissionRate);
         }
 
         /// <summary>True if ammo is unlimited or at least one round remains.</summary>
@@ -379,19 +381,19 @@ public class HoverController_Weapons : MonoBehaviour
 
         if (input.FireHeld)
         {
-            if (def.useWindUp)
+            if (def.windUp.useWindUp)
             {
                 slot.windUpProgress = Mathf.Clamp01(
-                    slot.windUpProgress + Time.deltaTime / def.windUpDuration
+                    slot.windUpProgress + Time.deltaTime / def.windUp.windUpDuration
                 );
             }
         }
         else
         {
-            if (def.useWindUp)
+            if (def.windUp.useWindUp)
             {
-                slot.windUpProgress = def.windDownDuration > 0f
-                    ? Mathf.Clamp01(slot.windUpProgress - Time.deltaTime / def.windDownDuration)
+                slot.windUpProgress = def.windUp.windDownDuration > 0f
+                    ? Mathf.Clamp01(slot.windUpProgress - Time.deltaTime / def.windUp.windDownDuration)
                     : 0f;
             }
 
@@ -400,12 +402,12 @@ public class HoverController_Weapons : MonoBehaviour
             // of cutting off. No ammo decrement or fire events during this coast.
             // Stops once windUpProgress reaches 0, or immediately for non-windup weapons.
             bool visualWindDown = def.projectileMode == ProjectileMode.ParticleSystem
-                                  && def.useWindUp
+                                  && def.windUp.useWindUp
                                   && slot.windUpProgress > 0f;
 
             if (visualWindDown)
             {
-                float windDownScale = def.windUpCurve.Evaluate(slot.windUpProgress);
+                float windDownScale = def.windUp.windUpCurve.Evaluate(slot.windUpProgress);
                 SetEmitterRateMultiplier(slot, windDownScale);
                 PlayParticleEmitters(slot);
             }
@@ -418,8 +420,8 @@ public class HoverController_Weapons : MonoBehaviour
         if (!input.FireHeld) return;
         if (!slot.HasAmmo)   return;
 
-        float windUpScale = def.useWindUp
-            ? def.windUpCurve.Evaluate(slot.windUpProgress)
+        float windUpScale = def.windUp.useWindUp
+            ? def.windUp.windUpCurve.Evaluate(slot.windUpProgress)
             : 1f;
 
         if (windUpScale <= 0f)
@@ -433,14 +435,14 @@ public class HoverController_Weapons : MonoBehaviour
         {
             // Scale emitter rateOverTime by the wind-up curve so the visual bullet
             // stream ramps with the spin-up, not just the ammo decrement cadence.
-            if (def.useWindUp)
+            if (def.windUp.useWindUp)
                 SetEmitterRateMultiplier(slot, windUpScale);
 
             PlayParticleEmitters(slot);
 
             if (!slot.IsReady) return;
 
-            slot.cooldownRemaining = (1f / def.fireRate) / Mathf.Max(0.001f, windUpScale);
+            slot.cooldownRemaining = (1f / def.combat.fireRate) / Mathf.Max(0.001f, windUpScale);
 
             if (slot.currentAmmo > 0)
             {
@@ -454,7 +456,7 @@ public class HoverController_Weapons : MonoBehaviour
         {
             if (!slot.IsReady) return;
 
-            slot.cooldownRemaining = (1f / def.fireRate) / Mathf.Max(0.001f, windUpScale);
+            slot.cooldownRemaining = (1f / def.combat.fireRate) / Mathf.Max(0.001f, windUpScale);
 
             FireAllMuzzles(slot);
         }
@@ -474,7 +476,7 @@ public class HoverController_Weapons : MonoBehaviour
     {
         var def = slot.definition;
 
-        switch (def.missileFireMode)
+        switch (def.weaponLock.missileFireMode)
         {
             case MissileFireMode.Dumbfire:
                 if (input.FirePressed && slot.IsReady && slot.HasAmmo)
@@ -539,8 +541,8 @@ public class HoverController_Weapons : MonoBehaviour
                     break;
                 }
                 lockTimer   += Time.deltaTime;
-                LockProgress = Mathf.Clamp01(lockTimer / def.lockAcquireTime);
-                if (lockTimer >= def.lockAcquireTime)
+                LockProgress = Mathf.Clamp01(lockTimer / def.weaponLock.lockAcquireTime);
+                if (lockTimer >= def.weaponLock.lockAcquireTime)
                 {
                     TransitionLockState(MissileLockState.Locked);
                     OnMissileLocked?.Invoke();
@@ -637,9 +639,17 @@ public class HoverController_Weapons : MonoBehaviour
             {
                 if (muzzle == null) continue;
                 var proj = Instantiate(def.projectilePrefab, muzzle.position, muzzle.rotation);
-                proj.GetComponent<IProjectileDamageCarrier>()?.SetDamage(def.damage);
+
+                // Definition first: a projectile that reads its tuning live needs the asset before
+                // anything else touches it, and certainly before its first Start/FixedUpdate.
+                proj.GetComponent<IProjectileDefinitionCarrier>()?.SetDefinition(def);
+
+                // Legacy per-value pushes, kept so any prefab that implements only these keeps
+                // working. RocketProjectile no longer needs them.
+                proj.GetComponent<IProjectileDamageCarrier>()?.SetDamage(def.combat.damage);
                 proj.GetComponent<IProjectileImpactCarrier>()?
-                    .SetImpact(def.impactForce, def.splashImpactForce, def.destabilizeFraction);
+                    .SetImpact(def.impact.impactForce, def.impact.splashImpactForce, def.impact.destabilizeFraction);
+
                 proj.GetComponent<IHomingTarget>()?.SetTarget(LockTarget);
                 if (ShouldDrawDebug) Debug.DrawRay(muzzle.position, muzzle.forward * 3f, Color.red, 0.2f);
             }
@@ -653,7 +663,7 @@ public class HoverController_Weapons : MonoBehaviour
         }
 
         if (def.type != WeaponType.Automatic)
-            slot.cooldownRemaining = 1f / def.fireRate;
+            slot.cooldownRemaining = 1f / def.combat.fireRate;
 
         OnWeaponFired?.Invoke(ActiveSlotIndex, slot.currentAmmo);
     }
@@ -713,8 +723,8 @@ public class HoverController_Weapons : MonoBehaviour
     {
         LockTarget = TargetingScan.PickBestInCone(
             transform,
-            def.lockRange,
-            def.lockConeAngle,
+            def.weaponLock.lockRange,
+            def.weaponLock.lockConeAngle,
             lockTargetLayers,
             _lockScanBuffer);
         return LockTarget != null;
@@ -790,10 +800,10 @@ public class HoverController_Weapons : MonoBehaviour
             }
         }
 
-        if (slot.definition.type == WeaponType.Missile && slot.definition.missileFireMode != MissileFireMode.Dumbfire)
+        if (slot.definition.type == WeaponType.Missile && slot.definition.weaponLock.missileFireMode != MissileFireMode.Dumbfire)
         {
             var def = slot.definition;
-            bool softHoming = def.missileFireMode == MissileFireMode.SoftHoming;
+            bool softHoming = def.weaponLock.missileFireMode == MissileFireMode.SoftHoming;
 
             // SoftHoming holds no lock state between shots (LockTarget is cleared
             // right after firing), so preview what a shot fired this frame would
@@ -802,8 +812,8 @@ public class HoverController_Weapons : MonoBehaviour
             if (softHoming)
                 previewTarget = TargetingScan.PickBestInCone(
                     transform,
-                    def.lockRange,
-                    def.lockConeAngle,
+                    def.weaponLock.lockRange,
+                    def.weaponLock.lockConeAngle,
                     lockTargetLayers,
                     _gizmoScanBuffer);
 
@@ -816,7 +826,7 @@ public class HoverController_Weapons : MonoBehaviour
                     _                         => new Color(1f, 1f, 1f, 0.2f)
                 };
 
-            DrawLockCone(def.lockRange, def.lockConeAngle, coneColor);
+            DrawLockCone(def.weaponLock.lockRange, def.weaponLock.lockConeAngle, coneColor);
 
             if (LockTarget != null)
             {

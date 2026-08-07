@@ -2,79 +2,121 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// WeaponDefinitionEditor v1.0
+/// WeaponDefinitionEditor v2.0
 /// ---------------------------
-/// Draws only the fields that the selected WeaponType and ProjectileMode actually read.
-/// Wind-up is Automatic only, lock settings are Missile only, and splashImpactForce is
-/// Instantiated only. Hidden fields keep their serialized values; this changes what you see,
-/// not what is stored.
+/// Draws only the sections that the selected WeaponType and ProjectileMode actually read, so a
+/// Shotgun does not show missile lock settings and a rocket does not show emitter settings.
+/// Hidden fields keep their serialized values; this changes what you see, not what is stored.
 ///
-/// Which fields each mode reads (verified against the runtime, not the tooltips):
-///   damage             Both paths. SetDamage on the projectile, direct read for particles.
-///   impactForce        Both paths. Per particle for ParticleSystem, per direct hit for
-///                      Instantiated, so the sane range differs by orders of magnitude.
-///   splashImpactForce  Instantiated only, and only if the prefab has splash.
-///   destabilizeFraction Both paths, via the shared WeaponImpact helper.
+/// Which sections each configuration reads:
+///   Combat, Impact      always
+///   Flight, Blast       Instantiated mode only
+///   Homing              Missile type only, and only when it has a target (not Dumbfire)
+///   Emitter             ParticleSystem mode only
+///   Wind-up             Automatic type only
+///   Lock                Missile type only
+///
+/// Section headings come free, and this survived the move to nested sections. They are [Header]
+/// attributes on the first field of each group, and PropertyField draws a field's decorators
+/// along with it, so a heading appears and disappears with the field that carries it. That still
+/// holds when the field lives inside a nested [Serializable] class, because we draw the LEAF
+/// property directly rather than the container.
+///
+/// Do not add explicit LabelField headings here. An earlier v2.0 draft assumed nesting broke the
+/// trick and drew them by hand; the attributes rendered anyway and every heading appeared twice.
+/// The only rule to respect is that each section's heading lives on whichever field is drawn
+/// FIRST in that group, so reordering a draw block means moving the [Header] with it.
 /// </summary>
 [CustomEditor(typeof(WeaponDefinition))]
 [CanEditMultipleObjects]
 public class WeaponDefinitionEditor : Editor
 {
-    private SerializedProperty type, displayName;
-    private SerializedProperty projectileMode, projectilePrefab;
+    // Identity
+    private SerializedProperty type, displayName, projectileMode, projectilePrefab;
+    // Sections
     private SerializedProperty damage, maxAmmo, startingAmmo, fireRate;
     private SerializedProperty impactForce, splashImpactForce, destabilizeFraction;
+    private SerializedProperty speed, lifetime, armingDelay;
+    private SerializedProperty turnRate, homingDelay, flareOffset, flareDuration, flareDirection;
+    private SerializedProperty splashRadius, splashFalloff, blastLayers, explosionPrefab;
+    private SerializedProperty emissionRate, burstCount, startSpeed, startSpeedMin, startLifetime,
+                               coneAngle, coneRadius, emitterLayers;
     private SerializedProperty useWindUp, windUpDuration, windUpCurve, windDownDuration;
     private SerializedProperty missileFireMode, lockAcquireTime, lockRange, lockConeAngle;
 
+    private SerializedProperty Find(string path) => serializedObject.FindProperty(path);
+
     private void OnEnable()
     {
-        type                = serializedObject.FindProperty(nameof(WeaponDefinition.type));
-        displayName         = serializedObject.FindProperty(nameof(WeaponDefinition.displayName));
-        projectileMode      = serializedObject.FindProperty(nameof(WeaponDefinition.projectileMode));
-        projectilePrefab    = serializedObject.FindProperty(nameof(WeaponDefinition.projectilePrefab));
-        damage              = serializedObject.FindProperty(nameof(WeaponDefinition.damage));
-        maxAmmo             = serializedObject.FindProperty(nameof(WeaponDefinition.maxAmmo));
-        startingAmmo        = serializedObject.FindProperty(nameof(WeaponDefinition.startingAmmo));
-        fireRate            = serializedObject.FindProperty(nameof(WeaponDefinition.fireRate));
-        impactForce         = serializedObject.FindProperty(nameof(WeaponDefinition.impactForce));
-        splashImpactForce   = serializedObject.FindProperty(nameof(WeaponDefinition.splashImpactForce));
-        destabilizeFraction = serializedObject.FindProperty(nameof(WeaponDefinition.destabilizeFraction));
-        useWindUp           = serializedObject.FindProperty(nameof(WeaponDefinition.useWindUp));
-        windUpDuration      = serializedObject.FindProperty(nameof(WeaponDefinition.windUpDuration));
-        windUpCurve         = serializedObject.FindProperty(nameof(WeaponDefinition.windUpCurve));
-        windDownDuration    = serializedObject.FindProperty(nameof(WeaponDefinition.windDownDuration));
-        missileFireMode     = serializedObject.FindProperty(nameof(WeaponDefinition.missileFireMode));
-        lockAcquireTime     = serializedObject.FindProperty(nameof(WeaponDefinition.lockAcquireTime));
-        lockRange           = serializedObject.FindProperty(nameof(WeaponDefinition.lockRange));
-        lockConeAngle       = serializedObject.FindProperty(nameof(WeaponDefinition.lockConeAngle));
+        type             = Find("type");
+        displayName      = Find("displayName");
+        projectileMode   = Find("projectileMode");
+        projectilePrefab = Find("projectilePrefab");
+
+        damage       = Find("combat.damage");
+        maxAmmo      = Find("combat.maxAmmo");
+        startingAmmo = Find("combat.startingAmmo");
+        fireRate     = Find("combat.fireRate");
+
+        impactForce         = Find("impact.impactForce");
+        splashImpactForce   = Find("impact.splashImpactForce");
+        destabilizeFraction = Find("impact.destabilizeFraction");
+
+        speed       = Find("flight.speed");
+        lifetime    = Find("flight.lifetime");
+        armingDelay = Find("flight.armingDelay");
+
+        turnRate       = Find("homing.turnRate");
+        homingDelay    = Find("homing.homingDelay");
+        flareOffset    = Find("homing.flareOffset");
+        flareDuration  = Find("homing.flareDuration");
+        flareDirection = Find("homing.flareDirection");
+
+        splashRadius    = Find("blast.splashRadius");
+        splashFalloff   = Find("blast.splashFalloff");
+        blastLayers     = Find("blast.damageLayers");
+        explosionPrefab = Find("blast.explosionPrefab");
+
+        emissionRate  = Find("emitter.emissionRate");
+        burstCount    = Find("emitter.burstCount");
+        startSpeed    = Find("emitter.startSpeed");
+        startSpeedMin = Find("emitter.startSpeedMin");
+        startLifetime = Find("emitter.startLifetime");
+        coneAngle     = Find("emitter.coneAngle");
+        coneRadius    = Find("emitter.coneRadius");
+        emitterLayers = Find("emitter.damageLayers");
+
+        useWindUp        = Find("windUp.useWindUp");
+        windUpDuration   = Find("windUp.windUpDuration");
+        windUpCurve      = Find("windUp.windUpCurve");
+        windDownDuration = Find("windUp.windDownDuration");
+
+        missileFireMode = Find("weaponLock.missileFireMode");
+        lockAcquireTime = Find("weaponLock.lockAcquireTime");
+        lockRange       = Find("weaponLock.lockRange");
+        lockConeAngle   = Find("weaponLock.lockConeAngle");
     }
 
     public override void OnInspectorGUI()
     {
         serializedObject.Update();
 
-        // Mixed selections can't resolve "which fields apply", so fall back to showing
+        // Mixed selections can't resolve "which sections apply", so fall back to showing
         // everything rather than hiding a field the user is trying to edit.
         bool mixedType = type.hasMultipleDifferentValues;
         bool mixedMode = projectileMode.hasMultipleDifferentValues;
 
-        var  weaponType = (WeaponType)type.enumValueIndex;
-        var  mode       = (ProjectileMode)projectileMode.enumValueIndex;
-        bool isAutomatic  = mixedType || weaponType == WeaponType.Automatic;
-        bool isMissile    = mixedType || weaponType == WeaponType.Missile;
-        bool isInstanced  = mixedMode || mode == ProjectileMode.Instantiated;
+        var  weaponType  = (WeaponType)type.enumValueIndex;
+        var  mode        = (ProjectileMode)projectileMode.enumValueIndex;
+        bool isAutomatic = mixedType || weaponType == WeaponType.Automatic;
+        bool isMissile   = mixedType || weaponType == WeaponType.Missile;
+        bool isInstanced = mixedMode || mode == ProjectileMode.Instantiated;
+        bool isParticle  = mixedMode || mode == ProjectileMode.ParticleSystem;
 
-        // Section headings come from the [Header] attributes on WeaponDefinition: PropertyField
-        // draws a field's decorators with it, so a heading disappears along with the field that
-        // carries it. Wind-up and Missile headers sit on the first field of their group, which is
-        // why hiding those groups hides their headings too.
         EditorGUILayout.PropertyField(type);
         EditorGUILayout.PropertyField(displayName);
-
         EditorGUILayout.PropertyField(projectileMode);
-        if (isInstanced)
-            EditorGUILayout.PropertyField(projectilePrefab);
+        if (isInstanced) EditorGUILayout.PropertyField(projectilePrefab);
 
         EditorGUILayout.PropertyField(damage);
         EditorGUILayout.PropertyField(maxAmmo);
@@ -82,11 +124,59 @@ public class WeaponDefinitionEditor : Editor
         if (maxAmmo.hasMultipleDifferentValues || maxAmmo.intValue > 0)
             EditorGUILayout.PropertyField(startingAmmo);
         EditorGUILayout.PropertyField(fireRate);
+
         EditorGUILayout.PropertyField(impactForce);
         // Splash only exists on the projectile path; the particle path has no blast.
-        if (isInstanced)
-            EditorGUILayout.PropertyField(splashImpactForce);
+        if (isInstanced) EditorGUILayout.PropertyField(splashImpactForce);
         EditorGUILayout.PropertyField(destabilizeFraction);
+
+        if (isInstanced)
+        {
+            EditorGUILayout.PropertyField(speed);
+            EditorGUILayout.PropertyField(lifetime);
+            EditorGUILayout.PropertyField(armingDelay);
+        }
+
+        // Homing is meaningless on a Dumbfire missile: nothing ever hands it a target, so every
+        // value in the section is inert.
+        if (isMissile)
+        {
+            bool mixedFireMode = missileFireMode.hasMultipleDifferentValues;
+            var  fireMode      = (MissileFireMode)missileFireMode.enumValueIndex;
+            bool guided        = mixedFireMode || fireMode != MissileFireMode.Dumbfire;
+
+            if (guided)
+            {
+                EditorGUILayout.PropertyField(turnRate);
+                EditorGUILayout.PropertyField(homingDelay);
+                EditorGUILayout.PropertyField(flareOffset);
+                if (flareOffset.hasMultipleDifferentValues || flareOffset.floatValue > 0f)
+                {
+                    EditorGUILayout.PropertyField(flareDuration);
+                    EditorGUILayout.PropertyField(flareDirection);
+                }
+            }
+        }
+
+        if (isInstanced)
+        {
+            EditorGUILayout.PropertyField(splashRadius);
+            EditorGUILayout.PropertyField(splashFalloff);
+            EditorGUILayout.PropertyField(blastLayers);
+            EditorGUILayout.PropertyField(explosionPrefab);
+        }
+
+        if (isParticle)
+        {
+            EditorGUILayout.PropertyField(emissionRate);
+            EditorGUILayout.PropertyField(burstCount);
+            EditorGUILayout.PropertyField(startSpeed);
+            EditorGUILayout.PropertyField(startSpeedMin);
+            EditorGUILayout.PropertyField(startLifetime);
+            EditorGUILayout.PropertyField(coneAngle);
+            EditorGUILayout.PropertyField(coneRadius);
+            EditorGUILayout.PropertyField(emitterLayers);
+        }
 
         if (isAutomatic)
         {
@@ -108,8 +198,7 @@ public class WeaponDefinitionEditor : Editor
             bool scans         = mixedFireMode || fireMode != MissileFireMode.Dumbfire;
             bool hardLock      = mixedFireMode || fireMode == MissileFireMode.HardLock;
 
-            if (hardLock)
-                EditorGUILayout.PropertyField(lockAcquireTime);
+            if (hardLock) EditorGUILayout.PropertyField(lockAcquireTime);
             if (scans)
             {
                 EditorGUILayout.PropertyField(lockRange);
@@ -149,16 +238,50 @@ public class WeaponDefinitionEditor : Editor
                         + "accumulates every frame and spins targets uncontrollably. Intended for "
                         + "burst weapons.", MessageType.Warning);
 
-        // Knockback reaches an Instantiated projectile only through IProjectileImpactCarrier.
-        // A prefab that doesn't implement it silently ignores every value in this section.
+        // Projectiles read their tuning through IProjectileDefinitionCarrier. A prefab that does
+        // not implement it (nor the legacy carriers) ignores this entire asset.
         if (!mixedMode && mode == ProjectileMode.Instantiated
             && !projectilePrefab.hasMultipleDifferentValues
             && projectilePrefab.objectReferenceValue is GameObject prefab
-            && prefab.GetComponent<IProjectileImpactCarrier>() == null
-            && (impactForce.floatValue > 0f || splashImpactForce.floatValue > 0f))
-            Warn(ref any, $"'{prefab.name}' does not implement IProjectileImpactCarrier, so the impact "
-                        + "values above never reach it. Implement the interface on the prefab, or set "
-                        + "the forces to 0 to make that explicit.", MessageType.Warning);
+            && prefab.GetComponent<IProjectileDefinitionCarrier>() == null
+            && prefab.GetComponent<IProjectileImpactCarrier>() == null)
+            Warn(ref any, $"'{prefab.name}' implements neither IProjectileDefinitionCarrier nor the "
+                        + "legacy IProjectileImpactCarrier, so nothing on this asset ever reaches it.",
+                        MessageType.Warning);
+
+        // A flare aims at a point beside the target and slides onto it. With no steering authority
+        // the missile can leave, but it can never come back.
+        if (!mixedType && weaponType == WeaponType.Missile
+            && !flareOffset.hasMultipleDifferentValues && flareOffset.floatValue > 0f
+            && !turnRate.hasMultipleDifferentValues && turnRate.floatValue <= 0f)
+            Warn(ref any, "Flare Offset is set but Turn Rate is 0, so the missile will swing wide and "
+                        + "never converge. Raise Turn Rate or clear the flare.", MessageType.Warning);
+
+        if (!mixedType && weaponType == WeaponType.Missile
+            && !homingDelay.hasMultipleDifferentValues && !lifetime.hasMultipleDifferentValues
+            && homingDelay.floatValue >= lifetime.floatValue)
+            Warn(ref any, "Homing Delay is longer than Lifetime. The missile expires before it is "
+                        + "allowed to steer, so it can only ever fly straight.", MessageType.Warning);
+
+        // The tunnelling class of bug: a projectile that moves further than its own collider in one
+        // physics step relies entirely on the sweep in ProjectileSweep to catch anything.
+        if (!mixedMode && mode == ProjectileMode.Instantiated
+            && !speed.hasMultipleDifferentValues
+            && projectilePrefab.objectReferenceValue is GameObject p2)
+        {
+            var col = p2.GetComponentInChildren<Collider>();
+            if (col != null)
+            {
+                float perStep = speed.floatValue * Time.fixedDeltaTime;
+                float extent  = Mathf.Min(col.bounds.extents.x, Mathf.Min(col.bounds.extents.y, col.bounds.extents.z));
+                if (extent > 0f && perStep > extent)
+                    Warn(ref any, $"At speed {speed.floatValue:F0} this projectile moves {perStep:F2}m per "
+                               + $"physics step against a collider only {extent:F2}m across, so Unity's own "
+                               + "contact callbacks will not fire. Detection relies entirely on the swept "
+                               + "test in ProjectileSweep. That is by design, but do not remove the sweep.",
+                               MessageType.Info);
+            }
+        }
     }
 
     private static void Warn(ref bool any, string message, MessageType severity)

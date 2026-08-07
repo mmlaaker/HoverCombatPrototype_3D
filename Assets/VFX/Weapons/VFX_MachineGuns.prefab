@@ -170,7 +170,7 @@ ParticleSystem:
     startSpeed:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 100
+      scalar: 150
       minScalar: 5
       maxCurve:
         serializedVersion: 2
@@ -871,7 +871,7 @@ ParticleSystem:
     rateOverTime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 7
+      scalar: 8
       minScalar: 10
       maxCurve:
         serializedVersion: 2
@@ -3793,7 +3793,7 @@ ParticleSystem:
     radiusScale: 1
     collidesWith:
       serializedVersion: 2
-      m_Bits: 4294967295
+      m_Bits: 192
     maxCollisionShapes: 256
     quality: 0
     voxelSize: 0.5
@@ -4850,6 +4850,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleWeaponCollision
   weaponDefinition: {fileID: 11400000, guid: d567ff3eea30af84ca1472c73a12031f, type: 2}
+  debugSettings: {fileID: 0}
+  drawDebug: 0
 --- !u!1 &3759056033014844471
 GameObject:
   m_ObjectHideFlags: 0
@@ -5020,7 +5022,7 @@ ParticleSystem:
     startSpeed:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 100
+      scalar: 150
       minScalar: 5
       maxCurve:
         serializedVersion: 2
@@ -5721,7 +5723,7 @@ ParticleSystem:
     rateOverTime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 7
+      scalar: 8
       minScalar: 10
       maxCurve:
         serializedVersion: 2
@@ -8643,7 +8645,7 @@ ParticleSystem:
     radiusScale: 1
     collidesWith:
       serializedVersion: 2
-      m_Bits: 4294967295
+      m_Bits: 192
     maxCollisionShapes: 256
     quality: 0
     voxelSize: 0.5
@@ -9700,6 +9702,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleWeaponCollision
   weaponDefinition: {fileID: 11400000, guid: d567ff3eea30af84ca1472c73a12031f, type: 2}
+  debugSettings: {fileID: 0}
+  drawDebug: 0
 --- !u!1 &7711646723984399796
 GameObject:
   m_ObjectHideFlags: 0

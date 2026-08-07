@@ -14,7 +14,23 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
       propertyPath: turnRate
-      value: 90
+      value: 160
+      objectReference: {fileID: 0}
+    - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: flareOffset
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: homingDelay
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: flareDuration
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: flareDirection
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6033046476915351036, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
