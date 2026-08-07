@@ -19997,7 +19997,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   drawDebugRays: 1
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &4964355425596500860
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20013,7 +20013,7 @@ MonoBehaviour:
   profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
   meshRoot: {fileID: 1580328478889343114}
   drawDebug: 0
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &7460556337297359226
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20027,7 +20027,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VehicleHealth
   profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &3396267810379779740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20041,7 +20041,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Energy
   profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &6056019813642530629
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20078,7 +20078,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   drawDebug: 1
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &2559843217812755066
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20092,7 +20092,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Aim
   drawDebug: 1
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &3375178076399956502
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -20200,6 +20200,8 @@ MonoBehaviour:
     m_Bits: 4294967295
   avoidanceUrgentDistance: 4
   avoidanceMinThrottle: 0.15
+  drawDebug: 1
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!1 &4319495617784153463
 GameObject:
   m_ObjectHideFlags: 0
@@ -40255,6 +40257,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 5797443098344253826}
     m_Modifications:
+    - target: {fileID: 641245609387872478, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 794787285485777235, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: m_Layer
       value: 7
@@ -40311,6 +40317,10 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 7
       objectReference: {fileID: 0}
+    - target: {fileID: 8958215382633468940, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 9211085691754117585, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -40407,6 +40417,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1691961618130697875, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: looping
       value: 0

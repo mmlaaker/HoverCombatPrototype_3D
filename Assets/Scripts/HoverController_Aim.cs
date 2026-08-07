@@ -43,7 +43,7 @@ public class HoverController_Aim : MonoBehaviour
     [Tooltip("Optional global debug toggle. When assigned, overrides Draw Debug.")]
     [SerializeField] private HoverDebugSettings debugSettings;
 
-    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Weapons) : drawDebug;
 
     // -------------------------------------------------------------------------
     // Private

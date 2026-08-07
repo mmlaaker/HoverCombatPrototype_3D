@@ -24,6 +24,10 @@ PrefabInstance:
       propertyPath: turnRate
       value: 120
       objectReference: {fileID: 0}
+    - target: {fileID: 5672397664302089339, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 6033046476915351036, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0

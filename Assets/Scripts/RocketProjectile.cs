@@ -111,7 +111,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
              "when you need to compare two shots precisely.")]
     [SerializeField] private bool logSplash = false;
 
-    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Impacts) : drawDebug;
 
     // -------------------------------------------------------------------------
     // Runtime

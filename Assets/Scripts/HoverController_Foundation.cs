@@ -91,7 +91,7 @@ public class HoverController_Foundation : MonoBehaviour
              "Create via Assets > Create > Hover > Debug Settings.")]
     [SerializeField] private HoverDebugSettings debugSettings;
 
-    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebugRays;
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Recovery) : drawDebugRays;
 
     // -------------------------------------------------------------------------
     // 📡 Collision Tracking

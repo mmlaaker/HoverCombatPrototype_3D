@@ -14657,7 +14657,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleWeaponCollision
   weaponDefinition: {fileID: 11400000, guid: d567ff3eea30af84ca1472c73a12031f, type: 2}
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
   drawDebug: 0
 --- !u!1 &2005133194715339020
 GameObject:
@@ -29671,7 +29671,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   drawDebugRays: 1
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &4964355425596500860
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29687,7 +29687,7 @@ MonoBehaviour:
   profile: {fileID: 0}
   meshRoot: {fileID: 0}
   drawDebug: 0
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &3396267810379779740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29701,7 +29701,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Energy
   profile: {fileID: 0}
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &5148731502581588017
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29720,7 +29720,7 @@ MonoBehaviour:
   targetLayers:
     serializedVersion: 2
     m_Bits: 128
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &3021440741374397934
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29740,7 +29740,7 @@ MonoBehaviour:
   activeColor: {r: 0, g: 0.5019608, b: 0.5019608, a: 0.19607843}
   fadeInDuration: 0.15
   fadeOutDuration: 0.25
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &6056019813642530629
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29817,7 +29817,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   drawDebug: 1
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &7460556337297359226
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29831,7 +29831,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VehicleHealth
   profile: {fileID: 0}
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &2559843217812755066
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -29845,7 +29845,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HoverController_Aim
   drawDebug: 1
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &3375178076399956502
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -49767,6 +49767,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 5797443098344253826}
     m_Modifications:
+    - target: {fileID: 641245609387872478, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 794787285485777235, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: m_Layer
       value: 6
@@ -49823,6 +49827,10 @@ PrefabInstance:
       propertyPath: m_Layer
       value: 6
       objectReference: {fileID: 0}
+    - target: {fileID: 8958215382633468940, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 9211085691754117585, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -49919,6 +49927,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1691961618130697875, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: looping
       value: 0

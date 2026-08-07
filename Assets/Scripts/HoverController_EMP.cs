@@ -170,7 +170,7 @@ public class HoverController_EMP : MonoBehaviour
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (debugSettings != null && !debugSettings.enableDebugGizmos) return;
+        if (debugSettings != null && !debugSettings.IsEnabled(HoverDebugCategory.Weapons)) return;
         if (profile == null) return;
 
         var s = profile.emp;

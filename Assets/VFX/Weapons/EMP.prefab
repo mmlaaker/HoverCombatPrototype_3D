@@ -4994,6 +4994,7 @@ MonoBehaviour:
   armingDelay: 0.05
   turnRate: 90
   impactForce: 0
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
   drawDebug: 0
 --- !u!1 &8113937698114318361
 GameObject:

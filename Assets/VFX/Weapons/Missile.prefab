@@ -187,7 +187,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e80f3a80c4b8cd4e9ca7e5ae76866e3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RocketProjectile
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
   drawDebug: 1
   logSplash: 0
 --- !u!1 &7776605814818324861

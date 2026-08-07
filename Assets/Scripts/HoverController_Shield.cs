@@ -304,7 +304,7 @@ public class HoverController_Shield : MonoBehaviour
     private void OnDrawGizmos()
     {
         if (!Application.isPlaying) return;
-        if (debugSettings != null && !debugSettings.enableDebugGizmos) return;
+        if (debugSettings != null && !debugSettings.IsEnabled(HoverDebugCategory.Resources)) return;
         if (!IsActive) return;
 
         Gizmos.color = new Color(1f, 0.85f, 0.2f, 0.6f);

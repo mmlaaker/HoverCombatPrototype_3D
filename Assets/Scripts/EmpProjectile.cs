@@ -94,7 +94,13 @@ public class EmpProjectile : MonoBehaviour, IHomingTarget, IProjectileOwner
     // 🛠 Debug
     // -------------------------------------------------------------------------
     [Header("🛠 Debug")]
+    [Tooltip("Optional global debug toggle. When assigned, overrides Draw Debug. " +
+             "Assign the shared HoverDebugSettings asset so one switch covers this too.")]
+    [SerializeField] private HoverDebugSettings debugSettings;
+
     [SerializeField] private bool drawDebug = false;
+
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Impacts) : drawDebug;
 
     // -------------------------------------------------------------------------
     // Runtime
@@ -262,7 +268,7 @@ public class EmpProjectile : MonoBehaviour, IHomingTarget, IProjectileOwner
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (!drawDebug) return;
+        if (!ShouldDrawDebug) return;
 
         Gizmos.color = new Color(0.4f, 0.9f, 1f, 0.8f);
         Gizmos.DrawWireSphere(transform.position, 0.4f);

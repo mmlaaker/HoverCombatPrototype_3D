@@ -258,7 +258,7 @@ public class HoverController_Energy : MonoBehaviour
         if (!Application.isPlaying)
             return;
 
-        if (debugSettings != null && !debugSettings.enableDebugGizmos)
+        if (debugSettings != null && !debugSettings.IsEnabled(HoverDebugCategory.Resources))
             return;
 
         if (profile == null)

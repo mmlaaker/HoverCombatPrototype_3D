@@ -41,10 +41,81 @@ and deserve a live confirmation before the tuning pass leans on them.
 | Projectile layer + collision matrix | Layer/mask read back; sweep mask `-1` -> `-311` | That missiles still detonate on terrain and on enemy hulls in motion |
 | AI `lockTargetLayers` 0 -> 64 | Field read back after scene save | Nothing to verify; AI has no missiles |
 | HardLock commit-and-hold | Not verified at runtime | Everything. Needs two targets to exercise, which the scene does not have |
-| Boost tick ordering | Not verified at runtime | That the 10ms shift is invisible in feel |
+| Boost tick ordering | **Partly closed 2026-08-07.** Play mode: holding boost raises the live forward cap 60 -> 60.86 -> 61.71 as `boostLerp` blends in, and `DRIVE` engages airborne only while boosting, both correct | That the 10ms shift is invisible in feel |
+
+**Also confirmed in that session, incidentally:** hover holds 6.94-7.03m against a `hoverHeight` of
+7 while driving; the over-speed bleed works airborne and is the only force acting above the cap;
+below the cap while airborne genuinely nothing acts (pure inertia); and drive/forward-drag mutual
+exclusion holds at full throttle.
+
+**Two measurement traps found the hard way, worth adding to the recipes:**
+- **Teleporting with `transform.position` silently does nothing.** The vehicle Rigidbody uses
+  interpolation, so the solver overwrites the transform from its own pose every frame. Use
+  `rb.position`. A test that appeared to show the bleed never firing was actually a teleport that
+  never happened.
+- **Wall-clock time between MCP calls is far longer than the eval itself** (thinking time), so any
+  state set in one `eval` and read in the next has had seconds to evolve -- long enough for the
+  craft to fall 400m or drive into a wall. Multi-phase measurements must run inside ONE eval via
+  the `EditorApplication.update` sampler, pinning `rb.position` each tick if the craft must stay
+  put.
 
 **Done looks like:** one play session per row, or a scripted `AIHoverInput` rig (see
 `CLAUDE.md` > Recipes) driving each case. HardLock needs a second target spawned to test at all.
+
+### 0.4 `VehicleTuningProfile` custom inspector
+**Specced and ready to build. The requirements are already written** -- every formula below exists
+as prose in a tooltip on `FoundationTuning` or `PropulsionTuning`, so this is transcription, not
+design. Follow the `WeaponDefinitionEditor` pattern (conditional hiding plus `HelpBox` warnings);
+note its standing rule that `[Header]` attributes on the first field of a group are drawn by
+`PropertyField` and must NOT be duplicated as explicit `LabelField` headings.
+
+**Show derived values live**, so tuning stops requiring arithmetic between every tweak:
+
+| Derived | Formula | At time of writing |
+|---|---|---|
+| Hover damping ratio | `(N x liftDamping) / (2 x sqrt(N x liftStrength))`, N = hover point count | 0.55 |
+| Steady air roll rate | `airRollTorque / airControlDamping` | 501 deg/s |
+| Steady air pitch rate | `airPitchTorque / airControlDamping` | 286 deg/s |
+| Righting rate | `flipRecoveryTorque / pitchRollDamping` | ~430 deg/s |
+| Dodge delta-v | `dodgeForce x dodgeDuration / 2` | 52 m/s |
+| Unstick delta-v | `unstickLiftForce x unstickLiftDuration / 2` | 4.5 m/s |
+| Rise gravity | `9.81 x (1 + extraGravityMultiplier)` | 39.24 m/s^2 |
+| Fall gravity | rise + `extraFallGravity` | 52.24 m/s^2 |
+| Jump landing speed | `launch x sqrt(fallGravity / riseGravity)`, `launch = sqrt(jumpImpulseMax^2 + airJumpImpulse^2)` | 46.2 plain / 54.4 stacked |
+| Spring pin force | `N x liftStrength` per metre of compression | 64 m/s^2 |
+
+**Warn on the invariants nothing enforces.** These are all documented as "maintain by hand", which
+is exactly why they need a warning:
+
+- `minDriftSpeed` should EQUAL `strafeTopSpeed`, so outpacing strafe is what earns the drift. Both
+  40 today; they have been out of step before.
+- `hardLandingMinSpeed` must exceed the computed jump landing speed above, or ordinary jumps
+  trigger hard landings. It depends on **both** jump impulses, `extraFallGravity` **and**
+  `sensorRange` -- raising sensor range makes hard landings less likely, which is not obvious.
+- `sensorRange - hoverHeight` wants roughly 2-3m. Below that, leaving the ground stops reading
+  cleanly; above it, the craft counts as grounded while visibly airborne.
+- `liftDamping` needs retuning whenever `liftStrength` moves, since the ratio depends on both.
+- `ceilingClearance` must exceed the hull height above the hover points (2.22m on the default
+  chassis) or the roof scrapes.
+- `flipRecoveryReleaseAngle` must stay well below `flipRecoveryAngleThreshold`; approaching it
+  reintroduces the ~78 degree hover-supported equilibrium stall.
+
+### 0.5 CSV capture for A/B tuning
+**Specced.** `CLAUDE.md` > Recipes documents the working mechanism (a self-removing
+`EditorApplication.CallbackFunction`; `System.Action` will not compile, it needs that exact
+delegate type). Turning it into a component removes the friction of re-deriving it each session.
+
+Record per tick, to a CSV in the scratchpad: time, forward and lateral speed, the live forward and
+lateral caps, the four blends, the acting-force state, tilt, and grounded/downed flags. Start and
+stop on a hotkey.
+
+**Why it is worth building:** you cannot feel a 3% change, but you can see one on a graph. The
+specific comparisons it unlocks are the boost ramp, drift speed bleed, and the jump arc -- all of
+which are currently judged by feel across separate play sessions.
+
+Two traps already known and worth honouring in the implementation: `eval` cannot sleep
+(`Thread.Sleep` blocks Unity's main loop so every sample comes back identical), and sampling from
+`Update` while the values are written in `FixedUpdate` quantises the log to frame rate.
 
 ### 0.2 Nothing is committed
 Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts, 1 new script,
@@ -230,9 +301,15 @@ Also casts from `transform.position + Vector3.up * 0.5f`, which is inside its ow
 
 **Fix:** restrict `obstacleMask` to terrain layers.
 
-### 3.4 `AIHoverInput.OnDrawGizmos` re-casts the whole ray fan
-Five more `Physics.Raycast` calls every gizmo pass, and unlike every other script in the project it
-has no `HoverDebugSettings` gate. Editor-only cost, but it is the only unguarded debug draw left.
+### 3.4 ~~`AIHoverInput.OnDrawGizmos` re-casts the whole ray fan~~ — DONE 2026-08-07
+Fixed while building the tuning instrumentation. It now draws from hits captured during
+`ApplyObstacleAvoidance` and casts nothing; it also gained the `HoverDebugSettings` gate it was
+missing (it was the only unguarded debug draw in the project), and its tessellated roam disc is now
+edit-mode only, since a filled disc is only useful while placing the area. The equivalent problem in
+`HoverController_Weapons` -- an 80-115m `OverlapSphere` per repaint for the soft-homing preview --
+was fixed the same way, moved to the game tick and throttled to 10Hz.
+
+**Left open: 3.3, the `obstacleMask = ~0` behaviour bug.** That one is unrelated to cost.
 
 ### 3.5 `RocketProjectile.Explode` allocates
 Uses `Physics.OverlapSphere` (allocating) while the rest of the project is scrupulously non-alloc:
@@ -374,6 +451,25 @@ Chaos Vehicle, Precision Drone, Transition Specialist. None of the other four ex
 
 The architecture supports it already -- one asset per archetype, scene refs stay on the
 MonoBehaviours -- so this is authoring work, not engineering.
+
+### 5.8 Vehicle scale: deferred, with two gates
+The craft is a ~1.6x sedan. Measured dimensions, the consequences, and the reasoning behind not
+rescaling are in `CLAUDE.md` > Vehicle Scale; not repeated here.
+
+**Deferred deliberately, not forgotten.** The handling is good and there is nothing built for the
+craft to look wrong against, so there is no case for touching it now. Two points where the decision
+should be re-opened, because both produce work that INHERITS the scale and is expensive to redo:
+
+1. **Before arena blockout.** Geometry authored at one scale and rebuilt at another is far more
+   costly than rescaling a single vehicle. Note the alternative is equally valid and cheaper:
+   build the arena TO the craft (corridors ~20m, entrances ~10m per the ceiling-duck measurement)
+   and nothing needs retuning at all.
+2. **Before the five-vehicle roster** (5.7). Authoring five handling profiles against an unsettled
+   scale means tuning five vehicles twice.
+
+If it is ever revisited, the cheapest single improvement is **narrowing the hull**. The 1.75x width
+against 1.46x length is what makes it read stubby, and width is the least coupled dimension to the
+tuning, since the attitude torques ignore the inertia tensor.
 
 ---
 

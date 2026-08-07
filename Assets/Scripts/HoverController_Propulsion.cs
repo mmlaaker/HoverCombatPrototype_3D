@@ -203,7 +203,7 @@ public class HoverController_Propulsion : MonoBehaviour
     [Tooltip("Optional global debug toggle. When assigned, overrides Draw Debug.")]
     [SerializeField] private HoverDebugSettings debugSettings;
 
-    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Movement) : drawDebug;
 
     // -------------------------------------------------------------------------
     // 🕹 Input
@@ -305,6 +305,47 @@ public class HoverController_Propulsion : MonoBehaviour
     // Avoids redundant rb.linearVelocity reads and InverseTransformDirection calls.
     private Vector3 _cachedLocalVel;
 
+    // -------------------------------------------------------------------------
+    // Speed caps (shared so they cannot disagree)
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// The boost-scaled strafe ceiling. Lateral drive and the lateral bleed both cap against this.
+    /// </summary>
+    private float StrafeTopSpeedScaled(float effectiveTopSpeed)
+        => P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
+
+    /// <summary>
+    /// The forward cap drive actually clamps against: boost-scaled top speed, blended toward the
+    /// boost-scaled strafe ceiling by strafe mode.
+    ///
+    /// ApplyDrive and ApplyOverSpeedBleed MUST use the same expression, and this exists so they
+    /// cannot drift apart again. When they disagreed there was a band (strafeTopSpeed..topSpeed)
+    /// where drive was suppressed for being over cap, forward drag was suppressed for held
+    /// throttle, and the bleed had not engaged yet: nothing acted on the chassis and it coasted
+    /// there indefinitely. The debug readout reports that state as NO FORCE, which is what makes
+    /// a band like it visible instead of feeling like intended glide.
+    /// </summary>
+    private float BlendedTopSpeed(float effectiveTopSpeed)
+        => Mathf.Lerp(effectiveTopSpeed, StrafeTopSpeedScaled(effectiveTopSpeed), _strafeModeBlend);
+
+    // -------------------------------------------------------------------------
+    // 🧭 Debug readout state
+    // -------------------------------------------------------------------------
+    // Written during FixedUpdate, read by OnDrawGizmos. Plain fields rather than
+    // recomputation in the gizmo, for the same reason Foundation caches
+    // _effectiveHoverHeight: OnDrawGizmos runs on the editor's schedule, sometimes
+    // several times a frame and sometimes not at all, and must never re-derive
+    // physics state or mutate anything.
+    //
+    // Kept as separate flags rather than one enum deliberately. Drive and forward
+    // drag are supposed to be MUTUALLY EXCLUSIVE (see ApplyDrag), so seeing both
+    // lit at once is a violation of the architecture rule that opposing forces
+    // cause jitter, and a single enum would hide exactly that case.
+    private bool  _dbgDrive, _dbgReverse, _dbgDrag, _dbgBleed;
+    private float _dbgDriveAccel;
+    private float _dbgFwdCap, _dbgLatCap;
+
     private void FixedUpdate()
     {
         // EMP freeze: complete control lockout. Skip every input-driven and
@@ -336,6 +377,11 @@ public class HoverController_Propulsion : MonoBehaviour
         float effectiveTopSpeed     = P.topSpeed        * Mathf.Lerp(1f, P.boostSpeedMultiplier, boostLerp);
         float effectiveForwardAccel = P.maxForwardAccel * Mathf.Lerp(1f, P.boostAccelMultiplier, boostLerp);
 
+        // Cleared here so each tick's readout reflects only this tick. The caps are
+        // recorded after ApplyStrafeModeBlend below, since both depend on it.
+        _dbgDrive = _dbgReverse = _dbgDrag = _dbgBleed = false;
+        _dbgDriveAccel = 0f;
+
         // Note ApplyBoostBlend reads _strafeModeBlend, which ApplyStrafeModeBlend updates
         // further down, so the strafe-mode boost gate still runs a tick behind. Left
         // alone deliberately: hoisting the strafe blend above boost would also move the
@@ -343,6 +389,13 @@ public class HoverController_Propulsion : MonoBehaviour
         // consistency fix. Revisit only with a reason.
         ApplyDriftBlend();
         ApplyStrafeModeBlend();
+
+        // Recorded after the strafe blend, before anything reads them. These are the
+        // numbers the player is actually driving against, and neither is visible in
+        // the inspector because both are derived from boost and strafe state.
+        _dbgFwdCap = BlendedTopSpeed(effectiveTopSpeed);
+        _dbgLatCap = StrafeTopSpeedScaled(effectiveTopSpeed);
+
         ApplyDrive(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyStrafe(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyTurning(grounded);
@@ -705,9 +758,8 @@ public class HoverController_Propulsion : MonoBehaviour
         // Blend forward cap and accel toward strafe values in strafe mode.
         // Strafe top speed is boost-scaled the same way ApplyStrafe scales lateral
         // top speed, so boost still affects strafe mode (relative to the strafe ceiling).
-        float strafeEffectiveTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
-        float blendedTopSpeed  = Mathf.Lerp(effectiveTopSpeed,     strafeEffectiveTopSpeed, _strafeModeBlend);
-        float blendedFwdAccel  = Mathf.Lerp(effectiveForwardAccel, P.strafeAccel,           _strafeModeBlend);
+        float blendedTopSpeed  = BlendedTopSpeed(effectiveTopSpeed);
+        float blendedFwdAccel  = Mathf.Lerp(effectiveForwardAccel, P.strafeAccel, _strafeModeBlend);
 
         // Exact-cap clamp: full accel until the tick that crosses the cap, which
         // is clamped to land exactly ON the cap. Without it, the hard gate
@@ -760,6 +812,10 @@ public class HoverController_Propulsion : MonoBehaviour
 
         if (Mathf.Abs(rawAccel) < 0.001f)
             return;
+
+        _dbgDrive      = rawAccel > 0f;
+        _dbgReverse    = rawAccel < 0f;
+        _dbgDriveAccel = rawAccel;
 
         rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
 
@@ -852,7 +908,10 @@ public class HoverController_Propulsion : MonoBehaviour
         {
             float effectiveForwardDamp = Mathf.Lerp(P.forwardDamp, P.driftForwardDamp, driftLerp);
             if (effectiveForwardDamp > 0f)
+            {
+                _dbgDrag = true;
                 rb.AddForce(transform.forward * (-_cachedLocalVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
+            }
         }
     }
 
@@ -886,8 +945,7 @@ public class HoverController_Propulsion : MonoBehaviour
         // was suppressed for held throttle, and the bleed had not engaged yet -- nothing
         // acted on the chassis and it coasted there indefinitely. Same expression as
         // ApplyDrive so the two can never disagree again.
-        float strafeEffectiveTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
-        float blendedTopSpeed = Mathf.Lerp(effectiveTopSpeed, strafeEffectiveTopSpeed, _strafeModeBlend);
+        float blendedTopSpeed = BlendedTopSpeed(effectiveTopSpeed);
 
         // Use forward-axis speed only. Total magnitude includes lateral, which is
         // irrelevant to the forward top-speed cap.
@@ -896,6 +954,7 @@ public class HoverController_Propulsion : MonoBehaviour
         if (forwardSpeed > blendedTopSpeed)
         {
             float excess = forwardSpeed - blendedTopSpeed;
+            _dbgBleed = true;
             rb.AddForce(-transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
         }
         else
@@ -911,6 +970,7 @@ public class HoverController_Propulsion : MonoBehaviour
             if (forwardSpeed < -reverseCap)
             {
                 float excess = -reverseCap - forwardSpeed;
+                _dbgBleed = true;
                 rb.AddForce(transform.forward * excess * P.forwardDamp, ForceMode.Acceleration);
             }
         }
@@ -1028,7 +1088,7 @@ public class HoverController_Propulsion : MonoBehaviour
         // Derives the boost ratio from the forward accel multiplier so strafe
         // acceleration scales identically with boost without a separate parameter.
         float lateralAccel             = P.strafeAccel * (effectiveForwardAccel / P.maxForwardAccel);
-        float effectiveLateralTopSpeed = P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
+        float effectiveLateralTopSpeed = StrafeTopSpeedScaled(effectiveTopSpeed);
 
         // Lateral drive: gated at the cap with the same exact-cap clamp as
         // ApplyDrive (the crossing tick lands exactly on the cap). Drive no
@@ -1159,4 +1219,135 @@ public class HoverController_Propulsion : MonoBehaviour
         foundation.SetAirControl(pitch, roll, _airControlWeight);
     }
 
+#if UNITY_EDITOR
+    // -------------------------------------------------------------------------
+    // 🎨 Tuning Readout
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Live movement state in the Scene view during play. This module owns most of the
+    /// tunables in the profile and drew nothing, so every value below was previously
+    /// invisible while driving.
+    ///
+    /// Reads only. All state is captured during FixedUpdate (see the debug fields);
+    /// OnDrawGizmos runs on the editor's schedule and must not re-derive or mutate.
+    ///
+    /// What each line is for:
+    ///
+    ///   SPEED    forward and lateral against the caps ACTUALLY in force. Neither cap is
+    ///            visible in the inspector: both move with boost, and the forward one also
+    ///            blends toward the strafe ceiling. Tuning against topSpeed alone is how
+    ///            you end up surprised by strafe mode.
+    ///
+    ///   FORCE    which longitudinal force acted this tick. The two states that matter:
+    ///            NO FORCE (red) means drive, drag and bleed all declined -- the chassis is
+    ///            coasting with nothing acting on it, which is the dead-band failure the
+    ///            strafe caps produced once already. DRIVE+DRAG (red) means the mutual
+    ///            exclusion in ApplyDrag has broken, which is a jitter source by the
+    ///            project's own architecture rules.
+    ///
+    ///   BLENDS   the four authority weights. All are private, all gate large behaviour
+    ///            changes, and none was observable before.
+    ///
+    ///   DRIFT    every entry gate with its live value, naming the one that is blocking.
+    ///            Copied from Foundation's flip-recovery gizmo, which is the best
+    ///            diagnostic in the project for exactly this reason: a state that will not
+    ///            engage should say WHY, not leave you guessing which of four conditions
+    ///            failed.
+    ///
+    ///   SHOULDER the signed angle between heading and velocity. This is THE drift metric
+    ///            and nothing displayed it. driftLateralDamp is currently 0, so this is the
+    ///            number to watch when tuning how a drift should feel.
+    /// </summary>
+    private void OnDrawGizmos()
+    {
+        if (!ShouldDrawDebug || !Application.isPlaying) return;
+        if (profile == null || rb == null || input == null) return;
+
+        Vector3 localVel = transform.InverseTransformDirection(rb.linearVelocity);
+        float   fwd      = localVel.z;
+        float   lat      = localVel.x;
+
+        // Signed heading-vs-velocity angle. Guarded: at rest the direction is undefined
+        // and Atan2(0,0) would report a meaningless 0 that looks like a real reading.
+        bool  moving   = localVel.sqrMagnitude > 1f;
+        float shoulder = moving ? Mathf.Atan2(lat, fwd) * Mathf.Rad2Deg : 0f;
+
+        // --- Force state ---
+        //
+        // Drive and forward drag overlapping is NOT automatically a fault, and an earlier
+        // version of this readout flagged it red as an "opposing forces" violation. That was
+        // wrong, and measured wrong: the overlap fires constantly in normal driving. Two
+        // documented cases produce it deliberately, verified in play mode --
+        //
+        //   throttle fade  ApplyDrag's weight ramps to zero across 0..0.15 throttle rather
+        //                  than snapping, so any throttle inside that band drives AND drags.
+        //                  Measured at throttle 0.08: DRIVE=True DRAG=True, driftLerp 0.
+        //   drift          ApplyDrag forces full drag weight during drift regardless of
+        //                  throttle, because the drive/drag exclusion assumes heading equals
+        //                  velocity and drift breaks that. Measured at full throttle + drift:
+        //                  DRIVE=True DRAG=True, driftLerp 0.27.
+        //
+        // So the overlap is only suspicious OUTSIDE both cases. Naming which one is active
+        // keeps the readout informative instead of crying wolf, and a red DRIVE+DRAG now
+        // means something genuinely unexplained.
+        bool noForce  = !_dbgDrive && !_dbgReverse && !_dbgDrag && !_dbgBleed;
+        bool overlap  = (_dbgDrive || _dbgReverse) && _dbgDrag;
+        bool inFade   = Mathf.Abs(input.ThrottleInput) < 0.15f;
+        bool drifting = driftLerp > 0f;
+        bool unexplainedOverlap = overlap && !inFade && !drifting;
+
+        string forceText =
+              unexplainedOverlap ? "DRIVE+DRAG  UNEXPLAINED (opposing forces, jitter source)"
+            : overlap && drifting ? $"DRIVE+DRAG  (drift, expected)   accel {_dbgDriveAccel:F1}"
+            : overlap             ? $"DRIVE+DRAG  (throttle fade, expected)   accel {_dbgDriveAccel:F1}"
+            : _dbgDrive           ? $"DRIVE    accel {_dbgDriveAccel:F1}"
+            : _dbgReverse         ? $"REVERSE  accel {_dbgDriveAccel:F1}"
+            : _dbgDrag            ? "DRAG"
+            : _dbgBleed           ? "BLEED    (over cap)"
+            :                       "NO FORCE (coasting, nothing acting)";
+
+        Color forceColor = (unexplainedOverlap || noForce) ? Color.red
+                         : _dbgBleed                       ? new Color(1f, 0.6f, 0f)
+                         : overlap                          ? new Color(0.6f, 0.9f, 0.4f)
+                         :                                    Color.green;
+
+        // --- Speed bar: forward speed against the live cap ---
+        Vector3 barStart = transform.position + Vector3.up * 4.6f;
+        float   capFrac  = _dbgFwdCap > 0.01f ? Mathf.Clamp01(fwd / _dbgFwdCap) : 0f;
+
+        Gizmos.color = new Color(0.25f, 0.25f, 0.25f);
+        Gizmos.DrawLine(barStart, barStart + transform.right * 3f);
+        Gizmos.color = fwd > _dbgFwdCap + 0.01f ? Color.red : Color.green;
+        Gizmos.DrawLine(barStart, barStart + transform.right * (capFrac * 3f));
+
+        // --- Heading (white) vs velocity (cyan). The gap between them IS the drift angle. ---
+        if (moving)
+        {
+            Gizmos.color = Color.white;
+            Gizmos.DrawRay(transform.position, transform.forward * 4f);
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawRay(transform.position, rb.linearVelocity.normalized * 4f);
+        }
+
+        // --- Drift gates, in the order ApplyDriftBlend evaluates them ---
+        float turnMag = Mathf.Abs(input.TurnInput);
+        string driftText =
+              _isDrifting                          ? $"DRIFTING  lerp {driftLerp:F2}"
+            : !input.Drift                         ? "idle: drift not held"
+            : turnMag < P.driftTurnThreshold        ? $"BLOCKED: turn {turnMag:F2} < {P.driftTurnThreshold:F2}"
+            : !foundation.IsHoverGrounded           ? "BLOCKED: airborne"
+            : fwd < P.minDriftSpeed                 ? $"BLOCKED: speed {fwd:F1} < {P.minDriftSpeed:F1}"
+            :                                         "ready";
+
+        UnityEditor.Handles.color = forceColor;
+        UnityEditor.Handles.Label(
+            barStart + Vector3.up * 0.35f,
+            $"SPEED     fwd {fwd,6:F1} / {_dbgFwdCap:F1}     lat {lat,6:F1} / {_dbgLatCap:F1}\n" +
+            $"FORCE     {forceText}\n" +
+            $"BLENDS    boost {boostLerp:F2}  drift {driftLerp:F2}  strafe {_strafeModeBlend:F2}  air {_airControlWeight:F2}\n" +
+            $"DRIFT     {driftText}\n" +
+            $"SHOULDER  {shoulder,6:F1} deg" + (moving ? "" : "  (stationary)")
+        );
+    }
+#endif
 }

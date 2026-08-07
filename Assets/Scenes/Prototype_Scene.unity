@@ -1587,6 +1587,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 459038230322532909, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 1039246164585857734, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
@@ -1595,6 +1603,18 @@ PrefabInstance:
       propertyPath: InitialModule.startSpeed.minScalar
       value: 100
       objectReference: {fileID: 0}
+    - target: {fileID: 1254805148386242258, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 2559843217812755066, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 3396267810379779740, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 3649194527859001394, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
@@ -1619,6 +1639,10 @@ PrefabInstance:
       propertyPath: EmissionModule.rateOverTime.scalar
       value: 8
       objectReference: {fileID: 0}
+    - target: {fileID: 4964355425596500860, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -1644,13 +1668,29 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 6056019813642530629, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 6056019813642530629, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: lockTargetLayers.m_Bits
       value: 64
       objectReference: {fileID: 0}
+    - target: {fileID: 7460556337297359226, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 8427285393085644911, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_Enabled
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8427285393085644911, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 8852938834561386004, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2311,6 +2351,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 559111189984110763, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 696110556930451447, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
@@ -2323,6 +2367,10 @@ PrefabInstance:
       propertyPath: drawDebug
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 926588851921025534, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 948721441313247371, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_IsActive
       value: 1
@@ -2331,6 +2379,10 @@ PrefabInstance:
       propertyPath: muzzlePoint
       value: 
       objectReference: {fileID: 1504178126}
+    - target: {fileID: 1102521362177438387, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2356,6 +2408,10 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: lockTargetLayers.m_Bits
       value: 128
       objectReference: {fileID: 0}
@@ -2363,6 +2419,18 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 3437989404244087800, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 3667334880870159510, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 5067444251213910084, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 150
@@ -2395,6 +2463,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.y
       value: -0.475
       objectReference: {fileID: 0}
+    - target: {fileID: 5648038973051912367, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -2407,6 +2479,10 @@ PrefabInstance:
       propertyPath: m_LocalPosition.z
       value: -8.5
       objectReference: {fileID: 0}
+    - target: {fileID: 6437614130089442384, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 6692797991235915105, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.y
       value: 3.5
@@ -2431,6 +2507,10 @@ PrefabInstance:
       propertyPath: m_LocalRotation.z
       value: 0.0000000029223584
       objectReference: {fileID: 0}
+    - target: {fileID: 7048512796822282092, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 7329922606537100077, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: Lens.FieldOfView
       value: 55
@@ -2443,6 +2523,14 @@ PrefabInstance:
       propertyPath: landingDustHeavyPrefab
       value: 
       objectReference: {fileID: 100008, guid: 06736895ea0a4ff408d25e6684dce797, type: 3}
+    - target: {fileID: 7430656568362228766, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 7762352581548736760, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: debugSettings
+      value: 
+      objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_Name
       value: HoverCar_Prototype

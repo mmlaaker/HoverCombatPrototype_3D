@@ -32,6 +32,57 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 
 ---
 
+## Vehicle Scale (measured 2026-08-07)
+
+Everything inherits this, so it is recorded once here rather than re-derived.
+
+| | Measured | Real sedan | Ratio |
+|---|---|---|---|
+| Body collider | 6.88 L x 3.19 W x 2.35 H m | 4.7 x 1.82 x 1.45 | **1.46 / 1.75 / 1.62x** |
+| Visual mesh | 7.74 L x 3.81 W x 2.64 H m | | |
+| Collider union (incl. rims) | 6.88 x 3.81 x 2.35 m | | |
+| Mass | 1000 kg | ~1400 kg | 0.71x |
+| Inertia tensor | (3293.6, 3756.1, 1091.0) | | roll ~3x easier than pitch |
+
+**The craft is a ~1.6x sedan, and disproportionately wide** (1.75x across against 1.46x long),
+which is what makes it read stubby rather than simply large. The art reads correctly as a sedan;
+this is a uniform-ish scale-up, not a distortion. The 3.81m union width is the rims, which sit
+proud of the 3.19m body.
+
+Consequences worth knowing before tuning:
+
+- **Density is ~16 kg/m^3 of bounding volume, about 7x lighter than a real car** (~115). Nothing is
+  broken by this and the impulse tuning is calibrated against it, but every `impactForce`,
+  `splashImpactForce`, jump impulse and dodge value would rescale if the mass ever moved.
+- **Perceived speed is speed / vehicle length**, and this craft is long: 60 m/s over 6.88m is
+  **8.7 body-lengths/sec**, against roughly 15-16 for a fast road car. It reads about half as fast
+  as 216 km/h sounds. If a tuning pass leaves you wanting more sensation of speed, shrinking the
+  craft achieves it as effectively as raising `topSpeed` and disturbs far less.
+- It turns in **37m at top speed, only 5.4 body-lengths** -- tight for its size. Slow-reading
+  straights plus tight corners is the signature of a vehicle that is large for its arena.
+- The belly rides about **4.7m off the ground**, higher than a double-decker bus. On-theme for
+  "low-altitude jets", but it will look strange beside any human-scale prop.
+
+**Decision: not rescaling.** Scale is relational, and with no arena, props or reference objects
+built yet there is nothing for the craft to look wrong against. Feel First; the handling is good.
+
+**Rescaling stays cheap to revisit, and this is the non-obvious part:** the hover and attitude
+system is **inertia-independent by construction**. Every Foundation torque uses
+`ForceMode.Acceleration` (leveling, flip recovery, air control, pitch/roll damping), which ignores
+the inertia tensor, and `ApplyTurning` multiplies by `inertiaTensor.y` to cancel it explicitly. So
+a rescale would not disturb any attitude tuning. What it WOULD disturb: impact spin
+(`AddForceAtPosition` uses `ForceMode.Impulse`, which does respect inertia -- at 0.68x scale a hit
+tumbles roughly 1.5x more, so `destabilizeFraction` and the 80 degree flip calibration would need
+redoing), and every length value (`hoverHeight`, `sensorRange`, `ceilingClearance`, `splashRadius`,
+weapon ranges, muzzle offsets).
+
+**Real-world scale would NOT make the tuning values easier to reason about**, which is the reason it
+was considered. The values are already in real units; a 1.6x hull does not change what 60 m/s
+means. The thing that actually breaks intuition is `extraGravityMultiplier` 3: at Earth gravity a
+40 m/s jump impulse rises 81.6m, at the live 39.24 m/s^2 it rises 20.4m. Every derived figure sits
+4x off intuition regardless of vehicle size. The fix for that is the derived-values inspector in
+`TODO.md`, not a rescale.
+
 ## Engine & Stack
 - Unity 6.3 URP (no HDRP)
 - Rigidbody-based hover physics
@@ -46,7 +97,7 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 | Module | Version | Notes |
 |---|---|---|
 | `HoverController_Foundation.cs` | v1.4 | **v1.4: hover rays skip self-hits, flip recovery disarms on attitude only at a new lower release angle, `IsDowned` added.** `ApplyHoverForces` uses `RaycastNonAlloc` and rejects hits whose `attachedRigidbody` is this craft, taking the nearest survivor: `groundLayers` is Everything and the chassis colliders sit on the vehicle layer, so past ~15.5 deg of bank the craft shot its own `Rim_FR`/`Rim_RR`, read 0.04m instead of 6.83m, and one flank's spring jumped 12.5 -> 121 m/s^2 against 39.24 of gravity. That was the drift flip. Flip-recovery disarm dropped its `|| IsHoverGrounded` term, which revoked righting authority mid-rotation at ~84 deg (a craft on its flank still lands two rays on the floor between ~40 and 88 deg) and produced a permanent 102->127->84->134 limit cycle; arming already requires `flipRecoveryDelay` under `flipRecoverySpeedThreshold`, which is what keeps righting off a craft carrying momentum through a loop. Righting now also releases at the new `flipRecoveryReleaseAngle` (35) rather than the arm threshold, because releasing at 80 parked the craft in a hover-supported equilibrium at ~78 deg. New `IsDowned` (contacting ground while flipped, latched by `rightingAuthorized` until upright) drives Propulsion's control lockout. **Do not modify without explicit justification.** Spring-damper hover lift (`ForceMode.Acceleration` = mass independent; sensors ignore triggers), leveling torque as the **single attitude authority** (ground normal + aim pitch target; aim strength applies to pitch axis only; `aimPitchDamping` adds aim-only settle damping independent of ride stiffness), two-path recovery (upright-stuck vs flipped; unstick arms only while vertically settled so belly scrapes don't get pulse trains, and only against surfaces within `unstickMaxSurfaceAngle` of horizontal so walls and other vehicles are never pushed off). Ground contact tracked by timestamp, not exit callback. v1.1: hard landing spring give -- airborne-to-grounded edge above `hardLandingMinSpeed` suppresses spring forces on a front-loaded taper so the chassis slams its collider, then pops back to ride height (feel only, no damage/lockout). v1.2: air control torque -- Propulsion pushes airborne pitch/roll intent via `SetAirControl(pitch, roll, weight)`; per-axis torque authority (roll > pitch), pitch/roll damping lerps toward `airControlDamping` by weight; still the single attitude authority. Public: `IsHoverGrounded`, `AverageGroundNormal`, `SetRecoveryEnabled(bool)`, `SetAimPitch(degrees, weight)`, `SetAirControl(pitch, roll, weight)`, `OnHardLanding(severity 0..1)` event. v1.3: **gravity feedforward** -- each hover point feeds forward `gravityMagnitude * hit.normal.y / N` along the surface normal, so the spring corrects error only instead of also holding the craft up. `hoverHeight` is now the literal resting height on flat ground and on slopes (verified 7.000m on both), while the craft still slides downhill because only the normal component is supported. This decouples ride height from spring stiffness, which were previously the same knob inverted. **Asymmetric fall gravity**: new `extraFallGravity` applies only while airborne and descending, so the rise stays generous for air tricks while the landing reads decisively (measured fall 52.18 vs designed 52.24). Slope lift compensation **removed** as redundant. Flip-recovery gate diagnostics added to `OnDrawGizmos` (inside the existing `#if UNITY_EDITOR`) |
-| `HoverController_Propulsion.cs` | v1.3 | **v1.3: downed lockout.** Jump (grounded and air), all commanded torque (yaw input, air control), and all commanded thrust (`ApplyDrive`, `ApplyStrafe`, boost engagement) are suppressed while `Foundation.IsDowned`. Thrust is included because drive is a *force*: it escaped a torque-only lockout and kept the downed chassis moving above `flipRecoverySpeedThreshold`, resetting the arming clock and more than doubling recovery time under button-mashing. Closes the flip-recovery bypass: air control gated on `!IsHoverGrounded`, which is not the same as airborne -- on its flank the craft's sensor rays find nothing, so it read as airborne while lying on the floor and handed back full 501 deg/s roll authority to lever itself upright against the ground (measured 4.79 rad/s), plus an air jump, beating the recovery. Yaw *damping* is deliberately still applied while downed; it is a stabilizer, not agency. `ApplyChassisBank` is **not visual-only** and no longer claims to be -- `meshRoot` owns all five mesh colliders. Drive/drag mutually exclusive; top speed in `ApplyDrive` with exact-cap clamp (crossing tick lands exactly on the cap, no ripple); lateral damp excludes intended strafe velocity (`strafeTopSpeed` is the real lateral ceiling); lateral drive gated at the cap with a gentle over-speed bleed, so dodge bursts at the cap are **additive** (surge, then ~1s glide back down); strafe dodge burst; continuous boost requires >= 0.15 throttle deflection. Strafe pitch applies **no torque** -- it hands the accumulated target to `Foundation.SetAimPitch`. v1.1: drift-held airborne air control (left stick Y/X = pitch/roll, right stick X stays yaw; strafe-aim precedence; no energy cost; reuses the `Drift` bool, free airborne). Public: `DriftLerp`, `StrafeModeBlend`, `StrafePitchLimit`, `AirControlWeight`, `OnJumpDenied` event. v1.2: **strafe forward dead band fixed** -- `ApplyOverSpeedBleed` was bleeding against the unblended `effectiveTopSpeed` while `ApplyDrive` clamped to the strafe-blended cap, leaving a band where drive was suppressed for being over cap, drag was suppressed for held throttle, and the bleed had not engaged, so the chassis coasted there indefinitely. Both now use the same expression. **Boost works in reverse**: the boost gate always accepted reverse throttle, so holding boost while reversing drained energy every tick for zero effect, because only the forward branch read the boost-scaled values. Reverse accel and cap are now scaled by the same ratios, and the reverse bleed matches so the two cannot oppose each other |
+| `HoverController_Propulsion.cs` | v1.4 | **v1.4: tuning readout.** This module owns most of the profile's tunables and drew nothing, so every value below was invisible while driving. `OnDrawGizmos` now reports: forward and lateral speed against **the caps actually in force** (neither is visible in the inspector -- both move with boost, and the forward one also blends toward the strafe ceiling); which longitudinal force acted this tick; the four authority blends (boost / drift / strafe / air); every drift entry gate with its live value naming the one that is blocking, copied from Foundation's flip-recovery gizmo; and the signed heading-vs-velocity **shoulder angle**, which is the drift metric and was displayed nowhere. State is captured during `FixedUpdate` into `_dbg*` fields and only READ in the gizmo, since `OnDrawGizmos` runs on the editor's schedule. Also extracted `BlendedTopSpeed()` / `StrafeTopSpeedScaled()`, now shared by `ApplyDrive`, `ApplyOverSpeedBleed` and `ApplyStrafe` -- those first two previously duplicated the expression and a past bug was them disagreeing. **The force label deliberately does NOT flag drive+drag overlap as a fault:** measured in play mode, the overlap fires constantly and legitimately in two documented cases (throttle inside the 0..0.15 drag fade band, and drift forcing full drag weight), so it names which case is active and only reddens when neither explains it. An earlier version reddened on any overlap, which would have cried wolf through normal driving. **v1.3: downed lockout.** Jump (grounded and air), all commanded torque (yaw input, air control), and all commanded thrust (`ApplyDrive`, `ApplyStrafe`, boost engagement) are suppressed while `Foundation.IsDowned`. Thrust is included because drive is a *force*: it escaped a torque-only lockout and kept the downed chassis moving above `flipRecoverySpeedThreshold`, resetting the arming clock and more than doubling recovery time under button-mashing. Closes the flip-recovery bypass: air control gated on `!IsHoverGrounded`, which is not the same as airborne -- on its flank the craft's sensor rays find nothing, so it read as airborne while lying on the floor and handed back full 501 deg/s roll authority to lever itself upright against the ground (measured 4.79 rad/s), plus an air jump, beating the recovery. Yaw *damping* is deliberately still applied while downed; it is a stabilizer, not agency. `ApplyChassisBank` is **not visual-only** and no longer claims to be -- `meshRoot` owns all five mesh colliders. Drive/drag mutually exclusive; top speed in `ApplyDrive` with exact-cap clamp (crossing tick lands exactly on the cap, no ripple); lateral damp excludes intended strafe velocity (`strafeTopSpeed` is the real lateral ceiling); lateral drive gated at the cap with a gentle over-speed bleed, so dodge bursts at the cap are **additive** (surge, then ~1s glide back down); strafe dodge burst; continuous boost requires >= 0.15 throttle deflection. Strafe pitch applies **no torque** -- it hands the accumulated target to `Foundation.SetAimPitch`. v1.1: drift-held airborne air control (left stick Y/X = pitch/roll, right stick X stays yaw; strafe-aim precedence; no energy cost; reuses the `Drift` bool, free airborne). Public: `DriftLerp`, `StrafeModeBlend`, `StrafePitchLimit`, `AirControlWeight`, `OnJumpDenied` event. v1.2: **strafe forward dead band fixed** -- `ApplyOverSpeedBleed` was bleeding against the unblended `effectiveTopSpeed` while `ApplyDrive` clamped to the strafe-blended cap, leaving a band where drive was suppressed for being over cap, drag was suppressed for held throttle, and the bleed had not engaged, so the chassis coasted there indefinitely. Both now use the same expression. **Boost works in reverse**: the boost gate always accepted reverse throttle, so holding boost while reversing drained energy every tick for zero effect, because only the forward branch read the boost-scaled values. Reverse accel and cap are now scaled by the same ratios, and the reverse bleed matches so the two cannot oppose each other |
 | `HoverController_Energy.cs` | v1.0 | `TryConsume` fail also resets regen lockout (intentional anti-spam). EMP freeze additive. Public: `Energy`, `EnergyNormalized`, `IsEmpFrozen`, `IsRegenerating` |
 | `HoverController_Weapons.cs` | v1.0 | Weapons **never spend energy**. EMP only gates fire via `IsEmpFrozen`. `WeaponDefinition` SO (shared); `WeaponSlot` (per-vehicle). Four `WeaponType`s: SingleShot, Automatic, Missile, Mine. Two `ProjectileMode`s: Instantiated, ParticleSystem. Public: `ActiveSlot`, `ActiveSlotIndex`, `CurrentLockState`, `LockProgress`, `LockTarget`, `RefillAmmo()`, `SetActiveSlot()` |
 | `HoverController_Aim.cs` | v1.0 | **LateUpdate only; no `DefaultExecutionOrder` needed.** Reads actual vehicle pitch from Rigidbody (no independent accumulation). Only rotates active slot's `vfxMount`; Instantiated-mode weapons unaffected. Called by Weapons via `NotifySlotChanged(WeaponSlot)` |
@@ -95,7 +146,8 @@ Ground-level aerial dogfighting game. Hover vehicles behave like low-altitude je
 - **`sensorRange` defines GROUNDED, not just sensing.** Between `hoverHeight` and `sensorRange` the springs produce zero lift but the craft still counts as grounded, so drag and leveling torque apply, air control stays off, and the grounded jump path is used. Two consequences: do not widen `sensorRange` casually, and hard-landing speed is sampled on that edge rather than at ride height, so measured landing speed runs several percent below the closed form and raising `sensorRange` makes hard landings *less* likely.
 - **`maxReverseAccel` doubles as the brake.** Pulling reverse while moving forward decelerates at that rate, so it is set by stopping distance, not by reverse speed.
 - **Layers and the collision matrix.** Named layers are Default (0), TransparentFX (1), Ignore Raycast (2), Water (4), UI (5), **PlayerVehicle (6)**, **AIVehicle (7)**, **Projectile (8)**. Vehicles are put on 6/7 at runtime by `VehicleLayerAssigner`; the four projectile prefabs (`Missile`, `SoftHomingMissile`, `HardLockMissile`, `EMP`) sit on 8 in the asset, root and every child. The matrix has exactly one row of exclusions, all on Projectile: it ignores **Projectile** (a volley must not detonate itself), **Ignore Raycast** (the sweep is a raycast, so honour the convention), **TransparentFX / Water / UI**. Everything else collides. **Projectile deliberately still collides with both vehicle layers** -- see `ProjectileSweep` for why making the matrix do the self-filtering is the wrong shape. Two per-vehicle masks are authored in the scene rather than derived and must stay mirrored: `HoverController_Weapons.lockTargetLayers` is 128 (AIVehicle) on the player and 64 (PlayerVehicle) on the AI. The AI's was **0** until corrected, which would have made every missile lock fail silently the moment the AI carried one.
-- **`HoverDebugSettings` ScriptableObject:** Optional global gizmo toggle. The four hover scripts plus `RocketProjectile` and `ParticleWeaponCollision` check it first, then fall back to their local `drawDebug` bool. Assign it on `Missile.prefab` and the weapon emitters to bring impact draws under the same switch as everything else.
+- **`HoverDebugSettings` (v2.0) at `Assets/Data/HoverDebugSettings.asset` is the debug master switch, and it is wired everywhere.** 22 scene components plus 28 across the vehicle, missile and emitter prefabs all point at it. Every draw site calls `IsEnabled(HoverDebugCategory.X)`; a component with no asset assigned falls back to its own local `drawDebug` bool. **The asset did not exist until 2026-08-07** -- the wiring had always been there but nothing had ever been created it, so every script silently fell through to its local flag and there was no global switch at all. If a draw ever ignores the toggle, the field is unassigned on that component. Category map: Foundation -> Recovery, Propulsion -> Movement, Weapons/Aim/EMP -> Weapons, Energy/Health/Shield -> Resources, AIHoverInput -> AI, RocketProjectile/EmpProjectile/ParticleWeaponCollision -> Impacts.
+- **Gizmos cost real frames, which matters because a tuning pass judges feel.** Measured across three 60-frame windows in one play session, prototype scene, two vehicles, no combat: **all categories 5.22ms mean / 6.27ms p95; Movement only 3.70 / 4.69; master off 3.36 / 3.76.** So the "Movement only" tuning preset recovers roughly 80% of the gap between everything-on and everything-off while keeping the readout you actually want. Physics is unaffected in all three cases (worst frame stays inside the 10ms fixed timestep, so no `FixedUpdate` starvation), but frame *delivery* is not, and inconsistent delivery corrupts exactly the judgement a tuning pass is making. **Turn the master off while assessing feel; turn categories on while reading numbers.** Note editor frame timing is noisy across sessions -- only compare windows captured within one play session.
 
 ---
 
@@ -133,7 +185,87 @@ Everything here was learned by getting it wrong first. Ignoring any of it costs 
 - **Scripted input without writing a script.** `AIHoverInput` already implements `IHoverInputProvider`. Add it at runtime, set `enabled = false` so its own `Update` does not fight you, write its auto-property backing fields (`<ThrottleInput>k__BackingField` etc.) by reflection, and repoint Propulsion's cached private `input` field at it. **Restore `input` to `PlayerHoverInput` and destroy the component when done.**
 - **Time-series logging.** `eval` cannot sleep: `Thread.Sleep` blocks Unity's main loop so time never advances and every sample is identical. Register a self-removing `EditorApplication.CallbackFunction` that appends a CSV row per tick and unsubscribes itself. `System.Action` will not compile; it needs that exact delegate type. For multi-shot batteries, drive a phase state machine inside that callback (reset → settle-gate → fire → measure) so every shot is independently gated.
 - **Measuring mass properties.** `rb.inertiaTensor` and `centerOfMass` do not reflect moved child colliders unless you call `ResetInertiaTensor()` / `ResetCenterOfMass()` first, and they do not update at all while `isKinematic` is true.
+### Reading the debug overlays
+
+Which category shows what, and what each visual is actually telling you. Toggle categories on
+`Assets/Data/HoverDebugSettings.asset`. Gizmos must be enabled in whichever view you are watching.
+
+**Movement** (Propulsion) -- the tuning readout. Cheapest to leave on: one label, no physics queries.
+- *Bar above the craft*: forward speed as a fraction of the cap in force. Grey track, green fill,
+  **turns red past the cap**.
+- *White ray* = heading. *Cyan ray* = actual velocity. **The gap between them is the drift angle**,
+  and it is the whole picture for drift tuning.
+- `SPEED` -- forward and lateral against the LIVE caps. Neither cap is in the inspector: both scale
+  with boost, and the forward one also blends toward the strafe ceiling.
+- `FORCE` -- what acted on the forward axis this tick. `DRIVE` / `REVERSE` / `DRAG` / `BLEED` (amber,
+  over cap) / **`NO FORCE` (red)** = coasting, nothing acting. `DRIVE+DRAG` is normal and labelled
+  with its cause (throttle fade band, or drift); only `UNEXPLAINED` (red) is a real fault.
+- `BLENDS` -- boost / drift / strafe / air authority, 0..1. All four are private state.
+- `DRIFT` -- names the gate that is blocking, e.g. `BLOCKED: turn 0.31 < 0.50`.
+- `SHOULDER` -- signed heading-vs-velocity angle in degrees.
+
+**Recovery** (Foundation) -- hover, unstick, flip. Heaviest label load in the project.
+- *Hover point spheres*: **these share one colour driven by the global `IsHoverGrounded`, not
+  per-point.** For per-point truth read the RAYS: a green ray is a hit and its LENGTH is the measured
+  distance; a red ray means no hit and runs the full `sensorRange`. Four unequal green rays is the
+  chassis on a slope; one red among three green is a wheel over an edge.
+- *Blue ray + sphere and `DUCKING ride X / Y`*: drawn ONLY while the ceiling duck is active. Seeing
+  it at all means low geometry is squatting the craft. A craft pinned WITHOUT this showing means the
+  duck is not engaging, and the probe is the thing to look at.
+- *Cyan ray*: floor contact normal. **Absent while only touching walls, and that absence is the
+  signal** -- no floor contact, no unstick.
+- *Yellow bar + `Unstick x/y s`*: unstick arming progress. *Orange bar*: flip timer.
+- *Flip diagnostics block* (appears past half the flip threshold): prints every gate with its live
+  value and names the blocker -- `RIGHTING`, `BLOCKED: no ground contact`, `tilt below threshold`,
+  `moving too fast`, or `counting up`. Authority is reported FIRST, because the arming gates are
+  irrelevant once righting is already held.
+- *Magenta double sphere flash, 0.5s*: `FLIP RECOVERY ARMED` or `UNSTICK FIRED`.
+
+**Weapons** (Weapons, Aim, EMP) -- targeting, before the hit.
+- *Yellow spheres and rays* = particle emitters, *red* = instantiated muzzle points, each with a
+  forward ray.
+- *Lock cone*: centre ray, four edge rays, base disc. **The colour is the state** -- white/faint = no
+  target, cyan = soft-homing has a target, yellow = Scanning, green = Locked.
+- *Green line + sphere* = the committed `LockTarget`. *Cyan line + sphere* = soft-homing preview
+  (what a shot fired now would chase; refreshed at 10Hz).
+- Labels: `TRACK [name]` or `LOCK [state] N%`, plus `WEAPON [i] name | AMMO | CD` and `[EMP FROZEN]`.
+- *Cyan ray from the VFX mount* (Aim) = where particle weapons are actually pointing, which is NOT
+  the chassis forward once terrain pitches the craft.
+- *Blue cone* (EMP) = acquisition cone at `empScanRange`; yellow sphere = EMP muzzle.
+
+**Resources** (Energy, Health, Shield) -- bars above the chassis.
+- *Energy* at +2.5m: red-to-green by fill, **cyan while EMP-frozen**; label shows `↑` while
+  regenerating, or the remaining freeze seconds.
+- *Health* at +2.0m: red-to-green, with `[SHIELD]` or `[INVULN]` when damage is being blocked.
+- *Yellow wire sphere + `SHIELD x.xs`*: shield active window.
+
+**AI** (AIHoverInput).
+- *Cyan wire ring* = roam area (filled disc only in edit mode, while placing it).
+- *Yellow sphere + line* = current waypoint. *Wire sphere* = fire range.
+- *Line to target*: **red = firing**, orange = tracking but holding fire.
+- *Avoidance fan*: red line + sphere to a hit, faint green for a clear ray. Drawn from cached hits,
+  so it can lag one frame and freezes entirely once the AI is Dead.
+- Label: `AI: state  HP: x%  Target: name`.
+
+**Impacts** (RocketProjectile, EmpProjectile, ParticleWeaponCollision). These use `Debug.DrawLine`
+with a duration, so they **persist ~4 seconds after the hit** (`WeaponDebugDraw.Lifetime`) -- the
+rocket destroys itself on detonation and has no gizmo left to run.
+- *Orange wire sphere in flight* = that rocket's `splashRadius`. *Green line* = its homing target.
+- *Orange sphere + cross at detonation* = the blast, so radius can be checked against who was caught.
+- *Splash victim lines*: epicentre to the point falloff was MEASURED FROM, coloured green (full) to
+  red (nothing), with marker size tracking the scale. **Watch the measured-from point** -- it should
+  sit at the target's centre of mass, and if it jumps between wheels on identical shots, falloff is
+  keying off collider iteration order again.
+- *Impulse split*: white cross = contact point, cyan cross = centre of mass, **magenta line between
+  them = the lever arm**, orange-red arrow = the off-centre share, blue arrow = the centre-of-mass
+  share. Long magenta plus long orange-red means a hit that will tumble the target; near-zero magenta
+  means it will not rotate anything regardless of `destabilizeFraction`.
+- *Particle contacts*: **green = hit something damageable, yellow = a Rigidbody only, red = absorbed
+  by plain geometry**, with a short tail showing approach direction.
+
 - **`eval` gotchas.** No `using` directives (code is wrapped in a method body, so fully qualify `System.Reflection.BindingFlags`), and `Object` is ambiguous, so write `UnityEngine.Object`.
+- **Teleport with `rb.position`, never `transform.position`.** Both vehicle Rigidbodies use interpolation, so the solver overwrites the transform from its own pose every frame and a `transform.position` write is silently discarded. This produced a run that appeared to prove the over-speed bleed never fires; the bleed was fine, the teleport had simply not happened. `rb.position` reads back correctly in the same eval, which is the cheap way to confirm it took.
+- **Do not split a measurement across two `eval` calls.** The wall-clock gap between MCP calls is thinking time, not execution time, and runs to many seconds -- long enough for a craft parked at y=400 to hit the ground, or one at 75 m/s to cross the arena and stop against a wall. Both happened. Anything with phases must run inside ONE eval through the `EditorApplication.update` sampler, re-asserting `rb.position` each tick if the craft is meant to stay put. Write results to `UnityEditor.SessionState.SetString` and read them back in a later eval.
 
 ---
 

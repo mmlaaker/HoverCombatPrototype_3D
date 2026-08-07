@@ -48,7 +48,7 @@ public class ParticleWeaponCollision : MonoBehaviour
     /// <summary>The definition driving this emitter. Used by WeaponDefinition's editor sync.</summary>
     public WeaponDefinition Definition => weaponDefinition;
 
-    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Impacts) : drawDebug;
 
     private ParticleSystem ps;
 

@@ -179,7 +179,7 @@ public class VehicleHealth : MonoBehaviour, IDamageable
     {
         if (!Application.isPlaying) return;
 
-        if (debugSettings != null && !debugSettings.enableDebugGizmos) return;
+        if (debugSettings != null && !debugSettings.IsEnabled(HoverDebugCategory.Resources)) return;
 
         if (profile == null) return;
 

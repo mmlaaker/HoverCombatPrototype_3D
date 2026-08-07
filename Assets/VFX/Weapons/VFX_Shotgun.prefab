@@ -4908,7 +4908,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ParticleWeaponCollision
   weaponDefinition: {fileID: 11400000, guid: 985d2e7e07377ef40bc93e0f81901ad4, type: 2}
-  debugSettings: {fileID: 0}
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
   drawDebug: 0
 --- !u!1 &4680984855036318916
 GameObject:

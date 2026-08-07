@@ -149,7 +149,7 @@ public class HoverController_Weapons : MonoBehaviour
     [Tooltip("Optional global debug toggle. When assigned, overrides Draw Debug.")]
     [SerializeField] private HoverDebugSettings debugSettings;
 
-    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.enableDebugGizmos : drawDebug;
+    private bool ShouldDrawDebug => debugSettings != null ? debugSettings.IsEnabled(HoverDebugCategory.Weapons) : drawDebug;
 
     // =========================================================================
     // 📢 Events
@@ -484,6 +484,9 @@ public class HoverController_Weapons : MonoBehaviour
                 return;
 
             case MissileFireMode.SoftHoming:
+#if UNITY_EDITOR
+                UpdateSoftHomingPreview(def);
+#endif
                 if (input.FirePressed && slot.IsReady && slot.HasAmmo)
                 {
                     // Scan once at fire time. ScanForLockTarget assigns LockTarget
@@ -825,9 +828,41 @@ public class HoverController_Weapons : MonoBehaviour
     // 🎨 Debug Gizmos
     // =========================================================================
 #if UNITY_EDITOR
-    // Editor-only buffer for the soft-homing preview scan in OnDrawGizmos.
-    // Separate from _lockScanBuffer so gizmo passes never touch live lock state.
+    // Editor-only buffer for the soft-homing preview scan.
+    // Separate from _lockScanBuffer so the preview never touches live lock state.
     private readonly Collider[] _gizmoScanBuffer = new Collider[16];
+
+    private Transform _previewTarget;
+    private float     _previewNextScan;
+
+    /// <summary>
+    /// Keeps the soft-homing preview target fresh on the GAME tick, throttled.
+    ///
+    /// SoftHoming holds no lock state between shots (LockTarget is cleared immediately after
+    /// firing), so the gizmo has nothing to display unless something scans for it. It used to do
+    /// that scan inside OnDrawGizmos, which is wrong twice over: OnDrawGizmos runs on the editor's
+    /// repaint schedule rather than the game's, and the scan is an OverlapSphere whose radius is
+    /// lockRange x tan(lockConeAngle) -- 80m for this weapon, 115m on WD_HardLockMissile. That put
+    /// a large physics query on every repaint of every visible view.
+    ///
+    /// Running it here instead drops it from once-per-repaint (60-120+/sec, doubled if both Scene
+    /// and Game views are showing gizmos) to 10/sec, and only while a soft-homing missile is the
+    /// active slot AND the weapons debug category is on. The preview is a targeting aid; a tenth
+    /// of a second of staleness is invisible.
+    /// </summary>
+    private void UpdateSoftHomingPreview(WeaponDefinition def)
+    {
+        if (!ShouldDrawDebug) { _previewTarget = null; return; }
+        if (Time.unscaledTime < _previewNextScan) return;
+
+        _previewNextScan = Time.unscaledTime + 0.1f;
+        _previewTarget = TargetingScan.PickBestInCone(
+            transform,
+            def.weaponLock.lockRange,
+            def.weaponLock.lockConeAngle,
+            lockTargetLayers,
+            _gizmoScanBuffer);
+    }
 
     private void OnDrawGizmos()
     {
@@ -863,17 +898,10 @@ public class HoverController_Weapons : MonoBehaviour
             var def = slot.definition;
             bool softHoming = def.weaponLock.missileFireMode == MissileFireMode.SoftHoming;
 
-            // SoftHoming holds no lock state between shots (LockTarget is cleared
-            // right after firing), so preview what a shot fired this frame would
-            // home on. Same scan the fire path runs, into a gizmo-only buffer.
-            Transform previewTarget = null;
-            if (softHoming)
-                previewTarget = TargetingScan.PickBestInCone(
-                    transform,
-                    def.weaponLock.lockRange,
-                    def.weaponLock.lockConeAngle,
-                    lockTargetLayers,
-                    _gizmoScanBuffer);
+            // Read only. The scan that produces this runs on the game tick in
+            // UpdateSoftHomingPreview, throttled to 10Hz; doing it here meant a
+            // large OverlapSphere on every repaint.
+            Transform previewTarget = softHoming ? _previewTarget : null;
 
             Color coneColor = softHoming
                 ? (previewTarget != null ? Color.cyan : new Color(1f, 1f, 1f, 0.2f))
