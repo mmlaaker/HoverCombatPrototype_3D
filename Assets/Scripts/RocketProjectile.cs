@@ -2,7 +2,31 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// RocketProjectile v1.1
+/// RocketProjectile v1.5
+///
+/// v1.5: detonation no longer depends on OnCollisionEnter.
+///
+/// It could not. Measured against static city geometry, the callback fires at 30 m/s and is
+/// silent at 70, which is the speed this prefab actually ships; against a vehicle hull it is
+/// already silent at 30. Above that threshold the rocket bounced off the target, drifted away
+/// with gravity off, and self-detonated on `lifetime` six seconds later. The direct-hit branch
+/// therefore never executed at all: every "hit" in the build was really the lifetime fuse
+/// firing splash-only from wherever the rocket had come to rest, which is why `impactForce`
+/// was inert while `splashImpactForce` appeared to work.
+///
+/// This is a tunnelling problem and no CollisionDetectionMode fixes it. Discrete, Continuous,
+/// ContinuousDynamic and ContinuousSpeculative were each measured at 70 m/s and all four are
+/// silent, so CCD is not doing the job it exists to do here.
+///
+/// The fix is to stop asking the contact system and sweep instead: every FixedUpdate,
+/// SphereCast from where the rocket was to where it now is, using the collider's own radius and
+/// the same layer mask the physics engine would have used. A sweep cannot tunnel, because it
+/// tests the whole swept volume rather than the endpoint.
+///
+/// OnCollisionEnter is kept as a backstop for anything the sweep misses (a target that spawns
+/// on top of the rocket, or an overlap at the sweep origin, which SphereCast does not report).
+/// Both paths funnel into Explode, which is idempotent via `exploded`, so a double report is
+/// harmless.
 ///
 /// Dumbfire or soft-homing rocket modeled after the Halo rocket launcher.
 /// Flies at constant speed, explodes on impact (or after lifetime), applies
@@ -121,6 +145,14 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     private bool  exploded;
     private Transform homingTarget;
 
+    // Swept hit detection. See the class header for why this exists instead of relying on
+    // OnCollisionEnter. sweepFrom is the position at the end of the previous physics step;
+    // sweepArmed gates the first sweep so we never test back across the muzzle.
+    private Vector3 sweepFrom;
+    private int     sweepMask;
+    private float   sweepRadius;
+    private bool    sweepArmed;
+
     // Supplied by the spawning WeaponDefinition via IProjectileImpactCarrier. Default to 0 so a
     // prefab dropped straight into a scene is inert rather than silently using stale tuning.
     private float directHitImpactForce;
@@ -151,6 +183,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        ProjectileSweep.Configure(GetComponentInChildren<Collider>(), out sweepMask, out sweepRadius);
     }
 
     private void Start()
@@ -158,6 +191,42 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
         // Fire-and-forget: set velocity once; no further force needed.
         // Rigidbody must have gravity off so the rocket stays level.
         rb.linearVelocity = transform.forward * speed;
+        sweepFrom = rb.position;
+    }
+
+    /// <summary>
+    /// Swept hit test, replacing the contact callback this projectile is too fast to receive.
+    /// Runs in FixedUpdate because that is the only place the body's position actually advances.
+    /// </summary>
+    private void FixedUpdate()
+    {
+        if (exploded) return;
+
+        Vector3 now = rb.position;
+
+        // Stay disarmed through armingDelay so the rocket cannot detonate on the firer's own
+        // hull at the muzzle, and so the first sweep does not span the spawn point.
+        if (age < armingDelay)
+        {
+            sweepFrom  = now;
+            sweepArmed = true;
+            return;
+        }
+
+        if (!sweepArmed) { sweepFrom = now; sweepArmed = true; return; }
+
+        // Lookahead is this step's displacement. FixedUpdate runs before the solver, so testing
+        // it here detonates on approach instead of after the solver has deflected the rocket.
+        Vector3 step = rb.linearVelocity * Time.fixedDeltaTime;
+
+        if (ProjectileSweep.TryHit(transform, sweepFrom, now, step, sweepRadius, sweepMask,
+                                   out Vector3 point, out Collider col))
+        {
+            Explode(point, col);
+            return;
+        }
+
+        sweepFrom = now;
     }
 
     private void Update()
@@ -180,6 +249,13 @@ public class RocketProjectile : MonoBehaviour, IProjectileDamageCarrier, IProjec
             Explode(transform.position, null);
     }
 
+    /// <summary>
+    /// Backstop only. At this prefab's shipped speed this never fires (see the class header);
+    /// the sweep in FixedUpdate is the real detection. Kept because the sweep cannot see a
+    /// collider already overlapping its origin, and because slow-moving variants are still
+    /// legitimately served by the contact system. Explode is idempotent, so if both report the
+    /// same hit only the first one does anything.
+    /// </summary>
     private void OnCollisionEnter(Collision col)
     {
         if (exploded || age < armingDelay)

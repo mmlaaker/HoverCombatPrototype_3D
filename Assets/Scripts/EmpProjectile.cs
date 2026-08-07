@@ -1,7 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// EmpProjectile v1.0
+/// EmpProjectile v1.1
+///
+/// v1.1: hit detection no longer depends on OnCollisionEnter, which this projectile is too fast
+/// to receive. Measured, the callback fires at 45 m/s and is silent at 50; `speed` ships at 55,
+/// so the EMP bounced off its target and expired on `lifetime` without ever applying a freeze.
+/// Detection is now a swept SphereCast in FixedUpdate via the shared <see cref="ProjectileSweep"/>.
+/// See that class for the full measurement and for why no CollisionDetectionMode fixes it.
+/// OnCollisionEnter is retained as a backstop; Consume is idempotent.
 ///
 /// Soft-homing single-shot projectile for the EMP ability. Flies at constant speed,
 /// optionally bends toward a target supplied via IHomingTarget.SetTarget, and applies
@@ -71,6 +78,12 @@ public class EmpProjectile : MonoBehaviour, IHomingTarget
     private float age;
     private bool consumed;
 
+    // Swept hit detection. See ProjectileSweep for why this replaces the contact callback.
+    private Vector3 sweepFrom;
+    private int     sweepMask;
+    private float   sweepRadius;
+    private bool    sweepArmed;
+
     /// <summary>Receives the homing target from the spawning ability. Null = flies straight.</summary>
     public void SetTarget(Transform target) => homingTarget = target;
 
@@ -87,11 +100,43 @@ public class EmpProjectile : MonoBehaviour, IHomingTarget
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
+        ProjectileSweep.Configure(GetComponentInChildren<Collider>(), out sweepMask, out sweepRadius);
     }
 
     private void Start()
     {
         rb.linearVelocity = transform.forward * speed;
+        sweepFrom = rb.position;
+    }
+
+    /// <summary>
+    /// Swept hit test, replacing the contact callback this projectile is too fast to receive.
+    /// </summary>
+    private void FixedUpdate()
+    {
+        if (consumed) return;
+
+        Vector3 now = rb.position;
+
+        // Disarmed through armingDelay so the shot cannot trigger on the firer at the muzzle.
+        if (age < armingDelay || !sweepArmed)
+        {
+            sweepFrom  = now;
+            sweepArmed = true;
+            return;
+        }
+
+        // Lookahead is this step's displacement; see ProjectileSweep for why it is required.
+        Vector3 step = rb.linearVelocity * Time.fixedDeltaTime;
+
+        if (ProjectileSweep.TryHit(transform, sweepFrom, now, step, sweepRadius, sweepMask,
+                                   out Vector3 point, out Collider col))
+        {
+            Consume(point, col);
+            return;
+        }
+
+        sweepFrom = now;
     }
 
     private void Update()
@@ -114,6 +159,10 @@ public class EmpProjectile : MonoBehaviour, IHomingTarget
             Consume(transform.position, null);
     }
 
+    /// <summary>
+    /// Backstop only; the sweep in FixedUpdate is the real detection at this projectile's speed.
+    /// Consume is idempotent, so a duplicate report from both paths does nothing.
+    /// </summary>
     private void OnCollisionEnter(Collision col)
     {
         if (consumed || age < armingDelay)

@@ -20,7 +20,7 @@ MonoBehaviour:
   maxAmmo: 0
   startingAmmo: 0
   fireRate: 1.5
-  impactForce: 3000
+  impactForce: 1800
   splashImpactForce: 0
   destabilizeFraction: 1
   useWindUp: 0
