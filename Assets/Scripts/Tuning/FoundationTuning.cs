@@ -27,6 +27,32 @@ public class FoundationTuning
              "2 to 3 metres, or leaving the ground stops reading cleanly.")]
     public float sensorRange = 9.5f;
 
+    [Tooltip("Lets the chassis squat to fit under low ceilings instead of being crushed against them.\n" +
+             "Without it, geometry lower than the chassis needs is a SOFT-LOCK, not a nuisance. The springs " +
+             "have no force ceiling: the pin is 64 m/s^2 per metre of compression, so a ceiling 1m under " +
+             "ride height pins at 64 and 2m under pins at 128, and friction against it kills all drive. " +
+             "Measured on a 2.35m-tall chassis at Hover Height 7: at 9m clearance the craft still reaches " +
+             "59.9 m/s, at 8m it reaches 0.7 m/s and travels 0.4m in two seconds. The whole cliff is one " +
+             "metre wide.\n" +
+             "Turn this off to reproduce that, and mind that level geometry then needs a hard minimum " +
+             "clearance instead (10m for this chassis).")]
+    public bool enableCeilingDuck = true;
+
+    [Tooltip("Room the chassis needs between its hover points and a ceiling before it starts ducking. " +
+             "Must cover the hull height ABOVE the hover points plus whatever margin you want; the default " +
+             "chassis is 2.22m above them, so 3 leaves about 0.8m of daylight.\n" +
+             "Too low and the roof scrapes; too high and the craft ducks under ceilings that would have " +
+             "cleared it fine, losing ride height for no reason. Try 2.5 to 4.")]
+    [Min(0f)]
+    public float ceilingClearance = 3f;
+
+    [Tooltip("How low ducking is allowed to push the resting height. Floor on the squat, so a genuinely " +
+             "impassable gap parks the chassis low rather than trying to reach a negative ride height.\n" +
+             "Gaps tighter than this plus Ceiling Clearance still pin, which is correct: that geometry does " +
+             "not fit a hovercraft and should read as a wall. Try 1 to 2.")]
+    [Min(0.1f)]
+    public float minDuckHoverHeight = 1.5f;
+
     [Tooltip("Stiffness of the hover spring, PER HOVER POINT. Higher values make the chassis correct height " +
              "faster and feel firmer; push too high and the vehicle starts bouncing.\n" +
              "Force is applied as mass-independent acceleration and every hover point contributes its own, " +
@@ -121,6 +147,19 @@ public class FoundationTuning
              "Keep this short. This is a physics correction, not a gameplay moment. Try 0.1 to 0.3.")]
     [Min(0f)]
     public float unstickRecoveryDelay = 0.2f;
+
+    [Tooltip("How far a surface can tilt from horizontal and still count as FLOOR for unstick. " +
+             "Anything steeper is treated as a wall and never triggers it.\n" +
+             "Unstick exists to free a craft the hover springs cannot lift. Hover does not lift you off a " +
+             "wall, so there is nothing to free, and pushing off one is just a shove. Without this filter " +
+             "the contact normal from a wall fed straight into the unstick direction: driving into a wall " +
+             "produced a firing every Unstick Recovery Delay (measured 29 in 5 seconds), each one a 4.5 m/s " +
+             "push straight back, which fully cancelled full throttle and pinned the craft off the surface. " +
+             "Against another vehicle it was a free repeating knockback that no weapon paid for.\n" +
+             "90 restores the old behaviour (every surface counts). Lower it if craft still shove off steep " +
+             "ramps and bowl walls. Try 50 to 70.")]
+    [Range(0f, 90f)]
+    public float unstickMaxSurfaceAngle = 60f;
 
     [Tooltip("Unstick only arms while vertical speed is below this (m/s). A genuinely stuck craft has settled " +
              "vertically; a dynamic belly scrape (ramp grind, bottoming out at speed) has not, so scrapes no longer " +

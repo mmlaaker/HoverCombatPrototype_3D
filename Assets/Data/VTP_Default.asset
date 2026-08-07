@@ -25,6 +25,7 @@ MonoBehaviour:
     airRollTorque: 35
     airControlDamping: 4
     unstickRecoveryDelay: 0.2
+    unstickMaxSurfaceAngle: 60
     unstickMaxVerticalSpeed: 1
     unstickLiftForce: 60
     unstickLiftDuration: 0.15

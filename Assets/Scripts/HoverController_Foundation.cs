@@ -84,7 +84,7 @@ public class HoverController_Foundation : MonoBehaviour
     /// an OnCollisionExit-cleared bool goes false when exiting ONE of two
     /// simultaneously touching ground colliders, and needs the exit callback to
     /// fire at all (not guaranteed on collider destruction). The timestamp simply
-    /// goes stale. groundContactNormal is only read behind IsContactingGround, so
+    /// goes stale. floorContactNormal is only read behind IsContactingFloor, so
     /// staleness there is harmless.
     /// Both flip recovery and unstick read these values; neither writes them.
     /// </summary>
@@ -96,12 +96,42 @@ public class HoverController_Foundation : MonoBehaviour
         lastGroundContactTime = Time.time;
 
         int count = collision.GetContacts(_contactBuffer);
-        if (count > 0)
+        if (count == 0)
+            return;
+
+        // Two separate signals, and they must stay separate.
+        //
+        //   lastGroundContactTime / IsContactingGround: touching ANYTHING. Flip
+        //   recovery and the downed lockout need this, because a craft flipped
+        //   against a wall is still very much down and must still recover.
+        //
+        //   lastFloorContactTime / floorContactNormal: touching something
+        //   FLAT ENOUGH TO BE STUCK ON. Only unstick uses this. It used to use
+        //   the all-contact average, so a wall's horizontal normal became the
+        //   unstick push direction and the craft shoved itself off any wall it
+        //   touched, once every unstickRecoveryDelay. Hover cannot lift a craft
+        //   off a wall, so there is nothing there to unstick from.
+        float minNormalY = Mathf.Cos(F.unstickMaxSurfaceAngle * Mathf.Deg2Rad);
+
+        Vector3 floorSum   = Vector3.zero;
+        int     floorCount = 0;
+
+        for (int i = 0; i < count; i++)
         {
-            Vector3 normalSum = Vector3.zero;
-            for (int i = 0; i < count; i++)
-                normalSum += _contactBuffer[i].normal;
-            groundContactNormal = (normalSum / count).normalized;
+            Vector3 n = _contactBuffer[i].normal;
+            if (n.y < minNormalY)
+                continue;
+
+            floorSum += n;
+            floorCount++;
+        }
+
+        // Averaged across floor contacts only, so touching a wall and the floor
+        // at once still yields a clean upward push instead of a diagonal one.
+        if (floorCount > 0)
+        {
+            lastFloorContactTime = Time.time;
+            floorContactNormal   = (floorSum / floorCount).normalized;
         }
     }
 
@@ -123,8 +153,9 @@ public class HoverController_Foundation : MonoBehaviour
 
     private float   unstickTimer;            // counts up while upright and contacting ground
     private float   flipTimer;               // counts up while flipped, slow, and contacting ground
-    private float   lastGroundContactTime = float.NegativeInfinity; // refreshed by OnCollisionStay
-    private Vector3 groundContactNormal;
+    private float   lastGroundContactTime = float.NegativeInfinity; // any contact, refreshed by OnCollisionStay
+    private float   lastFloorContactTime  = float.NegativeInfinity; // floor-like contact only (see OnCollisionStay)
+    private Vector3 floorContactNormal;
 
     /// <summary>
     /// True while ground contact is fresh. OnCollisionStay refreshes the
@@ -132,6 +163,13 @@ public class HoverController_Foundation : MonoBehaviour
     /// covers callback ordering within a step.
     /// </summary>
     private bool IsContactingGround => Time.time - lastGroundContactTime <= Time.fixedDeltaTime * 2f;
+
+    /// <summary>
+    /// True while contact with a surface flat enough to be stuck on is fresh.
+    /// Strictly narrower than IsContactingGround, which counts walls. Only the
+    /// unstick path reads this; recovery deliberately uses the wider signal.
+    /// </summary>
+    private bool IsContactingFloor => Time.time - lastFloorContactTime <= Time.fixedDeltaTime * 2f;
 
     // Aim pitch target, written by Propulsion via SetAimPitch each FixedUpdate
     // while strafe mode is active. Degrees in Unity euler-X convention
@@ -152,6 +190,7 @@ public class HoverController_Foundation : MonoBehaviour
     private bool    recoveryEnabled = true;
     private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
     private Vector3 unstickForceDir;         // direction cached at trigger time, held for duration
+    private float   _effectiveHoverHeight;   // ride height actually targeted this tick (ceiling duck)
     private float   hardLandingTimer;        // counts down while hard-landing spring suppression is active
     private float   hardLandingSeverity;     // 0..1, cached at detection so the taper scales with impact
 
@@ -335,6 +374,92 @@ public class HoverController_Foundation : MonoBehaviour
     // -------------------------------------------------------------------------
     // 🧠 Per-Point Spring-Damper Lift
     // -------------------------------------------------------------------------
+    /// <summary>
+    /// Raycast that never returns this craft's own geometry, taking the nearest
+    /// surviving hit. RaycastNonAlloc does not sort, hence the explicit min.
+    /// attachedRigidbody resolves every chassis collider to this Rigidbody, so
+    /// one comparison covers the whole hierarchy.
+    ///
+    /// Self-skipping is not optional here. groundLayers defaults to Everything
+    /// and the chassis colliders sit on the vehicle's own layer, so a sensor ray
+    /// can and does hit this craft: once ApplyChassisBank rolls meshRoot past
+    /// ~15.5 degrees it swings Rim_FR / Rim_RR straight into their own hover
+    /// rays. The ray then returned ~0.04m instead of ~6.8m, compression read as
+    /// nearly the whole hoverHeight, and one flank's spring jumped from 12.5 to
+    /// 121 m/s^2 -- about 6x the craft's weight, on one side, pushed along the
+    /// RIM's surface normal instead of the ground's. That was the drift flip.
+    /// </summary>
+    private bool RaycastIgnoringSelf(Vector3 origin, Vector3 direction, float range, out RaycastHit nearest)
+    {
+        int count = Physics.RaycastNonAlloc(origin, direction, _hoverHitBuffer, range,
+                                            groundLayers, QueryTriggerInteraction.Ignore);
+
+        bool found = false;
+        nearest = default;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (_hoverHitBuffer[i].collider.attachedRigidbody == rb)
+                continue;
+
+            if (!found || _hoverHitBuffer[i].distance < nearest.distance)
+            {
+                nearest = _hoverHitBuffer[i];
+                found   = true;
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Ride height the springs actually target this tick, reduced when something
+    /// overhead would otherwise be crushed into.
+    ///
+    /// The springs have no force ceiling, so a ceiling below ride height is a
+    /// SOFT-LOCK rather than a nuisance: net upward push is 64 m/s^2 per metre of
+    /// compression, and friction against the ceiling eats the drive. Measured on
+    /// the default chassis at 8m of clearance, full throttle produced a top speed
+    /// of 0.7 m/s and 0.4m of travel in two seconds. At 9m it reached 59.9 m/s.
+    /// The entire transition is one metre wide, which is far too sharp to leave to
+    /// level-design discipline when the failure is an immobilised player.
+    ///
+    /// Both probes fire from the hover-point centroid so their sum is the ABSOLUTE
+    /// floor-to-ceiling gap, which does not depend on where in that gap the craft
+    /// currently sits. Deriving the target from the ceiling distance alone would
+    /// make it a function of current height and feed back on itself.
+    ///
+    /// One central probe, not one per hover point, deliberately: per-corner ducking
+    /// under a sloped ceiling would drive the four points to different targets and
+    /// tilt the chassis.
+    /// </summary>
+    private float ComputeEffectiveHoverHeight()
+    {
+        if (!F.enableCeilingDuck || hoverPoints.Length == 0)
+            return F.hoverHeight;
+
+        Vector3 centroid = Vector3.zero;
+        foreach (Transform point in hoverPoints)
+            centroid += point.position;
+        centroid /= hoverPoints.Length;
+
+        Vector3 up = transform.up;
+
+        // Anything higher than this cannot constrain us, so there is no reason to
+        // look for it.
+        float probeRange = F.hoverHeight + F.ceilingClearance;
+
+        if (!RaycastIgnoringSelf(centroid, up, probeRange, out RaycastHit ceiling))
+            return F.hoverHeight;
+
+        if (!RaycastIgnoringSelf(centroid, -up, F.sensorRange, out RaycastHit floor))
+            return F.hoverHeight;
+
+        float gap = floor.distance + ceiling.distance;
+
+        return Mathf.Clamp(gap - F.ceilingClearance, F.minDuckHoverHeight, F.hoverHeight);
+    }
+
     private void ApplyHoverForces()
     {
         bool wasHoverGrounded = IsHoverGrounded;
@@ -360,6 +485,10 @@ public class HoverController_Foundation : MonoBehaviour
         // out of the loop; every point feeds forward an equal share of it.
         float gravityMagnitude = Physics.gravity.magnitude * (1f + F.extraGravityMultiplier);
 
+        // Reduced when something overhead would otherwise be crushed into. Applied
+        // uniformly to all four points so a sloped ceiling cannot tilt the chassis.
+        _effectiveHoverHeight = ComputeEffectiveHoverHeight();
+
         Vector3 normalSum     = Vector3.zero;
         int     groundedCount = 0;
 
@@ -367,50 +496,16 @@ public class HoverController_Foundation : MonoBehaviour
         {
             Vector3 rayDir = -point.up;
 
-            // QueryTriggerInteraction.Ignore: trigger volumes (pickups, ability
-            // fields) must never feed the hover springs.
-            //
-            // Self-hits are skipped rather than accepted. groundLayers defaults to
-            // Everything and the chassis colliders sit on the vehicle's own layer,
-            // so the sensor ray can and does hit this craft's own geometry: once
-            // ApplyChassisBank rolls meshRoot past ~15.5 degrees it swings Rim_FR /
-            // Rim_RR straight into their own hover rays. The ray then returned
-            // ~0.04m instead of ~6.8m, so compression read as nearly the whole
-            // hoverHeight and one flank's spring jumped from 12.5 to 121 m/s^2 --
-            // about 6x the craft's weight, on one side, pushed along the RIM's
-            // surface normal instead of the ground's. That is the drift flip: the
-            // live bank budget is passiveBankAngle 5 + maxBankAngle 12 = 17 degrees,
-            // which sits past the cliff, which is why reducing maxBankAngle from
-            // 18 to 12 never helped.
-            //
-            // Nearest non-self hit wins; RaycastNonAlloc does not sort, hence the
-            // explicit min. attachedRigidbody resolves every chassis collider to
-            // this Rigidbody, so one comparison covers the whole hierarchy.
-            int hitCount = Physics.RaycastNonAlloc(point.position, rayDir, _hoverHitBuffer, F.sensorRange,
-                                                   groundLayers, QueryTriggerInteraction.Ignore);
-
-            bool        foundGround = false;
-            RaycastHit  hit         = default;
-            for (int i = 0; i < hitCount; i++)
-            {
-                if (_hoverHitBuffer[i].collider.attachedRigidbody == rb)
-                    continue;
-
-                if (!foundGround || _hoverHitBuffer[i].distance < hit.distance)
-                {
-                    hit         = _hoverHitBuffer[i];
-                    foundGround = true;
-                }
-            }
-
-            if (!foundGround)
+            // QueryTriggerInteraction.Ignore (inside the helper): trigger volumes
+            // (pickups, ability fields) must never feed the hover springs.
+            if (!RaycastIgnoringSelf(point.position, rayDir, F.sensorRange, out RaycastHit hit))
             {
                 if (ShouldDrawDebug)
                     Debug.DrawRay(point.position, rayDir * F.sensorRange, Color.red);
                 continue;
             }
 
-            float compression         = F.hoverHeight - hit.distance;
+            float compression         = _effectiveHoverHeight - hit.distance;
             float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), hit.normal);
 
             // Gravity feedforward: each point carries its share of the chassis weight,
@@ -734,7 +829,9 @@ public class HoverController_Foundation : MonoBehaviour
         // train at default tuning).
         bool verticallySettled = Mathf.Abs(rb.linearVelocity.y) < F.unstickMaxVerticalSpeed;
 
-        if (IsContactingGround && !isFlipped && verticallySettled)
+        // IsContactingFloor, not IsContactingGround: rubbing a wall is not being
+        // stuck to it, and must not arm the lift.
+        if (IsContactingFloor && !isFlipped && verticallySettled)
         {
             unstickTimer += Time.fixedDeltaTime;
 
@@ -742,8 +839,8 @@ public class HoverController_Foundation : MonoBehaviour
             {
                 unstickTimer = 0f;
 
-                unstickForceDir = groundContactNormal.sqrMagnitude > 0.01f
-                    ? groundContactNormal
+                unstickForceDir = floorContactNormal.sqrMagnitude > 0.01f
+                    ? floorContactNormal
                     : Vector3.up;
 
                 unstickForceTimer      = F.unstickLiftDuration;
@@ -851,7 +948,7 @@ public class HoverController_Foundation : MonoBehaviour
     /// Live recovery state in the Scene view during play.
     ///
     ///   Hover point spheres: green (ray hitting ground) / red (no hit)
-    ///   Cyan line:           groundContactNormal direction while contacting
+    ///   Cyan line:           floorContactNormal while touching floor (absent on walls)
     ///   Yellow bar + label:  unstickTimer progress toward unstickRecoveryDelay
     ///   Orange bar + label:  flipTimer progress toward flipRecoveryDelay
     ///   Magenta sphere:      recovery fired flash, visible for 0.5s
@@ -874,16 +971,34 @@ public class HoverController_Foundation : MonoBehaviour
             }
         }
 
-        // --- Ground contact normal ---
-        if (IsContactingGround && groundContactNormal.sqrMagnitude > 0.01f)
+        // --- Ceiling duck (blue). Only drawn while actually ducking, so seeing it
+        //     at all means low geometry is squatting the craft. If a craft is
+        //     pinned and this is NOT showing, the duck is not engaging and the
+        //     ceiling probe is the thing to look at. ---
+        if (profile != null && _effectiveHoverHeight < F.hoverHeight - 0.01f)
+        {
+            Gizmos.color = new Color(0.3f, 0.6f, 1f);
+            Gizmos.DrawRay(transform.position, transform.up * F.ceilingClearance);
+            Gizmos.DrawWireSphere(transform.position + transform.up * F.ceilingClearance, 0.2f);
+
+            UnityEditor.Handles.color = Gizmos.color;
+            UnityEditor.Handles.Label(
+                transform.position + Vector3.up * 3.2f,
+                $"DUCKING  ride {_effectiveHoverHeight:F2} / {F.hoverHeight:F2}m"
+            );
+        }
+
+        // --- Floor contact normal (cyan). Absent while only touching walls,
+        //     which is itself the useful signal: no floor contact, no unstick. ---
+        if (IsContactingFloor && floorContactNormal.sqrMagnitude > 0.01f)
         {
             Gizmos.color = Color.cyan;
-            Gizmos.DrawRay(transform.position, groundContactNormal * 1.5f);
-            Gizmos.DrawWireSphere(transform.position + groundContactNormal * 1.5f, 0.1f);
+            Gizmos.DrawRay(transform.position, floorContactNormal * 1.5f);
+            Gizmos.DrawWireSphere(transform.position + floorContactNormal * 1.5f, 0.1f);
         }
 
         // --- Upright unstick timer bar (yellow) ---
-        if (IsContactingGround && unstickTimer > 0f && profile != null)
+        if (IsContactingFloor && unstickTimer > 0f && profile != null)
         {
             float progress  = Mathf.Clamp01(unstickTimer / Mathf.Max(0.01f, F.unstickRecoveryDelay));
             Gizmos.color    = Color.Lerp(Color.yellow, new Color(1f, 0.8f, 0f), progress);
