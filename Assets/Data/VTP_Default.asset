@@ -29,6 +29,7 @@ MonoBehaviour:
     unstickLiftForce: 60
     unstickLiftDuration: 0.15
     flipRecoveryAngleThreshold: 80
+    flipRecoveryReleaseAngle: 35
     flipRecoveryDelay: 1
     flipRecoveryTorque: 60
     flipRecoverySpeedThreshold: 2
@@ -72,7 +73,7 @@ MonoBehaviour:
     driftTurnThreshold: 0.5
     minDriftSpeed: 40
     driftBlendSeconds: 0.15
-    maxBankAngle: 12
+    maxBankAngle: 18
     passiveBankAngle: 5
     bankLerpSpeed: 8
     enableAirControl: 1

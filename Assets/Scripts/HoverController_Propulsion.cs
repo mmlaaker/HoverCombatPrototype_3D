@@ -29,7 +29,9 @@ using UnityEngine;
 ///   to hold the ceiling.
 ///
 ///   Drift modifies three physics values (lateralDamp, forwardDamp, yawAccel) and
-///   one visual transform (meshRoot Z rotation). It does not introduce new forces.
+///   one transform (meshRoot Z rotation). It does not introduce new forces. Note
+///   that the meshRoot rotation is NOT purely visual -- meshRoot owns the mesh
+///   colliders. See ApplyChassisBank for what that does and does not cost.
 ///
 ///   Strafe mode blends in lateral authority and a free-aim pitch target. The
 ///   pitch target is handed to Foundation (SetAimPitch), whose leveling torque is
@@ -322,8 +324,8 @@ public class HoverController_Propulsion : MonoBehaviour
         if (energy.IsEmpFrozen)
             return;
 
-        // Chassis bank is visual only. Runs in Update for smooth interpolation
-        // independent of the physics timestep.
+        // Runs in Update for smooth interpolation independent of the physics
+        // timestep. Not visual-only; see ApplyChassisBank.
         ApplyChassisBank();
     }
 
@@ -351,7 +353,10 @@ public class HoverController_Propulsion : MonoBehaviour
         bool hasThrottle = inStrafe
             ? (input.ThrottleInput >= 0.15f && input.ThrottleInput > Mathf.Abs(input.StrafeX))
             : Mathf.Abs(input.ThrottleInput) >= 0.15f;
-        bool wantsBoost  = P.enableBoost && input.Boost && hasThrottle;
+        // Downed: refuse to engage at all, so the meter is not drained for thrust
+        // that ApplyDrive is going to discard anyway. Same principle as the
+        // boost-in-reverse fix: never charge the player for nothing.
+        bool wantsBoost  = P.enableBoost && input.Boost && hasThrottle && !foundation.IsDowned;
         bool energyGranted = wantsBoost &&
                              energy.TryConsume(P.boostEnergyPerSecond * Time.fixedDeltaTime);
 
@@ -516,6 +521,23 @@ public class HoverController_Propulsion : MonoBehaviour
 
         wasGroundedLastFrame = grounded;
 
+        // ── Downed lockout ───────────────────────────────────────────────────
+        // No jump of any kind while flipped and against the ground. Placed AFTER
+        // the token grant and the lockout tick so both keep their bookkeeping,
+        // and before either fire path so neither can trigger.
+        //
+        // The air jump is the load-bearing half: airJumpAvailable survives a
+        // flip, and a downed craft is not hover-grounded, so the airborne branch
+        // below would happily fire it and pop the player off the ground into
+        // air-control range. Charge is cleared so a jump held down through the
+        // whole recovery does not fire the instant the craft rights itself.
+        if (foundation.IsDowned)
+        {
+            jumpChargeTimer   = 0f;
+            jumpHeldLastFrame = jumpHeld;
+            return;
+        }
+
         // ── Grounded jump ────────────────────────────────────────────────────
         if (grounded && jumpLockoutTimer <= 0f)
         {
@@ -619,6 +641,17 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyDrive(bool grounded, float effectiveTopSpeed, float effectiveForwardAccel)
     {
+        // Downed: thrusters do nothing while the craft is on its back. Drive is a
+        // FORCE, not a torque, so the jump/torque lockout did not cover it and
+        // throttle kept shoving the chassis around at whatever angle it was lying
+        // at. That held it above flipRecoverySpeedThreshold, which resets the
+        // arming clock, so mashing more than doubled the recovery: measured 1.70s
+        // untouched (repeatable to 0.01s) versus 3.15-5.70s under panic input.
+        // Note the cost only appears with throttle AND boost together, because
+        // ApplyBoostBlend needs both, and 1.5x drive is what made it bite.
+        if (foundation.IsDowned)
+            return;
+
         bool boosting = boostLerp > 0f;
 
         if (!grounded && !boosting)
@@ -703,6 +736,13 @@ public class HoverController_Propulsion : MonoBehaviour
     {
         float turn      = Mathf.Clamp(input.TurnInput, -1f, 1f);
         float turnScale = grounded ? 1f : P.airTurnMultiplier;
+
+        // Downed: no commanded torque until the craft is upright. The yaw DAMPING
+        // term below is deliberately left running -- it is a stabilizer, not player
+        // agency, and letting a downed chassis keep spinning would only fight the
+        // flip recovery's own speed gate and stretch the lockout unpredictably.
+        if (foundation.IsDowned)
+            turn = 0f;
 
         // Effective yaw multiplier inlined: lerp between 1 and driftYawMultiplier.
         float effectiveYawMult = Mathf.Lerp(1f, P.driftYawMultiplier, driftLerp);
@@ -839,9 +879,31 @@ public class HoverController_Propulsion : MonoBehaviour
     }
 
     // -------------------------------------------------------------------------
-    // Chassis bank (visual only, runs in Update)
+    // Chassis bank (runs in Update)
     // -------------------------------------------------------------------------
     /// <summary>
+    /// NOT visual-only, despite what this was called for a long time. meshRoot is
+    /// 3D/HoverCar, which owns all five mesh colliders, so banking rotates the
+    /// collision hull relative to a Rigidbody and a set of hover rays that do not
+    /// move with it. Measured consequences at the full -17 degree bank:
+    ///
+    ///   inertia magnitudes  unchanged at (3293.6, 3756.1, 1091.0)
+    ///   inertia BASIS       rotates the full 17 degrees
+    ///   centre of mass      shifts 2.5 cm laterally
+    ///   ApplyTurning        a unit yaw command leaks -3.91% into pitch
+    ///                       (about 5.5 deg/s of nose drift at full drift yaw)
+    ///
+    /// That was judged not worth decoupling: for scale, the hull's own principal
+    /// axes are 0.81 degrees off its local axes, so a unit yaw command ALREADY
+    /// leaks -3.46% into roll at zero bank, and decoupling meshRoot would not
+    /// touch that. Both are an order of magnitude below anything that destabilizes
+    /// the craft. Revisit if the bank budget grows a lot.
+    ///
+    /// The one consequence that WAS severe is fixed at its source rather than
+    /// here: banking used to swing Rim_FR / Rim_RR into their own hover rays past
+    /// ~15.5 degrees, which flipped the craft instantly. ApplyHoverForces now
+    /// skips self-hits. See the comment there before changing bank angles.
+    ///
     /// Two additive bank contributions:
     ///   Passive bank: proportional to turn input magnitude, always active.
     ///                 Subtle carving look on any hard turn.
@@ -912,6 +974,10 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyStrafe(bool grounded, float effectiveTopSpeed, float effectiveForwardAccel)
     {
+        // Downed: same reasoning as ApplyDrive. Lateral thrust is a force too.
+        if (foundation.IsDowned)
+            return;
+
         if (!grounded || _strafeModeBlend <= 0f)
             return;
 
@@ -1024,7 +1090,12 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyAirControl(bool grounded)
     {
-        bool active = P.enableAirControl && input.Drift && !grounded;
+        // !foundation.IsDowned: "not hover-grounded" is NOT the same as "airborne".
+        // A craft on its flank finds no ground with its sensor rays, so it read as
+        // airborne while lying on the floor and handed the player full roll
+        // authority to lever itself upright against the ground -- faster than the
+        // recovery it was supposed to be waiting out. A flip is meant to cost time.
+        bool active = P.enableAirControl && input.Drift && !grounded && !foundation.IsDowned;
 
         float target = active ? 1f : 0f;
         float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.airControlBlendSeconds);

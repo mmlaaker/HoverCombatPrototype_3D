@@ -145,9 +145,22 @@ public class FoundationTuning
     // 🔄 Flip Recovery
     // -------------------------------------------------------------------------
     [Header("🔄 Flip Recovery")]
-    [Tooltip("Tilt angle that counts as flipped. 90 is on its side, 180 is fully upside down. Try 70 to 100.")]
+    [Tooltip("Tilt angle that counts as flipped, and the angle at which recovery ARMS. " +
+             "90 is on its side, 180 is fully upside down. Try 70 to 100.")]
     [Range(10f, 180f)]
     public float flipRecoveryAngleThreshold = 80f;
+
+    [Tooltip("Tilt angle at which the righting torque lets go. Deliberately LOWER than Flip Recovery " +
+             "Angle Threshold: recovery arms at the threshold and holds until this.\n" +
+             "Load-bearing, not polish. Releasing at the arm threshold instead left the craft parked in a " +
+             "hover-supported equilibrium at about 78 degrees, where the one-sided spring lift from the two " +
+             "hover points that still reach the ground exactly balances Leveling Torque Strength. It sat " +
+             "there, drifted back over the threshold, re-armed, and repeated forever. Righting has to hand " +
+             "over well clear of that band, not at its edge.\n" +
+             "Raising this toward the arm threshold reintroduces the stall. Lowering it holds player " +
+             "control lockout for longer, since the craft counts as downed until this angle. Try 30 to 45.")]
+    [Range(0f, 80f)]
+    public float flipRecoveryReleaseAngle = 35f;
 
     [Tooltip("How long the chassis stays flipped before the righting torque kicks in. " +
              "Longer values let the player feel the flip as a real setback. Try 0.75 to 1.5.")]

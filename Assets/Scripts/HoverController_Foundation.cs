@@ -115,6 +115,12 @@ public class HoverController_Foundation : MonoBehaviour
     // ContactPoint[] allocation on every physics tick.
     private readonly System.Collections.Generic.List<ContactPoint> _contactBuffer = new(8);
 
+    // Pre-allocated buffer for the hover raycasts. RaycastNonAlloc is used
+    // instead of Raycast so self-hits can be skipped in favour of the next
+    // hit along the ray (see ApplyHoverForces). Sized well above the number of
+    // colliders a single 9.5m sensor ray can plausibly cross.
+    private readonly RaycastHit[] _hoverHitBuffer = new RaycastHit[16];
+
     private float   unstickTimer;            // counts up while upright and contacting ground
     private float   flipTimer;               // counts up while flipped, slow, and contacting ground
     private float   lastGroundContactTime = float.NegativeInfinity; // refreshed by OnCollisionStay
@@ -141,6 +147,7 @@ public class HoverController_Foundation : MonoBehaviour
     private float airControlRollInput;
     private float airControlWeight;
     private float   unstickFiredFlashTimer;  // drives the fired-impulse gizmo
+    private bool    firedFlashWasFlip;       // which path set the flash (label only)
     private bool    rightingAuthorized;      // true after flip timer threshold; cleared when craft rights
     private bool    recoveryEnabled = true;
     private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
@@ -153,6 +160,30 @@ public class HoverController_Foundation : MonoBehaviour
 
     /// <summary>Average ground normal this frame (Vector3.up when airborne).</summary>
     public Vector3 AverageGroundNormal { get; private set; }
+
+    /// <summary>
+    /// True while the craft is flipped AND resting against the ground: the state
+    /// flip recovery exists to undo. Propulsion reads this to lock out the jump
+    /// and all commanded torque, so a flip costs the player the full recovery
+    /// time instead of being cancellable.
+    ///
+    /// Both terms are load-bearing:
+    ///
+    ///   Tilt alone is not enough. Air control is gated on this, and a barrel
+    ///   roll passes through the flip threshold every single time, so a
+    ///   tilt-only test would cut the player's authority in the middle of the
+    ///   air tricks the system exists for.
+    ///
+    ///   Contact alone is not enough either. IsHoverGrounded cannot stand in for
+    ///   it: on its flank the craft's sensor rays point sideways and find
+    ///   nothing, so it reads as airborne while physically lying on the floor.
+    ///   That is exactly the hole that let a downed player hold drift and lever
+    ///   themselves upright against the ground with attitude thrusters, at
+    ///   measured 4.79 rad/s, beating the recovery outright.
+    ///
+    /// See UpdateDownedState for the exact condition and why it also latches.
+    /// </summary>
+    public bool IsDowned { get; private set; }
 
     // -------------------------------------------------------------------------
     // 📢 Events
@@ -278,6 +309,7 @@ public class HoverController_Foundation : MonoBehaviour
         {
             IsHoverGrounded     = false;
             AverageGroundNormal = Vector3.up;
+            IsDowned            = false;   // EMP already removes all control
             return;
         }
 
@@ -287,6 +319,7 @@ public class HoverController_Foundation : MonoBehaviour
         ApplyAirControlTorque();
         ApplyPitchRollDamping();
         HandleRecovery();
+        UpdateDownedState();
         ApplyUnstickForce();
     }
 
@@ -336,8 +369,41 @@ public class HoverController_Foundation : MonoBehaviour
 
             // QueryTriggerInteraction.Ignore: trigger volumes (pickups, ability
             // fields) must never feed the hover springs.
-            if (!Physics.Raycast(point.position, rayDir, out RaycastHit hit, F.sensorRange, groundLayers,
-                                 QueryTriggerInteraction.Ignore))
+            //
+            // Self-hits are skipped rather than accepted. groundLayers defaults to
+            // Everything and the chassis colliders sit on the vehicle's own layer,
+            // so the sensor ray can and does hit this craft's own geometry: once
+            // ApplyChassisBank rolls meshRoot past ~15.5 degrees it swings Rim_FR /
+            // Rim_RR straight into their own hover rays. The ray then returned
+            // ~0.04m instead of ~6.8m, so compression read as nearly the whole
+            // hoverHeight and one flank's spring jumped from 12.5 to 121 m/s^2 --
+            // about 6x the craft's weight, on one side, pushed along the RIM's
+            // surface normal instead of the ground's. That is the drift flip: the
+            // live bank budget is passiveBankAngle 5 + maxBankAngle 12 = 17 degrees,
+            // which sits past the cliff, which is why reducing maxBankAngle from
+            // 18 to 12 never helped.
+            //
+            // Nearest non-self hit wins; RaycastNonAlloc does not sort, hence the
+            // explicit min. attachedRigidbody resolves every chassis collider to
+            // this Rigidbody, so one comparison covers the whole hierarchy.
+            int hitCount = Physics.RaycastNonAlloc(point.position, rayDir, _hoverHitBuffer, F.sensorRange,
+                                                   groundLayers, QueryTriggerInteraction.Ignore);
+
+            bool        foundGround = false;
+            RaycastHit  hit         = default;
+            for (int i = 0; i < hitCount; i++)
+            {
+                if (_hoverHitBuffer[i].collider.attachedRigidbody == rb)
+                    continue;
+
+                if (!foundGround || _hoverHitBuffer[i].distance < hit.distance)
+                {
+                    hit         = _hoverHitBuffer[i];
+                    foundGround = true;
+                }
+            }
+
+            if (!foundGround)
             {
                 if (ShouldDrawDebug)
                     Debug.DrawRay(point.position, rayDir * F.sensorRange, Color.red);
@@ -610,7 +676,42 @@ public class HoverController_Foundation : MonoBehaviour
         bool  isSlow    = rb.linearVelocity.sqrMagnitude < F.flipRecoverySpeedThreshold * F.flipRecoverySpeedThreshold;
 
         // --- Righting torque (runs every frame while authorized) ---
-        if (!isFlipped || IsHoverGrounded)
+        // Disarm on attitude ONLY, and at a LOWER angle than it armed at.
+        //
+        // The hysteresis is load-bearing. Releasing at flipRecoveryAngleThreshold
+        // handed the craft over at exactly the angle where two hover points still
+        // reach the ground and the resulting one-sided lift balances
+        // levelingTorqueStrength: a stable equilibrium at ~78 degrees. Measured on
+        // real terrain, the craft armed, righted from 112 to 80, released, sat at
+        // 74-83 for a full second without converging, drifted back over the
+        // threshold and re-armed -- indefinitely. Righting has to carry it clear
+        // of that band before letting go.
+        //
+        // This was missed the first time because the 8-pose regression ran on a
+        // flat plane, where the craft rotates cleanly through the band instead of
+        // settling into it. Flat ground is not a sufficient test for this.
+        //
+        // Min() keeps the release at or below the arm angle if the two are ever
+        // tuned to cross, which would otherwise disarm on the same frame it armed.
+        float releaseAngle = Mathf.Min(F.flipRecoveryReleaseAngle, F.flipRecoveryAngleThreshold);
+
+        // The previous condition also disarmed on
+        // IsHoverGrounded, which broke recovery outright: a craft lying on its
+        // flank still lands two hover rays on the floor anywhere between roughly
+        // 40 and 88 degrees of tilt, so the righting torque revoked itself
+        // MID-ROTATION, every time, at ~84 degrees. Past 90 there are no ray hits
+        // at all, so there is no lift and ApplyLevelingTorque contributes zero
+        // (baseStrength is 0 when not hover-grounded); the craft coasted over on
+        // momentum and fell back. Measured limit cycle: 102 -> 127 -> 84 -> 134,
+        // never recovering, with the timer visibly counting and never completing.
+        //
+        // Removing the term does not let righting fight a craft riding a wall or
+        // a loop, because arming already requires a full flipRecoveryDelay of
+        // ground contact under flipRecoverySpeedThreshold. Anything carrying
+        // enough momentum to hold a loop is an order of magnitude above that gate
+        // and can never arm. A craft genuinely pinned at >80 degrees and under
+        // 2 m/s is stuck by definition and should be righted.
+        if (tiltAngle < releaseAngle)
             rightingAuthorized = false;
 
         if (rightingAuthorized && F.flipRecoveryTorque > 0f)
@@ -647,6 +748,7 @@ public class HoverController_Foundation : MonoBehaviour
 
                 unstickForceTimer      = F.unstickLiftDuration;
                 unstickFiredFlashTimer = 0.5f;
+                firedFlashWasFlip      = false;
 
                 if (ShouldDrawDebug)
                     Debug.DrawRay(transform.position, unstickForceDir * 2f, Color.cyan);
@@ -669,6 +771,7 @@ public class HoverController_Foundation : MonoBehaviour
                 rightingAuthorized = true;
 
                 unstickFiredFlashTimer = 0.5f;
+                firedFlashWasFlip      = true;
 
                 if (ShouldDrawDebug)
                     Debug.DrawRay(transform.position, Vector3.up * 2f, Color.magenta);
@@ -678,6 +781,44 @@ public class HoverController_Foundation : MonoBehaviour
         {
             flipTimer = 0f;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // 🚫 Downed State (control lockout)
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Two terms, ORed, and each covers a case the other cannot.
+    ///
+    ///   Resting term (contact AND flipped): locks control the instant the craft
+    ///   comes to rest inverted, before flipRecoveryDelay has elapsed, so the
+    ///   window before recovery arms is not a free escape.
+    ///
+    ///   Latch term (rightingAuthorized): holds the lockout through the rest of
+    ///   the recovery even after ground contact is lost. Load-bearing: as the
+    ///   righting torque swings the craft back through ~82 degrees the hover
+    ///   springs re-acquire and fling it clear of the ground, and without this
+    ///   term the lockout released mid-flip at 137 degrees of tilt and handed
+    ///   back both air control and the air jump. Authority is only revoked when
+    ///   tilt falls under flipRecoveryAngleThreshold, so this releases on being
+    ///   upright, which is the intended contract.
+    ///
+    /// Why contact and not IsHoverGrounded: a craft hovering a wall or a loop is
+    /// tilted past the threshold but never TOUCHES it, so contact stays false and
+    /// it keeps full control. A craft lying on its flank does touch. IsHoverGrounded
+    /// gets this exactly backwards -- on its flank the sensor rays point sideways
+    /// and find nothing, so it reads as airborne.
+    ///
+    /// Deliberately NOT downed: a craft tumbling in mid-air after a hit. No
+    /// contact and recovery has never armed, so air control still answers and a
+    /// mid-air save stays available. The lockout is the price of coming to rest
+    /// inverted, not of being knocked around.
+    /// </summary>
+    private void UpdateDownedState()
+    {
+        bool restingInverted = IsContactingGround
+                            && Vector3.Angle(transform.up, Vector3.up) >= F.flipRecoveryAngleThreshold;
+
+        IsDowned = recoveryEnabled && (rightingAuthorized || restingInverted);
     }
 
     // -------------------------------------------------------------------------
@@ -773,12 +914,19 @@ public class HoverController_Foundation : MonoBehaviour
                 bool  slowNow    = speedNow < F.flipRecoverySpeedThreshold;
                 bool  contactNow = IsContactingGround;
 
+                // Authority is reported FIRST. The old chain tested the arming
+                // gates before rightingAuthorized, so a craft that was already
+                // authorized and applying righting torque printed
+                // "BLOCKED: moving too fast" -- the arming gates are irrelevant
+                // once authority is held, and that label sent a whole debugging
+                // session after the wrong condition. The gates below describe
+                // only what is stopping the timer from ARMING.
                 string blocker =
-                      !contactNow  ? "BLOCKED: no ground contact"
+                      rightingAuthorized ? "RIGHTING"
+                    : !contactNow  ? "BLOCKED: no ground contact"
                     : !flippedNow  ? "BLOCKED: tilt below threshold"
                     : !slowNow     ? "BLOCKED: moving too fast"
-                    : IsHoverGrounded && rightingAuthorized ? "BLOCKED: hover grounded revoked authority"
-                    : rightingAuthorized ? "RIGHTING" : "counting up";
+                    : "counting up";
 
                 UnityEditor.Handles.color = rightingAuthorized ? Color.magenta
                                           : (contactNow && flippedNow && slowNow) ? new Color(1f, 0.6f, 0f)
@@ -821,7 +969,7 @@ public class HoverController_Foundation : MonoBehaviour
             UnityEditor.Handles.color = new Color(1f, 0f, 1f, alpha);
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 2f,
-                "UNSTICK FIRED"
+                firedFlashWasFlip ? "FLIP RECOVERY ARMED" : "UNSTICK FIRED"
             );
         }
     }
