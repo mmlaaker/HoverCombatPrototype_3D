@@ -118,6 +118,7 @@ public class VehicleTuningProfileEditor : Editor
             case "foundation.ceilingClearance":     DerivedCeilingDuck();   break;
             case "foundation.liftDamping":          DerivedHoverSpring();   break;
             case "foundation.airControlDamping":    DerivedAirControl();    break;
+            case "foundation.airControlMinClearance": DerivedAirControlGate(); break;
             case "foundation.flipRecoveryTorque":   DerivedRighting();      break;
             case "foundation.unstickLiftDuration":  DerivedUnstick();       break;
             case "foundation.extraFallGravity":     DerivedGravity();       break;
@@ -324,6 +325,65 @@ public class VehicleTuningProfileEditor : Editor
     /// BOTH boost and strafe blend and appears nowhere in the inspector, which is the same
     /// invisibility that motivated the Propulsion v1.4 in-play readout.
     /// </summary>
+    /// <summary>
+    /// Translates the air control clearance floor into the thing a designer actually
+    /// decides: how much of a jump charge it costs to earn attitude authority.
+    ///
+    /// The whole point of the floor is that a tap jump must not reach it, so the tap
+    /// apex is printed next to the threshold rather than left to be worked out. Both
+    /// failure directions are called out below, because either one silently turns the
+    /// feature off in a way that looks like it is working.
+    /// </summary>
+    private void DerivedAirControlGate()
+    {
+        if (!GetBool("propulsion.enableAirControl"))
+        {
+            DerivedBox("Air control", "disabled");
+            return;
+        }
+
+        float rise = RiseGravity;
+
+        if (rise <= 0f)
+        {
+            DerivedBox("Air control gate", "gravity is 0: apex is undefined");
+            return;
+        }
+
+        float clearance = Get("foundation.airControlMinClearance");
+        float minImp    = Get("propulsion.jumpImpulseMin");
+        float maxImp    = Get("propulsion.jumpImpulseMax");
+
+        float tapApex = minImp * minImp / (2f * rise);
+        float maxApex = maxImp * maxImp / (2f * rise);
+        float reqImp  = Mathf.Sqrt(2f * rise * clearance);
+
+        string cost;
+        if (reqImp <= minImp)
+        {
+            cost = "reached by an uncharged tap";
+        }
+        else if (reqImp > maxImp)
+        {
+            cost = "UNREACHABLE by any jump";
+        }
+        else
+        {
+            float frac = (reqImp - minImp) / Mathf.Max(0.01f, maxImp - minImp);
+            cost = $"{frac * 100f:F0}% charge  ({frac * Get("propulsion.jumpMaxChargeTime"):F2} s hold)";
+        }
+
+        DerivedBox(
+            "Clearance needed",  $"{clearance:F1} m above ride height",
+            "Costs",             cost,
+            "Tap jump apex",     $"{tapApex:F1} m",
+            "Max charge apex",   $"{maxApex:F1} m",
+            "", "A floor on WHEN authority is granted, not on what can be done with it: above the "
+              + "threshold, airtime still decides whether a rotation can be finished. Clearance is "
+              + "measured to the ground below, so a hop off a ledge arms and the same hop on flat "
+              + "ground does not.");
+    }
+
     private void DerivedReverseBand()
     {
         float driveCap  = Get("propulsion.reverseTopSpeed");
@@ -384,6 +444,30 @@ public class VehicleTuningProfileEditor : Editor
             Warn(ref any, $"minDriftSpeed ({minDrift:F1}) does not match strafeTopSpeed ({strafeCap:F1}). "
                         + "They are meant to be equal so that outpacing strafe is exactly what earns the "
                         + "drift and the two modes divide the speed range cleanly.", MessageType.Warning);
+
+        // 1b. The air control floor exists to keep a hop out of trick territory, because
+        //     drift and air control share a button and the left stick changes meaning the
+        //     moment the craft leaves the ground. If an uncharged tap already clears the
+        //     floor the feature is silently off, and it fails looking exactly like it works.
+        if (GetBool("propulsion.enableAirControl") && RiseGravity > 0f)
+        {
+            float clearanceNeeded = Get("foundation.airControlMinClearance");
+            float tapApexNow      = Get("propulsion.jumpImpulseMin") * Get("propulsion.jumpImpulseMin")
+                                  / (2f * RiseGravity);
+            float maxApexNow      = Get("propulsion.jumpImpulseMax") * Get("propulsion.jumpImpulseMax")
+                                  / (2f * RiseGravity);
+
+            if (tapApexNow >= clearanceNeeded)
+                Warn(ref any, $"An uncharged tap jump apexes at {tapApexNow:F1} m, at or above "
+                            + $"airControlMinClearance ({clearanceNeeded:F1} m), so a tap already grants "
+                            + "air control. Holding drift through a hop then reads held throttle as full "
+                            + "nose-down. Raise the clearance above the tap apex or lower jumpImpulseMin.",
+                            MessageType.Warning);
+            else if (maxApexNow < clearanceNeeded)
+                Warn(ref any, $"Even a full-charge jump apexes at only {maxApexNow:F1} m, below "
+                            + $"airControlMinClearance ({clearanceNeeded:F1} m), so no jump can ever grant "
+                            + "air control. Only ledges and ramps will.", MessageType.Warning);
+        }
 
         // 2. Depends on both jump impulses, extraFallGravity AND sensorRange. The sensorRange
         //    coupling is the non-obvious one: a wider sensor range fires the landing check higher

@@ -15,6 +15,8 @@ MonoBehaviour:
   foundation:
     hoverHeight: 7
     sensorRange: 9.5
+    supportMargin: 0.75
+    airControlMinClearance: 8
     enableCeilingDuck: 1
     ceilingClearance: 3
     minDuckHoverHeight: 1.5
@@ -24,9 +26,9 @@ MonoBehaviour:
     pitchRollDamping: 8
     aimPitchTrackingStrength: 200
     aimPitchDamping: 10
-    airPitchTorque: 20
-    airRollTorque: 35
-    airControlDamping: 4
+    airPitchTorque: 36.5
+    airRollTorque: 68.5
+    airControlDamping: 8
     unstickRecoveryDelay: 0.2
     unstickMaxSurfaceAngle: 60
     unstickMaxVerticalSpeed: 1
@@ -48,7 +50,7 @@ MonoBehaviour:
     maxForwardAccel: 65
     topSpeed: 60
     maxReverseAccel: 50
-    reverseTopSpeed: 40
+    reverseTopSpeed: 50
     yawAccel: 13
     yawDamping: 8
     airTurnMultiplier: 0.5
@@ -62,7 +64,7 @@ MonoBehaviour:
     dodgeEnergyCost: 15
     dodgeCooldown: 0.8
     enableJump: 1
-    jumpImpulseMin: 15
+    jumpImpulseMin: 20
     jumpImpulseMax: 40
     jumpMaxChargeTime: 2
     jumpGroundedLockout: 0.2
@@ -81,7 +83,7 @@ MonoBehaviour:
     passiveBankAngle: 5
     bankLerpSpeed: 8
     enableAirControl: 1
-    airControlBlendSeconds: 0.15
+    airControlBlendSeconds: 0.01
     enableStrafe: 1
     strafeTopSpeed: 40
     strafeAccel: 35

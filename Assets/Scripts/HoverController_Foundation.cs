@@ -1,7 +1,51 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v1.4
+/// HoverController_Foundation v1.7
+///
+/// v1.7: The clearance gate is predictive. It now compares the BALLISTIC PEAK from
+///       current rise velocity against airControlMinClearance rather than the craft's
+///       present clearance, because the thing it gates lasts a whole flight and
+///       present-tense was the approximation. Cost of the approximation was 0.225s of
+///       dead air at the start of every charged jump, which is precisely where a flip
+///       needs to read as already having momentum. Same jumps are gated (clearing the
+///       threshold from ground level takes 25.06 m/s of rise against a tap jump's 20),
+///       the decision just happens at takeoff. Peak height is conserved under ballistic
+///       motion so the prediction cannot drift or flicker during the climb, and it
+///       decays to plain measured clearance on the way down, closing once at the
+///       threshold. Both properties matter because airControlBlendSeconds is now
+///       effectively instant and a flickering gate would chop the torque.
+///
+/// v1.6: Air control clearance floor. A dedicated downward probe reports how much room
+///       is below the craft, and Propulsion gates air control on it. Reason: drift and
+///       air control share a button, and the left stick is throttle on the ground but
+///       PITCH in the air, so holding drift through a hop reinterpreted "still driving
+///       forward" as full nose-down the instant the craft left the ground, planting it
+///       and costing a full flip recovery. A height floor separates a hop from a real
+///       jump outright. It needs its own ray because the hover sensors top out at
+///       sensorRange - hoverHeight = 2.5m of measurable clearance while the tap jump
+///       alone apexes above 5m, so the threshold is simply outside what they can see.
+///       Measures clearance BELOW rather than height gained, so a hop off a ledge arms
+///       and the same hop on flat ground does not, with no special case for either.
+///       New tunable: airControlMinClearance (8m).
+///
+/// v1.5: HoverSupport replaces IsHoverGrounded as the gate for anything that should
+///       behave differently in the air. IsHoverGrounded answers "can the rays see
+///       ground", which is 2.5m later than "are the springs holding me up": above
+///       hoverHeight compression goes negative and the spring clamps to zero, so the
+///       craft is already in free fall while the rays still report hits. Four systems
+///       read that band as grounded -- fall gravity stayed off, drag kept braking
+///       mid-air, leveling pinned the chassis flat, air control was locked out -- and
+///       a tap jump apexes 2.87m against a 2.5m band, so two thirds of it happened
+///       inside the lie. That is the whole difference between a tap jump reading as
+///       weak and floaty and a charged jump (apex 20.4m) reading as good. HoverSupport
+///       is continuous rather than a second boolean on purpose: a boolean just moves
+///       the cliff, and handing air control authority while leveling is still at full
+///       strength puts two attitude authorities on the same axis. Fall gravity and air
+///       control now scale by (1 - support) while leveling and drag scale by support,
+///       so the handover is a crossfade with no overlap. Drive, jump charge and drift
+///       entry deliberately keep the generous IsHoverGrounded signal. New tunable:
+///       supportMargin (0.75m).
 ///
 /// v1.4: Hover rays skip self-hits, flip recovery disarms on attitude only at a
 ///       new lower release angle, and IsDowned is added. ApplyHoverForces uses
@@ -216,6 +260,55 @@ public class HoverController_Foundation : MonoBehaviour
     /// <summary>True when at least one hover point has a ground hit this frame.</summary>
     public bool IsHoverGrounded { get; private set; }
 
+    /// <summary>
+    /// How much of the chassis weight the springs are actually carrying, 0..1. The
+    /// continuous form of "grounded", and the correct gate for anything that should
+    /// behave differently in the air.
+    ///
+    /// IsHoverGrounded answers "can the rays see ground", which is NOT the same
+    /// question and is wrong by 2.5m at default tuning. The springs only push while
+    /// compressed, so anywhere above hoverHeight the craft is in free fall with the
+    /// rays still reporting hits. Four systems read that as grounded and behaved
+    /// accordingly: fall gravity stayed off, drag kept scrubbing speed mid-air,
+    /// leveling pinned the chassis flat, and air control was locked out. A tap jump
+    /// at jumpImpulseMin 15 apexes 2.87m up against a 2.5m band, so roughly two
+    /// thirds of it happened inside that, which is the whole reason a tap jump read
+    /// as weak and floaty while a charged jump (apex 20.4m, clear immediately) read
+    /// as good. One threshold, two impulses either side of it.
+    ///
+    /// Two terms, both load-bearing:
+    ///
+    ///   Height  fades 1 to 0 across supportMargin above the effective ride height.
+    ///           Keyed to _effectiveHoverHeight, not F.hoverHeight, so a ducking
+    ///           craft is judged against the height it is actually targeting.
+    ///
+    ///   Count   the fraction of hover points with a hit. Hanging one corner over a
+    ///           ledge genuinely is three of four springs working, and this makes
+    ///           that transition continuous instead of a snap at the last corner.
+    ///
+    /// Deliberately NOT used for drive, jump charge or drift entry. Those want the
+    /// generous signal: losing throttle on every bump crest would be much worse than
+    /// the problem this fixes.
+    /// </summary>
+    public float HoverSupport { get; private set; }
+
+    /// <summary>
+    /// Clear ground below the craft, in metres ABOVE the ride height being targeted.
+    /// PositiveInfinity when the probe finds nothing.
+    ///
+    /// SATURATES at airControlMinClearance by design. The probe is only ever asked a
+    /// yes/no question, so its range stops exactly where the answer stops changing and
+    /// a MISS is the pass condition. Anything past the threshold does not need
+    /// measuring, and a longer ray would cost more to tell us something nobody reads.
+    /// </summary>
+    public float AirControlClearance { get; private set; }
+
+    /// <summary>
+    /// True when there is enough room below to be granted air control. Propulsion's
+    /// gate; see UpdateAirControlClearance for why this is a separate probe.
+    /// </summary>
+    public bool HasAirControlClearance { get; private set; }
+
     /// <summary>Average ground normal this frame (Vector3.up when airborne).</summary>
     public Vector3 AverageGroundNormal { get; private set; }
 
@@ -365,13 +458,17 @@ public class HoverController_Foundation : MonoBehaviour
         // damping, so the vehicle tumbles for the freeze duration.
         if (energy != null && energy.IsEmpFrozen)
         {
-            IsHoverGrounded     = false;
-            AverageGroundNormal = Vector3.up;
-            IsDowned            = false;   // EMP already removes all control
+            IsHoverGrounded        = false;
+            AverageGroundNormal    = Vector3.up;
+            HoverSupport           = 0f;
+            AirControlClearance    = 0f;
+            HasAirControlClearance = false;  // no attitude authority during a freeze
+            IsDowned               = false;  // EMP already removes all control
             return;
         }
 
         ApplyHoverForces();
+        UpdateAirControlClearance();   // after ApplyHoverForces: reads _effectiveHoverHeight
         ApplyExtraGravity();
         ApplyLevelingTorque();
         ApplyAirControlTorque();
@@ -485,6 +582,7 @@ public class HoverController_Foundation : MonoBehaviour
 
         IsHoverGrounded     = false;
         AverageGroundNormal = Vector3.up;
+        HoverSupport        = 0f;
 
         // Hard landing: tick the suppression window (front-loaded taper, same
         // idiom as unstick). liftFactor is exactly 1 when the timer is idle, so
@@ -509,6 +607,7 @@ public class HoverController_Foundation : MonoBehaviour
         _effectiveHoverHeight = ComputeEffectiveHoverHeight();
 
         Vector3 normalSum     = Vector3.zero;
+        float   distanceSum   = 0f;
         int     groundedCount = 0;
 
         foreach (Transform point in hoverPoints)
@@ -562,6 +661,7 @@ public class HoverController_Foundation : MonoBehaviour
             rb.AddForceAtPosition(hit.normal * springForce, point.position, ForceMode.Acceleration);
 
             normalSum    += hit.normal;
+            distanceSum  += hit.distance;
             groundedCount++;
 
             if (ShouldDrawDebug)
@@ -573,9 +673,106 @@ public class HoverController_Foundation : MonoBehaviour
             IsHoverGrounded     = true;
             AverageGroundNormal = (normalSum / groundedCount).normalized;
 
+            // See the HoverSupport docstring. Height term fades across supportMargin
+            // above the ride height actually being targeted this tick; count term is
+            // the fraction of springs with ground under them.
+            float avgDistance  = distanceSum / groundedCount;
+            float heightFactor = Mathf.InverseLerp(_effectiveHoverHeight + F.supportMargin,
+                                                   _effectiveHoverHeight,
+                                                   avgDistance);
+
+            HoverSupport = heightFactor * ((float)groundedCount / hoverPoints.Length);
+
             if (!wasHoverGrounded)
                 DetectHardLanding();
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // 🛩 Air Control Clearance Probe
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// One downward probe answering "is there enough room below me to be given
+    /// attitude authority". A floor under air control, not a replacement for the way
+    /// airtime already decides what a player can finish.
+    ///
+    /// It needs its own ray because the hover sensors physically cannot see far
+    /// enough: sensorRange 9.5 against hoverHeight 7 measures at most 2.5m of
+    /// clearance, while the tap jump alone apexes above 5m. Any threshold that
+    /// separates a hop from a real jump is outside what those rays can report.
+    ///
+    /// Three choices here are deliberate:
+    ///
+    ///   Range stops at threshold. The question is yes/no, so a MISS is the pass
+    ///   condition and the ray is as short as the answer allows. AirControlClearance
+    ///   saturates as a result, which is fine because nothing needs the true value.
+    ///
+    ///   World down, not -transform.up. The question is how far the GROUND is, and a
+    ///   tumbling craft's local down points at the horizon.
+    ///
+    ///   Clearance below, not height gained since takeoff. Height gained cannot grant
+    ///   control to a craft falling off a cliff, which is the case that most obviously
+    ///   deserves it. Measuring the room actually available means a hop on flat ground
+    ///   grants nothing while the same hop off a ledge grants control as the floor
+    ///   drops away, with no special case for either.
+    /// </summary>
+    private void UpdateAirControlClearance()
+    {
+        if (hoverPoints.Length == 0)
+        {
+            AirControlClearance    = 0f;
+            HasAirControlClearance = false;
+            return;
+        }
+
+        Vector3 centroid = Vector3.zero;
+        foreach (Transform point in hoverPoints)
+            centroid += point.position;
+        centroid /= hoverPoints.Length;
+
+        float probeRange = _effectiveHoverHeight + F.airControlMinClearance;
+
+        if (!RaycastIgnoringSelf(centroid, Vector3.down, probeRange, out RaycastHit hit))
+        {
+            AirControlClearance    = float.PositiveInfinity;
+            HasAirControlClearance = true;
+            return;
+        }
+
+        AirControlClearance = hit.distance - _effectiveHoverHeight;
+
+        // Predictive, not present-tense, and this is the whole point of the probe.
+        //
+        // The gate protects an entire flight, so the question it has to answer is
+        // whether the craft WILL have room, not whether it has room this instant.
+        // Asking present-tense cost 0.225s of dead air at the start of every charged
+        // jump: authority was withheld while the craft climbed to the threshold, which
+        // is exactly the window where a flip needs to look like it already has
+        // momentum. Ballistic peak from current rise velocity closes that entirely.
+        //
+        // Two properties make this safe rather than clever:
+        //
+        //   It gates the SAME jumps. Reaching the threshold from ground level needs
+        //   sqrt(2 * g * clearance) of rise, which at the shipped tuning is 25.06 m/s
+        //   against a tap jump's 20. The hop is still locked out, just decided at
+        //   takeoff instead of a fifth of a second later.
+        //
+        //   The prediction is INVARIANT through the climb. Peak height is conserved
+        //   under ballistic motion, so the value does not drift as the craft rises and
+        //   the gate cannot flicker mid-ascent. On the way down rise velocity is zero
+        //   by construction, so it decays to plain measured clearance and closes once,
+        //   cleanly, at the threshold. Both matter now that the blend is instant and a
+        //   flickering gate would chop the torque.
+        float riseGravity   = Physics.gravity.magnitude * (1f + F.extraGravityMultiplier);
+        float riseVelocity  = Mathf.Max(0f, rb.linearVelocity.y);
+        float predictedPeak = AirControlClearance
+                            + riseVelocity * riseVelocity / (2f * Mathf.Max(0.01f, riseGravity));
+
+        HasAirControlClearance = predictedPeak >= F.airControlMinClearance;
+
+        if (ShouldDrawDebug)
+            Debug.DrawRay(centroid, Vector3.down * hit.distance,
+                          HasAirControlClearance ? Color.green : new Color(1f, 0.5f, 0f));
     }
 
     // -------------------------------------------------------------------------
@@ -624,12 +821,20 @@ public class HoverController_Foundation : MonoBehaviour
         if (F.extraGravityMultiplier > 0f)
             rb.AddForce(Physics.gravity * F.extraGravityMultiplier, ForceMode.Acceleration);
 
-        if (IsHoverGrounded)
+        // Scaled by unsupported fraction rather than gated on IsHoverGrounded. Gating
+        // switched fall gravity off across the whole sensor band, where the springs
+        // produce zero lift and the craft is already falling: a tap jump therefore
+        // descended at 39.24 instead of 52.24 for most of its arc while a charged jump
+        // got the full value, which is the floatiness. Fades in with height, so nothing
+        // pops on the way out.
+        float support = 1f - HoverSupport;
+
+        if (support <= 0f)
             return;
 
         // World-space Y, matching the world-up jump impulse. Reading the body axis here
         // would flip the sign mid-flip and yank the chassis upward during air control.
-        float airGravity = rb.linearVelocity.y < 0f ? F.extraFallGravity : 0f;
+        float airGravity = rb.linearVelocity.y < 0f ? F.extraFallGravity * support : 0f;
 
         if (airGravity > 0f)
             rb.AddForce(Vector3.down * airGravity, ForceMode.Acceleration);
@@ -666,7 +871,13 @@ public class HoverController_Foundation : MonoBehaviour
         bool aiming = aimPitchWeight > 0.001f
                    && (IsHoverGrounded || !IsContactingGround);
 
-        float baseStrength = IsHoverGrounded ? F.levelingTorqueStrength : 0f;
+        // Scaled by support rather than gated on IsHoverGrounded. Leveling is the single
+        // attitude authority, so this is what lets air control take over cleanly: full
+        // strength while the springs carry the craft, fading to zero as they stop, with
+        // no window where both are pulling on the same axis. Gating meant the chassis
+        // was pinned flat at full 12 for the first 2.5m of any jump, which is why a tap
+        // jump allowed no tilt at all.
+        float baseStrength = F.levelingTorqueStrength * HoverSupport;
 
         if (!aiming && baseStrength <= 0f)
             return;

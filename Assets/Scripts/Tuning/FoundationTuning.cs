@@ -20,12 +20,40 @@ public class FoundationTuning
 
     [Tooltip("How far the hover rays look down for ground. Must stay comfortably above Hover Height so " +
              "the chassis can drop before losing lift.\n" +
-             "This also defines GROUNDED, which is the part that bites. Between Hover Height and this " +
-             "value the springs produce no lift at all, but the craft still counts as grounded: leveling " +
-             "torque and drag keep applying and air control stays off. So this is really 'how far can it " +
-             "rise before it stops being a ground vehicle'. Keep the gap to Hover Height tight, around " +
-             "2 to 3 metres, or leaving the ground stops reading cleanly.")]
+             "This used to define GROUNDED as well, which is what bit: between Hover Height and this " +
+             "value the springs produce no lift at all, yet leveling torque and drag kept applying and " +
+             "air control stayed off, so a small jump behaved as though it had never left the ground. " +
+             "Support Margin now owns that handover instead, and this value is back to meaning only " +
+             "'how far down can the rays see'. It still gates drive, jump charge and drift entry, which " +
+             "deliberately stay generous.")]
     public float sensorRange = 9.5f;
+
+    [Tooltip("How far the chassis has to rise above Hover Height before it stops counting as supported " +
+             "and starts behaving as airborne. This is a FADE, not a switch: leveling torque and drag " +
+             "fade out across it while fall gravity and air control fade in, so nothing pops.\n" +
+             "The springs only push while compressed, so above Hover Height the craft is already in free " +
+             "fall no matter what this is set to. All this decides is how quickly the rest of the systems " +
+             "admit it. Tighter reads as a crisper split between driving and flying but is more likely to " +
+             "trigger on bump crests; wider is gentler on rough ground but leaves small jumps feeling " +
+             "half-committed. Try 0.5 to 1.5.")]
+    [Min(0.01f)]
+    public float supportMargin = 0.75f;
+
+    [Tooltip("How much clear ground you need BELOW you, measured above ride height, before air " +
+             "control is granted. A floor on when you get attitude authority at all; above it, " +
+             "airtime still decides what you can actually finish.\n" +
+             "This exists because drift and air control share a button. Holding drift through a small " +
+             "hop used to hand over full authority, and since the left stick is throttle on the ground " +
+             "and pitch in the air, simply not letting go of forward commanded a hard nose-down and " +
+             "planted the craft. Set this above the tap-jump apex and hopping in and out of a drift is " +
+             "safe by construction.\n" +
+             "Measured as clearance to the ground rather than height gained, which is deliberate: " +
+             "hopping on flat ground grants nothing, but hopping off a ledge grants control as the " +
+             "ground drops away, because the room is genuinely there. Cliff dives arm immediately.\n" +
+             "The hover sensors cannot see this far, so it runs its own probe. Check the derived " +
+             "readout below for what charge fraction actually clears it.")]
+    [Min(0f)]
+    public float airControlMinClearance = 8f;
 
     [Tooltip("Lets the chassis squat to fit under low ceilings instead of being crushed against them.\n" +
              "Without it, geometry lower than the chassis needs is a SOFT-LOCK, not a nuisance. The springs " +

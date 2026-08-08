@@ -1,7 +1,22 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.5
+/// HoverController_Propulsion v1.7
+///
+/// v1.7: Air control gated on Foundation.HasAirControlClearance. Closes the case where
+///       drifting into a tap jump handed over full attitude authority: the left stick is
+///       throttle grounded and pitch airborne, so not letting go of forward commanded a
+///       hard nose-down and flipped the craft. Authority now has a height floor; airtime
+///       still decides what can be finished above it.
+///
+/// v1.6: Drag and air control moved onto Foundation.HoverSupport. Both were gated on
+///       IsHoverGrounded, which stays true for 2.5m above ride height where the springs
+///       have already stopped pushing, so ground drag braked the chassis in mid-air and
+///       air control was unavailable for the whole of a tap jump. Both now scale with
+///       support (drag by it, air control by its inverse) so they crossfade with
+///       Foundation's leveling torque rather than switching. ApplyAirControl no longer
+///       takes grounded. Drive, jump charge and drift entry keep IsHoverGrounded: losing
+///       throttle on a bump crest would be a worse bug than the one being fixed.
 ///
 /// v1.5: Reverse cap is strafe-blended. New BlendedReverseTopSpeed joins the two
 ///       existing shared cap helpers, and both reverse read sites (ApplyDrive and
@@ -441,7 +456,7 @@ public class HoverController_Propulsion : MonoBehaviour
         ApplyDrag(effectiveTopSpeed);
         ApplyOverSpeedBleed(effectiveTopSpeed);
         ApplyStrafePitch();
-        ApplyAirControl(grounded);
+        ApplyAirControl();
         HandleJump(grounded);
         HandleDodge(grounded);
         ApplyDodgeForce();
@@ -912,7 +927,13 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyDrag(float effectiveTopSpeed)
     {
-        if (!foundation.IsHoverGrounded)
+        // Scaled by support rather than gated on IsHoverGrounded. Gating applied full
+        // ground drag across the whole sensor band, so a tap jump was braked in mid-air
+        // for most of its arc and arrived slower than it left. Both damp terms below are
+        // scaled, so drag fades out with the springs instead of switching off 2.5m late.
+        float support = foundation.HoverSupport;
+
+        if (support <= 0f)
             return;
 
         // Lateral drag: always active grounded, independent of throttle.
@@ -928,7 +949,7 @@ public class HoverController_Propulsion : MonoBehaviour
         // ApplyStrafe unreachable. With the intended term excluded, lateralDamp
         // purely kills unwanted slide and the soft cap owns the ceiling.
         // In drive mode intended is zero, so drive-mode behavior is unchanged.
-        float effectiveLateralDamp = Mathf.Lerp(P.lateralDamp, P.driftLateralDamp, driftLerp);
+        float effectiveLateralDamp = Mathf.Lerp(P.lateralDamp, P.driftLateralDamp, driftLerp) * support;
         if (effectiveLateralDamp > 0f)
         {
             float intendedLateral = Mathf.Clamp(input.StrafeX, -1f, 1f)
@@ -953,7 +974,7 @@ public class HoverController_Propulsion : MonoBehaviour
             : 1f - Mathf.Clamp01(throttleMag / 0.15f);
         if (dragWeight > 0f)
         {
-            float effectiveForwardDamp = Mathf.Lerp(P.forwardDamp, P.driftForwardDamp, driftLerp);
+            float effectiveForwardDamp = Mathf.Lerp(P.forwardDamp, P.driftForwardDamp, driftLerp) * support;
             if (effectiveForwardDamp > 0f)
             {
                 _dbgDrag = true;
@@ -1235,20 +1256,45 @@ public class HoverController_Propulsion : MonoBehaviour
     /// weight is scaled by (1 - _strafeModeBlend) so partial blends crossfade
     /// rather than pop.
     /// </summary>
-    private void ApplyAirControl(bool grounded)
+    private void ApplyAirControl()
     {
         // !foundation.IsDowned: "not hover-grounded" is NOT the same as "airborne".
         // A craft on its flank finds no ground with its sensor rays, so it read as
         // airborne while lying on the floor and handed the player full roll
         // authority to lever itself upright against the ground -- faster than the
         // recovery it was supposed to be waiting out. A flip is meant to cost time.
-        bool active = P.enableAirControl && input.Drift && !grounded && !foundation.IsDowned;
+        // HoverSupport, not !grounded. "The rays cannot see ground" was 2.5m later than
+        // "the springs have stopped holding me up", so air control was unavailable for
+        // the whole of a tap jump and most of any small hop. Support also SCALES the
+        // final weight, which is what keeps this compatible with leveling: Foundation
+        // fades levelingTorqueStrength out on the same curve, so authority hands over
+        // with no window where both act on the same axis.
+        // HasAirControlClearance is the floor, and it is why drifting into a hop is safe.
+        // Drift and air control share a button, and the left stick is throttle on the
+        // ground but pitch in the air, so holding drift through a small jump used to
+        // reinterpret "still driving forward" as "full nose-down" the instant the craft
+        // left the ground. That planted the nose, flipped the craft and charged the
+        // player a full recovery, for the crime of not letting go of the stick. A height
+        // floor separates the two cases outright: a hop on flat ground never clears it,
+        // a charged jump or a ledge always does.
+        //
+        // HoverSupport < 1f is redundant against that floor at any sane tuning and is
+        // kept anyway, because it is what guarantees leveling torque and air control can
+        // never both act on the same axis even if the two thresholds are ever tuned to
+        // cross. Cheap insurance against a jitter class this project has paid for before.
+        bool active = P.enableAirControl
+                   && input.Drift
+                   && foundation.HasAirControlClearance
+                   && foundation.HoverSupport < 1f
+                   && !foundation.IsDowned;
 
         float target = active ? 1f : 0f;
         float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.airControlBlendSeconds);
         _airControlBlend = Mathf.MoveTowards(_airControlBlend, target, step);
 
-        _airControlWeight = _airControlBlend * (1f - _strafeModeBlend);
+        _airControlWeight = _airControlBlend
+                          * (1f - _strafeModeBlend)
+                          * (1f - foundation.HoverSupport);
 
         if (_airControlWeight <= 0f)
         {

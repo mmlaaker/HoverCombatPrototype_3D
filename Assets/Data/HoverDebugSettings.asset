@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HoverDebugSettings
   enableDebugGizmos: 1
   movement: 0
-  recovery: 0
+  recovery: 1
   weapons: 0
   resources: 0
   ai: 0
