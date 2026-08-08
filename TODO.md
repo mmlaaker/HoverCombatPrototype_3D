@@ -62,44 +62,6 @@ exclusion holds at full throttle.
 **Done looks like:** one play session per row, or a scripted `AIHoverInput` rig (see
 `CLAUDE.md` > Recipes) driving each case. HardLock needs a second target spawned to test at all.
 
-### 0.4 `VehicleTuningProfile` custom inspector
-**Specced and ready to build. The requirements are already written** -- every formula below exists
-as prose in a tooltip on `FoundationTuning` or `PropulsionTuning`, so this is transcription, not
-design. Follow the `WeaponDefinitionEditor` pattern (conditional hiding plus `HelpBox` warnings);
-note its standing rule that `[Header]` attributes on the first field of a group are drawn by
-`PropertyField` and must NOT be duplicated as explicit `LabelField` headings.
-
-**Show derived values live**, so tuning stops requiring arithmetic between every tweak:
-
-| Derived | Formula | At time of writing |
-|---|---|---|
-| Hover damping ratio | `(N x liftDamping) / (2 x sqrt(N x liftStrength))`, N = hover point count | 0.55 |
-| Steady air roll rate | `airRollTorque / airControlDamping` | 501 deg/s |
-| Steady air pitch rate | `airPitchTorque / airControlDamping` | 286 deg/s |
-| Righting rate | `flipRecoveryTorque / pitchRollDamping` | ~430 deg/s |
-| Dodge delta-v | `dodgeForce x dodgeDuration / 2` | 52 m/s |
-| Unstick delta-v | `unstickLiftForce x unstickLiftDuration / 2` | 4.5 m/s |
-| Rise gravity | `9.81 x (1 + extraGravityMultiplier)` | 39.24 m/s^2 |
-| Fall gravity | rise + `extraFallGravity` | 52.24 m/s^2 |
-| Jump landing speed | `launch x sqrt(fallGravity / riseGravity)`, `launch = sqrt(jumpImpulseMax^2 + airJumpImpulse^2)` | 46.2 plain / 54.4 stacked |
-| Spring pin force | `N x liftStrength` per metre of compression | 64 m/s^2 |
-
-**Warn on the invariants nothing enforces.** These are all documented as "maintain by hand", which
-is exactly why they need a warning:
-
-- `minDriftSpeed` should EQUAL `strafeTopSpeed`, so outpacing strafe is what earns the drift. Both
-  40 today; they have been out of step before.
-- `hardLandingMinSpeed` must exceed the computed jump landing speed above, or ordinary jumps
-  trigger hard landings. It depends on **both** jump impulses, `extraFallGravity` **and**
-  `sensorRange` -- raising sensor range makes hard landings less likely, which is not obvious.
-- `sensorRange - hoverHeight` wants roughly 2-3m. Below that, leaving the ground stops reading
-  cleanly; above it, the craft counts as grounded while visibly airborne.
-- `liftDamping` needs retuning whenever `liftStrength` moves, since the ratio depends on both.
-- `ceilingClearance` must exceed the hull height above the hover points (2.22m on the default
-  chassis) or the roof scrapes.
-- `flipRecoveryReleaseAngle` must stay well below `flipRecoveryAngleThreshold`; approaching it
-  reintroduces the ~78 degree hover-supported equilibrium stall.
-
 ### 0.5 CSV capture for A/B tuning
 **Specced.** `CLAUDE.md` > Recipes documents the working mechanism (a self-removing
 `EditorApplication.CallbackFunction`; `System.Action` will not compile, it needs that exact

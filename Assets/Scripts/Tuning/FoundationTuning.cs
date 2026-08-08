@@ -175,7 +175,11 @@ public class FoundationTuning
     [Tooltip("Strength of the upward push that frees a stuck chassis. " +
              "Front-loaded and fades over the lift window. Mass independent. Try 40 to 80.\n" +
              "The push tapers linearly to zero, so the speed it actually adds is " +
-             "this x Unstick Lift Duration / 2. At 60 over 0.15s that is 4.5 m/s.")]
+             "this x (Unstick Lift Duration + Fixed Timestep) / 2. The timestep term is not a rounding " +
+             "detail: ApplyUnstickForce samples the taper BEFORE decrementing its timer, so the first " +
+             "tick runs at full strength and the last runs at one timestep's worth rather than zero. " +
+             "At 60 over 0.15s at the project's 100Hz that is 4.8 m/s, where the continuous form would " +
+             "say 4.5. The gap scales with timestep over duration, so it only shrinks on longer windows.")]
     [Min(0f)]
     public float unstickLiftForce = 60f;
 

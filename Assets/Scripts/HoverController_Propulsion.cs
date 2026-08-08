@@ -1,7 +1,26 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.3
+/// HoverController_Propulsion v1.5
+///
+/// v1.5: Reverse cap is strafe-blended. New BlendedReverseTopSpeed joins the two
+///       existing shared cap helpers, and both reverse read sites (ApplyDrive and
+///       ApplyOverSpeedBleed) now call it, because a cap that two methods rebuild
+///       separately is exactly what produced the strafe forward dead band and the
+///       reverse axis inherited that failure mode the moment its cap stopped being
+///       constant. reverseTopSpeed is now the DRIVE-mode ceiling only; strafe mode
+///       converges on strafeTopSpeed, so forward, reverse and lateral share one
+///       number at full blend. This overturns the previous "reverse is independent
+///       of strafe mode by design" note: pinning reverseTopSpeed to strafeTopSpeed
+///       did buy omnidirectional symmetry, but it also meant drive-mode reverse
+///       could not be raised without breaking that same symmetry. maxReverseAccel
+///       is deliberately NOT blended, since it doubles as the brake and blending it
+///       would soften braking inside strafe mode as a side effect of a speed
+///       decision. ApplyDrag also stopped rebuilding the strafe ceiling by hand and
+///       now calls StrafeTopSpeedScaled; the two were algebraically identical, so
+///       that part is behaviour-neutral.
+///
+/// v1.4: Tuning readout. (See CLAUDE.md; this docstring never carried its entry.)
 ///
 /// v1.3: Downed lockout. Jump (grounded and air), all commanded torque (yaw input,
 ///       air control) and all commanded thrust (ApplyDrive, ApplyStrafe, boost
@@ -329,6 +348,26 @@ public class HoverController_Propulsion : MonoBehaviour
     private float BlendedTopSpeed(float effectiveTopSpeed)
         => Mathf.Lerp(effectiveTopSpeed, StrafeTopSpeedScaled(effectiveTopSpeed), _strafeModeBlend);
 
+    /// <summary>
+    /// The reverse cap drive actually clamps against: boost-scaled reverse top speed, blended
+    /// toward the boost-scaled strafe ceiling by strafe mode.
+    ///
+    /// Mirrors BlendedTopSpeed on the forward axis and exists for the same reason: ApplyDrive
+    /// and ApplyOverSpeedBleed must share ONE expression or they open a band where neither acts
+    /// on the chassis.
+    ///
+    /// This overturns the previous "reverseTopSpeed is independent of strafe mode by design"
+    /// decision, which had reverseTopSpeed serving two jobs at once. Reverse and strafe were
+    /// pinned to the same number so that strafe mode reads as a consistent omnidirectional
+    /// speed, but that also meant drive-mode reverse could not be raised without raising the
+    /// strafe ceiling and breaking exactly the symmetry the pin existed to protect. Blending
+    /// gives both: reverseTopSpeed is now the DRIVE-mode cap only, and strafe mode converges
+    /// on strafeTopSpeed, so forward, reverse and lateral all land on one value at full blend.
+    /// </summary>
+    private float BlendedReverseTopSpeed(float effectiveTopSpeed)
+        => Mathf.Lerp(P.reverseTopSpeed, P.strafeTopSpeed, _strafeModeBlend)
+         * (effectiveTopSpeed / P.topSpeed);
+
     // -------------------------------------------------------------------------
     // 🧭 Debug readout state
     // -------------------------------------------------------------------------
@@ -399,7 +438,7 @@ public class HoverController_Propulsion : MonoBehaviour
         ApplyDrive(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyStrafe(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyTurning(grounded);
-        ApplyDrag();
+        ApplyDrag(effectiveTopSpeed);
         ApplyOverSpeedBleed(effectiveTopSpeed);
         ApplyStrafePitch();
         ApplyAirControl(grounded);
@@ -782,20 +821,25 @@ public class HoverController_Propulsion : MonoBehaviour
             else
             {
                 // Suppress reverse drive if already at or below reverse top speed.
-                // reverseTopSpeed is independent of strafe mode by design (reverse
-                // and strafe share the same speed budget), so no strafe blending here.
+                // The cap is strafe-blended (see BlendedReverseTopSpeed): reverseTopSpeed
+                // is the DRIVE-mode ceiling and strafe mode converges on strafeTopSpeed,
+                // so all three axes share one value at full strafe blend.
                 //
-                // Boost DOES apply, though. The boost gate in ApplyBoostBlend accepts
-                // reverse throttle (|throttle| >= 0.15), so holding boost in reverse was
-                // already draining energy every tick -- it just had no effect here,
-                // because this branch read the raw tuning values while only the forward
-                // branch used the boost-scaled ones. Paying for nothing is worse than
-                // not being able to boost at all, so scale both by the same ratios the
-                // forward path uses.
+                // Accel is deliberately NOT strafe-blended, unlike the forward axis.
+                // maxReverseAccel doubles as the brake, so blending it toward strafeAccel
+                // would soften braking inside strafe mode specifically, which is a
+                // side effect of a speed decision rather than a chosen one. The cost is
+                // that reverse reaches the shared cap faster than forward or lateral do.
+                //
+                // Boost DOES apply. The boost gate in ApplyBoostBlend accepts reverse
+                // throttle (|throttle| >= 0.15), so holding boost in reverse was already
+                // draining energy every tick -- it just had no effect here, because this
+                // branch read the raw tuning values while only the forward branch used
+                // the boost-scaled ones. Paying for nothing is worse than not being able
+                // to boost at all, so scale both by the same ratios the forward path uses.
                 float boostAccelRatio = effectiveForwardAccel / P.maxForwardAccel;
-                float boostSpeedRatio = effectiveTopSpeed     / P.topSpeed;
                 float reverseAccel    = P.maxReverseAccel * boostAccelRatio;
-                float reverseCap      = P.reverseTopSpeed * boostSpeedRatio;
+                float reverseCap      = BlendedReverseTopSpeed(effectiveTopSpeed);
 
                 if (currentFwd > -reverseCap)
                     rawAccel = Mathf.Max(throttle * reverseAccel,
@@ -866,15 +910,19 @@ public class HoverController_Propulsion : MonoBehaviour
     ///
     /// Drift state reduces both independently via driftLateralDamp and driftForwardDamp.
     /// </summary>
-    private void ApplyDrag()
+    private void ApplyDrag(float effectiveTopSpeed)
     {
         if (!foundation.IsHoverGrounded)
             return;
 
         // Lateral drag: always active grounded, independent of throttle.
         // Damps only UNWANTED lateral velocity: the player's intended strafe
-        // velocity (stick * strafeTopSpeed, boost-scaled to mirror ApplyStrafe's
-        // effectiveLateralTopSpeed) is excluded. Damping raw velocity silently
+        // velocity (stick * the shared StrafeTopSpeedScaled, which is exactly what
+        // ApplyStrafe caps against) is excluded. This used to rebuild that ceiling
+        // by hand from boostSpeedMultiplier; the two expressions were algebraically
+        // identical, but a hand-rolled copy of a cap is the precise shape of the
+        // defect that produced the strafe forward dead band, so it now calls the
+        // helper instead. Damping raw velocity silently
         // capped strafe at strafeAccel / lateralDamp (25 m/s at default tuning),
         // below strafeTopSpeed (30), making that knob dead and the soft cap in
         // ApplyStrafe unreachable. With the intended term excluded, lateralDamp
@@ -883,9 +931,8 @@ public class HoverController_Propulsion : MonoBehaviour
         float effectiveLateralDamp = Mathf.Lerp(P.lateralDamp, P.driftLateralDamp, driftLerp);
         if (effectiveLateralDamp > 0f)
         {
-            float boostRatio      = Mathf.Lerp(1f, P.boostSpeedMultiplier, boostLerp);
             float intendedLateral = Mathf.Clamp(input.StrafeX, -1f, 1f)
-                                  * P.strafeTopSpeed * boostRatio * _strafeModeBlend;
+                                  * StrafeTopSpeedScaled(effectiveTopSpeed) * _strafeModeBlend;
             float unwantedLateral = _cachedLocalVel.x - intendedLateral;
 
             rb.AddForce(transform.right * (-unwantedLateral * effectiveLateralDamp), ForceMode.Acceleration);
@@ -962,10 +1009,12 @@ public class HoverController_Propulsion : MonoBehaviour
             // Mirror bleed for reverse. Catches dodge burst overshoot and any other
             // impulse that pushes past the reverse cap backward.
             //
-            // Boost-scaled to match the cap ApplyDrive clamps reverse against, for the
-            // same reason as the forward axis above: bleeding at the unboosted cap while
-            // drive pushes to the boosted one puts the two in direct opposition.
-            float reverseCap = P.reverseTopSpeed * (effectiveTopSpeed / P.topSpeed);
+            // Shares BlendedReverseTopSpeed with ApplyDrive, for the same reason the
+            // forward axis shares BlendedTopSpeed: bleeding against a different cap than
+            // drive clamps to is what opened the strafe forward dead band, and the reverse
+            // axis gained the identical failure mode the moment its cap became
+            // strafe-dependent. One expression, two callers, cannot disagree.
+            float reverseCap = BlendedReverseTopSpeed(effectiveTopSpeed);
 
             if (forwardSpeed < -reverseCap)
             {

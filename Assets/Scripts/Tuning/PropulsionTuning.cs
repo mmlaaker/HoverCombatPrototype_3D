@@ -26,13 +26,18 @@ public class PropulsionTuning
     [Tooltip("How hard the chassis accelerates in reverse at full throttle.")]
     public float maxReverseAccel = 15f;
 
-    [Tooltip("Reverse top speed. Independent of forward top speed as a base value, but boost now " +
-             "scales it by Boost Speed Multiplier the same way it scales the forward cap, so " +
+    [Tooltip("Reverse top speed in DRIVE MODE ONLY. Strafe mode does not use this value: the cap " +
+             "blends toward Strafe Top Speed as strafe blends in, so at full strafe the forward, " +
+             "reverse and lateral ceilings are all the same number and the craft reads as one " +
+             "consistent omnidirectional speed. Raising this therefore makes drive-mode reverse " +
+             "faster WITHOUT touching strafe mode, which is the whole reason the two were split.\n" +
+             "Boost scales it by Boost Speed Multiplier the same way it scales the forward cap, so " +
              "boosting in reverse really does go faster.\n" +
-             "Tune this alongside Max Reverse Accel and Strafe Top Speed; they should feel like a " +
-             "matched budget. Note Max Reverse Accel doubles as the BRAKE: pulling reverse while " +
-             "moving forward decelerates at that rate, so it is set by how fast you want to stop, " +
-             "not by how fast you want to reverse.")]
+             "Note Max Reverse Accel doubles as the BRAKE: pulling reverse while moving forward " +
+             "decelerates at that rate, so it is set by how fast you want to stop, not by how fast " +
+             "you want to reverse. It is deliberately NOT strafe-blended, so braking is identical " +
+             "in both modes; the trade is that reverse reaches the shared strafe cap faster than " +
+             "forward or lateral do.")]
     [Min(0.01f)]
     public float reverseTopSpeed = 20f;
 
@@ -81,8 +86,11 @@ public class PropulsionTuning
     [Header("💨 Strafe Dodge")]
     [Tooltip("Peak strength of the dodge burst. Front-loaded and tapers to zero. Mass independent.\n" +
              "Tune this by the speed it adds, not by the number itself. The burst tapers linearly, so the " +
-             "dodge adds this x Dodge Duration / 2 metres per second sideways. At 1000 over 0.1s that is " +
-             "50 m/s, which is a full top speed of lateral velocity delivered in a tenth of a second.\n" +
+             "dodge adds this x (Dodge Duration + Fixed Timestep) / 2 metres per second sideways. The " +
+             "timestep term is not a rounding detail: ApplyDodgeForce samples the taper BEFORE " +
+             "decrementing its timer, so the first tick runs at full strength and the last runs at one " +
+             "timestep's worth rather than zero. At 1000 over 0.1s at the project's 100Hz that is 55 m/s, " +
+             "where the continuous form would say 50.\n" +
              "Compare the result against Strafe Top Speed: anything above it is over-cap and bleeds off " +
              "through Strafe Lateral Cap Strength rather than being sustainable. A burst worth 30 to 60% " +
              "of Strafe Top Speed reads as a sharp sidestep; at or above 100% it reads as a teleport and " +
