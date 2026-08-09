@@ -1,7 +1,21 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.7
+/// HoverController_Propulsion v1.8
+///
+/// v1.8: Drift becomes a held slide instead of a spin. Two additions and one reframe.
+///       maxDriftAngle caps the gap between heading and velocity by fading yaw authority
+///       as the slide widens, because drift previously had no equilibrium at all: lateral
+///       damping is cut so velocity holds its line, yaw runs at driftYawMultiplier, and
+///       nothing restored the angle, so the nose came round for as long as the stick was
+///       held. Only the widening direction is limited, so an overcooked entry can always
+///       be steered out of. driftHopImpulse adds the entry kick the transition was missing
+///       and is deliberately tiny: drift only sustains while grounded, which ends 2.5m up,
+///       so a hop past that would cancel the drift it just started. What drift is FOR is
+///       now the angle itself, not speed -- weapons fire along chassis forward, so a held
+///       slide is the only way to aim off the line of travel at full speed, bought with
+///       acceleration rather than the third of top speed strafe mode costs. New event:
+///       OnDriftHop.
 ///
 /// v1.7: Air control gated on Foundation.HasAirControlClearance. Closes the case where
 ///       drifting into a tap jump handed over full attitude authority: the left stick is
@@ -190,15 +204,6 @@ public class HoverController_Propulsion : MonoBehaviour
     public float BoostLerp => boostLerp;
 
     /// <summary>
-    /// Maximum nose pitch (degrees) in strafe mode.
-    /// Currently has no callers. HoverController_Aim was expected to read this but
-    /// does not need to: it derives aim from the vehicle's actual settled euler
-    /// angles, which are already clamped by this limit upstream in ApplyStrafePitch.
-    /// Kept as a read-only accessor for HUD/reticle work that wants the range.
-    /// </summary>
-    public float StrafePitchLimit => profile.propulsion.strafePitchLimit;
-
-    /// <summary>
     /// Current strafe blend weight (0 = drive mode, 1 = full strafe).
     /// Read by HoverController_Aim to scale aim pitch in sync with strafe entry/exit.
     /// </summary>
@@ -227,6 +232,13 @@ public class HoverController_Propulsion : MonoBehaviour
     /// Used by HoverVehicleVFX to fire side particle bursts.
     /// </summary>
     public event System.Action<Vector3> OnDodge;
+
+    /// <summary>
+    /// Fired once when a drift starts and the entry hop kicks. For VFX and audio:
+    /// the hop is the moment of commitment and is the obvious hook for tyre smoke,
+    /// a thruster puff or a chirp. Not fired on drift exit, deliberately.
+    /// </summary>
+    public event System.Action OnDriftHop;
 
     // -------------------------------------------------------------------------
     // 🧭 Debug
@@ -607,6 +619,8 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     private void ApplyDriftBlend()
     {
+        bool wasDrifting = _isDrifting;
+
         bool baseCondition = input.Drift
                           && Mathf.Abs(input.TurnInput) >= P.driftTurnThreshold
                           && foundation.IsHoverGrounded;
@@ -622,10 +636,45 @@ public class HoverController_Propulsion : MonoBehaviour
             _isDrifting = baseCondition && _cachedLocalVel.z >= P.minDriftSpeed;
         }
 
+        // Entry hop. Fires on the rising edge only, and only from a settled chassis.
+        //
+        // The support test is the rate limiter, and it is doing a real job: the entry
+        // gate is a threshold on turn input, so wobbling the stick across it would
+        // otherwise re-fire the hop every time it crossed. Requiring the springs to be
+        // carrying the craft again means it cannot re-fire until the last hop has
+        // landed, with no timer to own.
+        //
+        // No energy cost. This is punctuation, not a mobility tool, and charging for
+        // entering a drift would tax the manoeuvre for having a sound.
+        if (_isDrifting && !wasDrifting
+            && P.driftHopImpulse > 0f
+            && foundation.HoverSupport > 0.9f)
+        {
+            rb.AddForce(Vector3.up * P.driftHopImpulse, ForceMode.VelocityChange);
+            OnDriftHop?.Invoke();
+
+            if (ShouldDrawDebug)
+                Debug.DrawRay(transform.position, Vector3.up * 2f, Color.green, 0.4f);
+        }
+
         float target = _isDrifting ? 1f : 0f;
         float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.driftBlendSeconds);
         driftLerp    = Mathf.MoveTowards(driftLerp, target, step);
     }
+
+    /// <summary>
+    /// Signed angle between where the chassis POINTS and where it is MOVING, in degrees.
+    /// Positive means velocity is off to the right of the nose.
+    ///
+    /// This is the drift metric, and it is what the manoeuvre actually produces: weapons
+    /// fire along chassis forward, so this gap is the only way to aim off the line of
+    /// travel at full speed. Zero below walking pace, because Atan2 on a near-zero
+    /// vector reports a confident angle that means nothing.
+    /// </summary>
+    private float ShoulderAngle =>
+        _cachedLocalVel.sqrMagnitude > 1f
+            ? Mathf.Atan2(_cachedLocalVel.x, _cachedLocalVel.z) * Mathf.Rad2Deg
+            : 0f;
 
     // -------------------------------------------------------------------------
     // 🦘 Jump (charge-based grounded + fixed air jump, both energy-gated)
@@ -899,6 +948,29 @@ public class HoverController_Propulsion : MonoBehaviour
 
         // Effective yaw multiplier inlined: lerp between 1 and driftYawMultiplier.
         float effectiveYawMult = Mathf.Lerp(1f, P.driftYawMultiplier, driftLerp);
+
+        // Drift angle ceiling. Without it a drift has no equilibrium: lateral damping is
+        // reduced so velocity holds its line, yaw runs at driftYawMultiplier, and nothing
+        // stops the nose coming round for as long as the stick is held. That is a spin,
+        // not a slide, and it is why the manoeuvre could not be held and aimed from.
+        //
+        // Authority fades as the slide approaches maxDriftAngle, so it settles at an angle
+        // instead of running away. Only the WIDENING direction is limited: yawing back
+        // toward the line of travel keeps full authority at any angle, or an overcooked
+        // entry would strand the craft sideways with no way out. Sign convention: yawing
+        // right moves velocity leftward in the body frame, so turn and shoulder having
+        // opposite signs is what "widening" means.
+        if (driftLerp > 0f && P.maxDriftAngle > 0f)
+        {
+            float shoulder = ShoulderAngle;
+            bool  widening = turn * shoulder < 0f;
+
+            if (widening)
+            {
+                float budget = 1f - Mathf.Clamp01(Mathf.Abs(shoulder) / P.maxDriftAngle);
+                effectiveYawMult *= Mathf.Lerp(1f, budget, driftLerp);
+            }
+        }
 
         float inertiaY      = Mathf.Max(0.001f, rb.inertiaTensor.y);
         float desiredYawAcc = turn * P.yawAccel * turnScale * effectiveYawMult;

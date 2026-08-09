@@ -48,6 +48,18 @@ public class PropulsionTuning
     [Tooltip("How fast the chassis rotates at full turn input. Higher feels twitchier and more arcade.")]
     public float yawAccel = 8f;
 
+    [Tooltip("Widest angle, in degrees, that drift will open between where you POINT and where you are " +
+             "MOVING. Yaw authority fades to nothing as the slide approaches this, so the drift settles " +
+             "at an angle you can hold and aim from instead of rotating for as long as you hold the stick.\n" +
+             "This is the knob that decides what a drift is FOR. The gap between heading and velocity is " +
+             "the product of the manoeuvre: weapons fire along chassis forward, so a held slide is the " +
+             "only way to aim off your line of travel at full speed. Strafe mode buys the same thing for " +
+             "a third of your top speed; drift buys it for acceleration instead.\n" +
+             "Only the WIDENING direction is limited. Steering back toward your line always has full " +
+             "authority, or a drift could strand you sideways. Try 25 to 35.")]
+    [Min(1f)]
+    public float maxDriftAngle = 30f;
+
     [Tooltip("How firmly turning settles. Counter-torque proportional to current yaw rate. Higher kills wobble.")]
     [Range(0f, 20f)]
     public float yawDamping = 6f;
@@ -200,6 +212,20 @@ public class PropulsionTuning
     [Tooltip("How long it takes for drift to ramp in and out. Faster is snappier. Try 0.1 to 0.25.")]
     [Min(0.01f)]
     public float driftBlendSeconds = 0.15f;
+
+    [Tooltip("Upward kick when a drift STARTS, in m/s. The punctuation on the entry: without it the " +
+             "transition is a silent crossfade of numbers and the drift has no moment of commitment.\n" +
+             "Deliberately tiny, and it must stay that way. Drift only sustains while the craft reads as " +
+             "grounded, which ends Sensor Range minus Hover Height above ride height (2.5m at the shipped " +
+             "tuning), so a hop past that CANCELS THE DRIFT IT JUST STARTED. 5.5 gives about 0.4m and a " +
+             "third of a second, comfortably inside. It also cannot reach Air Control Min Clearance, so it " +
+             "cannot hand over attitude authority.\n" +
+             "This is why the jump button cannot serve: a tap jump apexes at 5.2m, which is outside the " +
+             "grounded band, costs energy, and ends the drift rather than starting one.\n" +
+             "Free side effect worth knowing: at 0.4m the support dial falls to about half, so drag and " +
+             "leveling ease off for the hop. That is real unweighting, not a fake. Set 0 to disable.")]
+    [Min(0f)]
+    public float driftHopImpulse = 5.5f;
 
     [Tooltip("Maximum chassis lean at full drift. Try 15 to 25. " +
              "Exaggerate slightly: readability matters at speed.")]

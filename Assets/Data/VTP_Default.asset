@@ -52,6 +52,7 @@ MonoBehaviour:
     maxReverseAccel: 50
     reverseTopSpeed: 50
     yawAccel: 13
+    maxDriftAngle: 60
     yawDamping: 8
     airTurnMultiplier: 0.5
     enableBoost: 1
@@ -73,12 +74,13 @@ MonoBehaviour:
     airJumpImpulse: 25
     lateralDamp: 1
     forwardDamp: 1
-    driftLateralDamp: 0
-    driftForwardDamp: 1
+    driftLateralDamp: 0.3
+    driftForwardDamp: 0.3
     driftYawMultiplier: 1.5
     driftTurnThreshold: 0.5
     minDriftSpeed: 40
-    driftBlendSeconds: 0.15
+    driftBlendSeconds: 0.1
+    driftHopImpulse: 10
     maxBankAngle: 18
     passiveBankAngle: 5
     bankLerpSpeed: 8

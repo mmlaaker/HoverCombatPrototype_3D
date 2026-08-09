@@ -3,14 +3,23 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// VehicleHUD v1.2
+/// VehicleHUD v1.3
 /// ----------------
+/// v1.3 changes:
+///   • OnRegenStarted subscription, unsubscription and its empty HandleRegenStarted
+///     handler all deleted, along with the event itself on HoverController_Energy.
+///     v1.2 below removed the local flag this handler existed to set and left the
+///     wiring in place, so the HUD had been paying for an event that did nothing for
+///     a version. Regen colour still reads _energy.IsRegenerating directly; behaviour
+///     is unchanged. If a regen cue is ever wanted, add it deliberately.
+///
 /// v1.2 changes:
 ///   • _isRegenerating local flag removed entirely. All regen color and Update gate
 ///     decisions now read _energy.IsRegenerating directly — the authoritative source.
 ///     Previously the local flag could get stuck true while energy was actively draining
 ///     (e.g. during boost), causing the bar to show regen color while depleting.
 ///   • HandleRegenStarted and HandleEnergyDepleted simplified accordingly.
+///     (HandleRegenStarted has since been deleted outright; see v1.3.)
 ///   • Update gate expanded: SyncEnergy runs whenever pool is not full, regenerating,
 ///     or EMP-frozen — covers active drain (boost) without any local tracking flags.
 ///
@@ -220,7 +229,6 @@ public class VehicleHUD : MonoBehaviour
         {
             _energy.OnEmpFreezeApplied += HandleEmpFreezeApplied;
             _energy.OnEmpFreezeLifted  += HandleEmpFreezeLifted;
-            _energy.OnRegenStarted     += HandleRegenStarted;
             _energy.OnEnergyDepleted   += HandleEnergyDepleted;
         }
 
@@ -256,7 +264,6 @@ public class VehicleHUD : MonoBehaviour
         {
             _energy.OnEmpFreezeApplied -= HandleEmpFreezeApplied;
             _energy.OnEmpFreezeLifted  -= HandleEmpFreezeLifted;
-            _energy.OnRegenStarted     -= HandleRegenStarted;
             _energy.OnEnergyDepleted   -= HandleEnergyDepleted;
         }
 
@@ -338,11 +345,6 @@ public class VehicleHUD : MonoBehaviour
     {
         _isEmpFrozen = false;
         // Color corrects on next SyncEnergy call in Update.
-    }
-
-    private void HandleRegenStarted()
-    {
-        // No local flag — Update reads _energy.IsRegenerating directly.
     }
 
     private void HandleEnergyDepleted()

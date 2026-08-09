@@ -100,3 +100,6 @@ Icon?
 *.orig
 *.patch
 *.rej
+
+# FrameSpikeWatch output
+PerfLogs/

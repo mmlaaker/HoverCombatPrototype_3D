@@ -44,9 +44,6 @@ public class HoverController_Energy : MonoBehaviour
     /// <summary>Fired when the pool reaches zero for the first time after being non-empty.</summary>
     public event Action OnEnergyDepleted;
 
-    /// <summary>Fired when regen begins after the lockout delay expires.</summary>
-    public event Action OnRegenStarted;
-
     /// <summary>Fired when an EMP freeze is applied. Parameter is total freeze duration remaining.</summary>
     public event Action<float> OnEmpFreezeApplied;
 
@@ -216,20 +213,14 @@ public class HoverController_Energy : MonoBehaviour
     ///   2. The system is not EMP-frozen.
     ///   3. The pool is not already full.
     ///
-    /// OnRegenStarted fires once when regen transitions from inactive to active.
     /// </summary>
     private void TickRegen()
     {
-        bool wasRegenerating = IsRegenerating;
-
         float timeSinceLastConsume = Time.unscaledTime - lastConsumeTime;
         bool  recentlyConsumed     = timeSinceLastConsume < E.regenDelay;
         bool  canRegen             = !recentlyConsumed && !IsEmpFrozen && Energy < E.maxEnergy;
 
         IsRegenerating = canRegen;
-
-        if (IsRegenerating && !wasRegenerating)
-            OnRegenStarted?.Invoke();
 
         if (IsRegenerating)
             Energy = Mathf.Min(E.maxEnergy, Energy + E.regenRate * Time.deltaTime);

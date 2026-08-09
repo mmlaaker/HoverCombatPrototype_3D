@@ -3,6 +3,13 @@
 Consolidated open work. Created 2026-08-07 from a full documentation-vs-code audit; the code was
 treated as the truth and the docs were corrected to match it in the same pass.
 
+**Updated 2026-08-08** from a movement tuning session driven by a full playtest. Reverse/strafe
+symmetry, the tap-jump grounded band, air control entry, drift feel and the weapon-switch firing bug
+were all closed and their outcomes moved to `CLAUDE.md`. Everything else the playtest raised is
+filed below: 2.6 to 2.10 (feel), 0.6 (what that session did NOT verify), 5.9 to 5.11 (decisions
+left open). The session's performance investigation is closed and lives in `CLAUDE.md`; the short
+version is that the chop was background applications, not the game.
+
 **How this relates to the other docs.** Four documents, no overlap; a fact lives in exactly one.
 
 | Question | Document |
@@ -29,7 +36,36 @@ Priority tiers are about what unblocks the prototype, not about effort.
 
 ## Tier 0 — Verification debt
 
-### 0.1 Play-mode verification of six bug fixes
+### 0.1 ~~Play-mode verification of six bug fixes~~ — VERIFIED AND CLOSED 2026-08-08
+**Actually run in play mode, not closed by judgement.** A second AI vehicle was spawned from
+`HoverCar_AI.prefab` to provide the target the scene lacks, and `PlayerHoverInput` was disabled and
+its backing fields written directly to drive the weapon system.
+
+| Fix | Result |
+|---|---|
+| Projectile layer + matrix; missiles detonate on enemy hulls | **PASS.** Missile fired at a pinned target 45m out: target knocked from rest to **21.24 m/s**, zero missiles left in scene. Detonation on a hull, not the six-second lifetime fuse |
+| `EmpProjectile` moved to `FixedUpdate`; still acquires, steers and freezes | **PASS.** EMP fired at the same target: `IsEmpFrozen` went true. Full flight path exercised, not just reflection |
+| HardLock commit-and-hold | **PASS, and it was never broken.** Reaches `Locked` at **1.51s** against a configured `lockAcquireTime` of 1.5, `LockProgress` peaks at 1.00, release launches (1 missile in flight) and the missile hits: target knocked to **75.61 m/s** |
+| Rocket self-splash owner exclusion | Unchanged. Already proven by direct call in both directions on 2026-08-07 |
+| AI `lockTargetLayers` | Nothing to verify; the AI carries no missiles |
+| Boost tick ordering | Already partly closed in play mode 2026-08-07 |
+
+**`saw_Committed` reads false and that is a sampling artefact, not a failure.** `Committed` is a
+one-frame pulse that fires, launches and resets to `Idle` inside a single `Update`, so an
+`EditorApplication.update` sampler can miss it entirely. The launch is proven by the missile
+existing and by the target moving, not by catching the state.
+
+**What is still not verified, and cannot be by measurement:** whether `selfImpactScale` 0.5 is the
+right rocket-jump feel, and whether the 10ms boost ordering shift is invisible. Both are feel
+questions. See also 1.3: these weapons currently deal zero damage, so only knockback was exercised.
+
+**A new measurement trap came out of this, added to `CLAUDE.md` > Recipes.** The first HardLock run
+held fire for 400 editor ticks and reported a failure to lock. At ~285fps that is 1.4 seconds
+against a 1.5 second requirement. **Tick counts are not time.** Anything gated on a configured
+duration must be driven from `realtimeSinceStartup`, or the test invents a bug.
+
+<details><summary>Original item, kept for the record</summary>
+
 Six bugs were fixed on 2026-08-07 and every one was verified by **compilation plus edit-mode
 probing only**. None has been run in play mode. Two are behavioural changes to physics-tick code
 and deserve a live confirmation before the tuning pass leans on them.
@@ -62,22 +98,47 @@ exclusion holds at full throttle.
 **Done looks like:** one play session per row, or a scripted `AIHoverInput` rig (see
 `CLAUDE.md` > Recipes) driving each case. HardLock needs a second target spawned to test at all.
 
-### 0.5 CSV capture for A/B tuning
-**Specced.** `CLAUDE.md` > Recipes documents the working mechanism (a self-removing
-`EditorApplication.CallbackFunction`; `System.Action` will not compile, it needs that exact
-delegate type). Turning it into a component removes the friction of re-deriving it each session.
+</details>
 
-Record per tick, to a CSV in the scratchpad: time, forward and lateral speed, the live forward and
-lateral caps, the four blends, the acting-force state, tilt, and grounded/downed flags. Start and
-stop on a hotkey.
+### 0.5 ~~CSV capture for A/B tuning~~ — PARTLY DONE 2026-08-08
+`FrameSpikeWatch` (see `CLAUDE.md`) now writes `PerfLogs/*.csv` automatically on stop, carrying
+time, speed, forward/lateral, tilt, grounded, support, downed, seconds-since-recovery, the four
+blends, particle counts, allocation rate, a CPU benchmark and GC deltas.
 
-**Why it is worth building:** you cannot feel a 3% change, but you can see one on a graph. The
-specific comparisons it unlocks are the boost ramp, drift speed bleed, and the jump arc -- all of
-which are currently judged by feel across separate play sessions.
+**What it does NOT do, and what the original item asked for:** it samples on spikes and on a
+2-second heartbeat, not per physics tick, and it does not record the live forward/lateral caps or
+the acting-force state. So it answers "what was happening when the frame died" but **not** the
+tuning comparisons this item was actually created for: the boost ramp, drift speed bleed and jump
+arc still cannot be graphed against each other.
 
-Two traps already known and worth honouring in the implementation: `eval` cannot sleep
-(`Thread.Sleep` blocks Unity's main loop so every sample comes back identical), and sampling from
-`Update` while the values are written in `FixedUpdate` quantises the log to frame rate.
+Either extend it with a per-`FixedUpdate` tuning mode, or accept that the jump arc is now measured
+well enough by the impulse table in `CLAUDE.md` and narrow this item to boost and drift.
+
+### 0.6 Consequences of the 2026-08-08 tuning session
+Two of the six original entries were verified in a play-mode pass the same day and are recorded
+here with their numbers. **What remains is four items, and every one of them is a feel judgement or
+needs a human, so no amount of scripting will close them.** That is the honest boundary of what
+measurement can do for this list.
+
+Verified 2026-08-08 in a play-mode pass:
+
+| Claim | Result |
+|---|---|
+| Six vehicles at once, the real performance question | **PASS, comfortably.** 1 vehicle 3.48ms mean / 4.08 p95; six vehicles **4.33ms mean / 5.13 p95 / 6.98 max**. That is +24% for 6x the vehicles, so roughly **0.17ms of marginal cost each** against a mostly fixed frame. Twelve would still sit near 5ms. **Caveat: AI driving only, no combat, because `AIHoverInput` never sets `FirePressed` (see 1.6). Particle collision at scale is still unmeasured** |
+| The support fade, which is the mechanism behind the ledge claim | **PASS, exactly as designed.** Pinned at measured heights above rest: 0.00m support 1.000, 0.25m 0.667, 0.50m 0.333, **0.75m 0.000**. `IsHoverGrounded` stays true until between 2.40m and 2.60m, confirming the 2.5m sensor band it used to be gated on. So at 60 m/s the "still acting grounded" distance is ~12m rather than ~21m, which is the claim, within a metre |
+
+Still genuinely open:
+
+| Claim | Status |
+|---|---|
+| Bumpy terrain may have improved for free, since leveling now fades as you crest | **Untested.** Could equally read as less planted. Owner had deprioritised bumps because arenas are planned smooth |
+| The drift angle ceiling reads as settling rather than hitting a wall | **Untested at the shipped `maxDriftAngle`.** Feel question. See 2.3 |
+| Boosted strafe at 60 omni does not cause strafe camping | **Untested and untestable by script.** Needs a human under combat pressure. See 5.11 |
+| Weapon physics beyond knockback | **Partly closed.** Missile, EMP and HardLock detonation and knockback are now verified (0.1). The Shotgun, Machine Gun and Chain Gun particle paths are not, and 1.3 means damage is zero on most of them anyway |
+
+The rare 400-550ms stalls also remain unexplained. `FrameSpikeWatch` now prints a CPU-throttling
+verdict on stop, which will settle whether they are thermal, and that costs nothing but one normal
+playtest.
 
 ### 0.2 Nothing is committed
 Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts, 1 new script,
@@ -200,16 +261,23 @@ cooldown indicator. The projectile carries its own particle visual so the shot i
 costs 70 of 100 energy -- the most expensive ability in the game, and one that empties the meter you
 need in order to disengage. A commitment that large should confirm itself.
 
-### 2.3 Drift feel is untuned and testable for the first time
-`driftLateralDamp` is 0, so there is no lateral resistance during a drift at all. Scripted full-turn
-drift reached 60-76 m/s laterally and spun out, bleeding forward speed to roughly zero.
+### 2.3 ~~Drift feel is untuned~~ — DONE 2026-08-08, with two open questions
+Tuned in the 2026-08-08 session and confirmed good by the owner. Drift is now an **aiming tool**:
+the gap between heading and velocity is the product, bought with acceleration. Causes, fixes and
+the two-knob tuning model are in `CLAUDE.md` > Propulsion v1.8. `driftLateralDamp` is 0.25,
+`driftForwardDamp` 0.3, plus `maxDriftAngle` and `driftHopImpulse`.
 
-The drift *flip* is fixed and verified. How drift should FEEL is an open owner decision, not a bug.
-This is the item most likely to change the character of the game.
+Still open, both feel questions rather than bugs:
+- **Is the angle ceiling settling or hitting a wall?** At low `driftLateralDamp` the slide runs
+  right up to `maxDriftAngle` and stops. Raising damping pulls the balance point below the cap so
+  it eases in instead: at a 45 cap, damping 0.25 settles at 42 and damping 1.0 settles at ~34.
+  Same cap, completely different character.
+- **No exit payout exists and that is deliberate.** The owner rejected a boost reward: drift is
+  about angle, not speed. Revisit only if the angle stops feeling worth the acceleration.
 
-Related invariant to maintain by hand: `minDriftSpeed` is meant to MATCH `strafeTopSpeed`, so that
-outpacing strafe is exactly what earns the drift. They currently do match, at 40 each. Nothing in
-code enforces it.
+Invariant still maintained by hand and still unenforced in code: `minDriftSpeed` MATCHES
+`strafeTopSpeed`, so outpacing strafe is what earns the drift. Both 40. `VehicleTuningProfileEditor`
+warns if they diverge.
 
 ### 2.4 Hard-landing lands with no dust
 `landingDustPrefab` and `landingDustHeavyPrefab` are both null on `HoverCar_Prototype` and
@@ -227,6 +295,85 @@ Detonations currently produce no visual at all. **Blocked on art, not code.**
 
 Note the dependency now runs the other way round from how it used to: the definition states
 `splashRadius` and the VFX is authored to match it, not the reverse.
+
+### 2.6 Boost reads flat
+Owner note, 2026-08-08 playtest: "the boost feels somewhat mid".
+
+`boostSpeedMultiplier` and `boostAccelMultiplier` are both 1.5, so it IS a real 50% increase and the
+problem is likely presentation rather than magnitude. Two things to try before touching the
+multiplier:
+
+- **`boostBlendSeconds` is 0.35 in both directions.** A boost that takes a third of a second to
+  arrive reads as gradual, not as a kick. Asymmetric (fast in ~0.1s, slow out at 0.35s) keeps the
+  smooth energy cutoff the slow fade was added for. Note the same trick already paid off on air
+  control, where the equivalent blend went to 0.01.
+- **There is no FOV kick anywhere in `HoverCameraController`.** FOV scaled by `BoostLerp` is the
+  highest sensation-per-effort change available.
+
+If the multiplier does go up afterwards, mind two interactions: boosted top speed is already 90
+against `hardLandingMaxSpeed` 85, so severity saturates; and boosted strafe already reaches 60 in
+every direction (see 5.11).
+
+### 2.7 Automatic weapon fire rates are far too low
+Owner note: both automatics "need to increase the firing speed a bunch to keep up with the reticle".
+Live emission is **8/sec per Machine Gun barrel and 20/sec on the Chain Gun**.
+
+Related: 3.6 records `WD_MachineGuns.combat.fireRate` at 0.01, which is a separate value from the
+emitter rate. Both need to move together, and the definition is the single author since
+`ParticleWeaponCollision.ApplyDefinitionToEmitter` pushes it.
+
+### 2.8 Camera, three separate complaints
+All from the 2026-08-08 playtest, all unaddressed.
+
+- **Drive cam cannot pitch high enough.** It swings back to roughly level with the vehicle roof,
+  which makes it hard to see where you are going up a steep slope. This is vcam configuration, not
+  code.
+- **Strafe cam feels wrong on jumps**, too rigidly locked to the back of the vehicle. Strafe uses
+  `LockToTargetNoRoll` with no damping; vertical position damping alone would soften jumps without
+  touching aim, since the crosshair is yaw and pitch.
+- **The reticle jars when aiming on slopes.** The HUD ray hits geometry at discontinuous depths,
+  made worse because `HoverController_Aim` points weapons along actual chassis pitch while the
+  reticle projects onto world geometry, so the two disagree on a slope.
+
+### 2.9 Impacts are under-intense, and big drops do not cost enough control
+Owner: crashes into walls, ground and other vehicles should hit harder; a mountain drop "should lose
+more control and tumble more than it does". The hard-landing camera punch is liked and should stay.
+
+The hard landing system today is **feel-only by design**: it suppresses LIFT on a 0.35s taper and
+fires the camera impulse, with no damage and no lockout. Leveling torque stays at full 12 throughout,
+which is why a badly angled high-speed landing snaps flat instead of tipping you.
+
+**Cheapest real change:** scale `levelingTorqueStrength` by the same `hardLandingSeverity` and timer
+that already scale `liftFactor`. Reuses existing machinery rather than adding a system, and it makes
+a bad landing angle actually cost something.
+
+For wall and vehicle crashes there is no shake at all, but `CinemachineImpulseSource` is already on
+the vehicle for landings, so routing collision impulses into the same source is cheap.
+
+**Measured context that changes the framing:** no jump can trigger a hard landing at all
+(full charge lands at 43.4 against `hardLandingMinSpeed` 58); the system fires only on mountain
+drops, confirmed live at 58.0 to 87.6 m/s. If landings should matter more generally, that threshold
+is the knob, and it needs the measured pass the owner already asked for.
+
+### 2.10 Energy is permanently tight, and tricks should probably pay it back
+Owner: "I feel like I'm always in need of more energy, mostly for boosting and jumping", plus the
+suggestion to reward landed aerial tricks with energy.
+
+The budget is tight by construction: boost drains 20/sec against a 20/sec regen with a 1s delay, so
+sustained boost is roughly a 45% duty cycle, and every jump costs 25, or 1.25 seconds of boost.
+
+**This is the highest-upside item on the list** because it closes a loop rather than adding a
+feature: tricks and drift both feed the resource that powers boost and jumps, which buys more
+tricks. It is on-pillar for momentum as the primary skill expression, and Tony Hawk is already in
+the inspiration list.
+
+The pieces exist. Foundation tracks attitude, `AirControlWeight` distinguishes deliberate control
+from tumbling, the airborne-to-grounded edge is already detected in `ApplyHoverForces`, and
+`IsDowned` gives a clean forfeit condition. Integrate rotation while airborne, bank it on landing
+upright, lose it on a flip.
+
+Note the owner explicitly rejected a **speed** payout for drift (2.3). An energy payout is a
+different question and was left open.
 
 ---
 
@@ -292,6 +439,10 @@ Unlike `TickCycleWeapon`, which walks past slots with a null definition, `SetAct
 accepts any in-range index. Pointing it at an empty slot leaves the vehicle silently weaponless,
 because `Update` early-returns on `definition == null`.
 
+**Still true after Weapons v1.1.** Both paths now share `SwitchToSlot`, so the empty-slot skip only
+needs writing once and belongs there. The duplication that hid the emitter-shutdown bug is gone;
+this gap survived it.
+
 ### 3.8 `SetRecoveryEnabled` has a sharp edge for its first caller
 `HoverController_Foundation.SetRecoveryEnabled(bool)` has no callers today, and `recoveryEnabled` is
 permanently true. EMP does not use it -- Foundation's `FixedUpdate` early-returns wholesale on
@@ -308,7 +459,11 @@ Minor: it also does not clear `unstickForceTimer`, so an in-flight unstick push 
 ### 3.9 Scene wiring noise
 Cosmetic, no runtime effect, but misleading when reading the inspector:
 - Weapon slots 2/3/4 (the three missiles, all `Instantiated` mode) each have a particle emitter
-  assigned, which that mode ignores
+  assigned, which that mode ignores. **No longer purely cosmetic since Weapons v1.1:** switching
+  away from a slot now stops its emitters and rewrites their emission rate, so slot 2 will reach
+  into the **Shotgun's** emitter (which is what it actually points at) on every switch. Harmless
+  today because the Shotgun is burst-only, but it is now a live coupling rather than dead data.
+  Slots 3 and 4 additionally hold a null element in the list
 - Slot 5 (Chain Gun, `ParticleSystem` mode) has a muzzle point assigned, which that mode ignores
 - `blast.damageLayers` is `Everything` on `WD_ChainGun`, `WD_MachineGuns` and `WD_Shotgun`, none of
   which read the blast section
@@ -318,21 +473,15 @@ decision, recorded in `CLAUDE.md`.)
 
 ---
 
-## Tier 4 — Deletion candidates
+## Tier 4 — ~~Deletion candidates~~ — DONE 2026-08-08
 
-Dead surface area. Each is harmless; the cost is that they make the API look wired when it is not.
+All three deleted. Compiles clean. Outcome recorded in `CLAUDE.md`; not repeated here.
 
-- **`OnMissileLocked`** -- raised once, no subscribers, and **genuinely duplicative**.
-  `VehicleHUD` already subscribes to `OnMissileLockStateChanged`, which fires on the same
-  `Scanning -> Locked` transition and sets the "LOCKED" text and green fill. The only argument for
-  keeping it is that a dedicated lock-tone event reads better than filtering a state switch.
-- **`Propulsion.StrafePitchLimit`** -- read-only accessor, no callers. Its XML doc used to claim
-  `HoverController_Aim` read it; corrected 2026-08-07 (Aim derives everything from actual euler
-  angles). Delete, or use it for a HUD pitch indicator.
-- **`OnRegenStarted` subscription in `VehicleHUD`** -- the event is raised and IS subscribed, but
-  `HandleRegenStarted` is an empty method. v1.2 removed the local flag in favour of reading
-  `IsRegenerating` directly and left the subscription behind. Either delete both sides or make it
-  do something.
+`OnMissileLocked` (duplicated `OnMissileLockStateChanged`), `Propulsion.StrafePitchLimit` (no
+callers), and the `OnRegenStarted` event plus its empty `VehicleHUD` handler, both sides.
+
+If a lock tone or a HUD pitch indicator is ever wanted, re-add deliberately rather than restoring
+these: each was dead because the consumer that justified it never existed.
 
 ---
 
@@ -341,6 +490,9 @@ Dead surface area. Each is harmless; the cost is that they make the API look wir
 These need an owner call, not code. Listed with what is already measured so the decision is cheap.
 
 ### 5.1 Hard Lock is not designed through
+**The mechanism works and is verified** (0.1): acquires at 1.51s, commits on release, launches, and
+the missile connects. What follows is about what the weapon SHOULD be, not whether it functions.
+
 Stated intent (2026-08-07): a volley of **small, low-damage, low-impact missiles**, lockable onto a
 single target or distributed across several. Currently implemented as the degenerate case -- one
 lock, one missile -- and tuned as though it were a Rocket Launcher.
@@ -433,6 +585,42 @@ If it is ever revisited, the cheapest single improvement is **narrowing the hull
 against 1.46x length is what makes it read stubby, and width is the least coupled dimension to the
 tuning, since the attitude torques ignore the inertia tensor.
 
+### 5.9 The air jump has never been justified or cut
+Owner, 2026-08-08: "I'm not sure if the double jump is fully justified, I might consider removing
+it." No decision was reached.
+
+The argument for keeping it is that it does not function as a second jump. It is a **hang-time
+extender** that buys the window to finish a trick, and tricks are the part of the build the owner
+rates highest. The argument against is the energy budget (2.10): 25 per air jump against a 100 pool
+that already feels short.
+
+Decide it against 2.10 rather than on its own. If tricks start paying energy back, the air jump
+stops competing with boost and the case for cutting it weakens considerably.
+
+### 5.10 Wall jump / wall riding, speculative
+Owner idea: count as grounded when deliberately oriented against a wall with sensors in range.
+
+**Test before building.** It may already partly work: hover points cast along `-point.up`, which
+rotates with the craft, so orienting against a wall does put rays on it and the springs will push
+off. `IsDowned` is the thing that would block it, and only on CONTACT past `flipRecoveryAngleThreshold`
+-- a craft hovering the wall without touching it keeps full control by design, which is already
+documented as deliberate in `CLAUDE.md`.
+
+### 5.11 Boosted strafe reaches unboosted drive top speed
+Measured 2026-08-08. Strafe caps are boost-scaled, so **strafe + boost + forward gives a 60 m/s cap
+in every direction**, equal to unboosted drive-mode top speed, while keeping free aim. The only
+thing limiting it is the energy meter, which is a resource constraint rather than a design one.
+
+The owner's stated goal is that drive mode is for fast forward and backward travel and strafe is for
+aiming at a reduced, consistent omnidirectional speed, and specifically that players should not
+"play the whole game in strafe mode". This is the strongest incentive to do exactly that.
+
+**Left as-is deliberately** pending evidence of actual camping under combat pressure. The lever if
+it does happen: stop boost scaling the strafe ceiling. Note that alone would recreate the
+paying-for-nothing bug already fixed for reverse boost (energy drained for acceleration into an
+unchanged cap), so it would need boost in strafe to become dodge-only, which is a larger behaviour
+change than it first appears.
+
 ---
 
 ## Unimplemented features
@@ -454,6 +642,14 @@ for "a small test arena with ramps and obstacles". `Prototype_Scene.unity` is th
 One measured constraint to design against: **tunnel and doorway entrances want about 10m of
 clearance.** Interiors are safe because the ceiling duck squats the craft; entrances are not. The
 reason is a closed limitation recorded in `CLAUDE.md`.
+
+**Blocking a feel question, not just a content one.** Owner, 2026-08-08: "it's hard to tell how high
+my ride sits in a mostly empty arena without props". Ride height is 7m and the belly sits ~4.7m up,
+higher than a double-decker bus, and there is currently nothing in the scene to read that against.
+Perceived speed has the same problem: 60 m/s over a 6.88m craft is 8.7 body-lengths per second
+against roughly 15-16 for a fast road car, so it reads about half as fast as 216 km/h sounds. **Both
+are judgements that cannot be made until props exist,** and both feed 5.8 (vehicle scale), which is
+explicitly gated on arena blockout.
 
 ### 6.3 No match flow
 No menu, no match start or end, no scoring, no round structure. Combined with 1.1, there is

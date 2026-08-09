@@ -1304,6 +1304,79 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 675101304}
   m_Mesh: {fileID: 4300042, guid: 27275aa30174308449b7adfdef5de29d, type: 3}
+--- !u!1 &702203266
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 702203267}
+  - component: {fileID: 702203268}
+  - component: {fileID: 702203269}
+  m_Layer: 0
+  m_Name: FrameSpikeWatch
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &702203267
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 702203266}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &702203268
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 702203266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a5b941732ed7e49468ce8acac977605e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FrameSpikeWatch
+  spikeMultiplier: 2.5
+  minSpikeMs: 12
+  warmupFrames: 120
+  logCooldownSeconds: 0.25
+  logToConsole: 0
+  autoDumpOnStop: 1
+  particleRescanSeconds: 5
+  heartbeatSeconds: 2
+  runBenchmark: 1
+  benchmarkIterations: 100000
+--- !u!114 &702203269
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 702203266}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9bb105717eac6b42b7b1c121d321abb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AllocationBisect
+  windowSeconds: 2.5
+  restrictTo: {fileID: 0}
+  excludeNameContains:
+  - AllocationBisect
+  - FrameSpikeWatch
+  reportThresholdMbs: 0.05
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -4074,3 +4147,4 @@ SceneRoots:
   - {fileID: 1076790794}
   - {fileID: 4458777512058190225}
   - {fileID: 1276685659}
+  - {fileID: 702203267}

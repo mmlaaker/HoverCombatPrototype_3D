@@ -3,7 +3,19 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Weapons v1.0
+/// HoverController_Weapons v1.1
+///
+/// v1.1: Weapon switching shuts down the weapon it switches away from. TickCycleWeapon
+///       and SetActiveSlot were line-for-line copies and neither deactivated the
+///       outgoing slot, so switching mid-burst on an Automatic left its emitter firing
+///       permanently: Update only ticks the ACTIVE slot, which makes the
+///       StopParticleEmitters call in TickAutomatic's idle branch unreachable the
+///       instant a slot stops being active. HandleEmpFreeze had already worked out this
+///       exact reasoning for the freeze lockout; nobody carried it across to switching.
+///       Both paths now share SwitchToSlot, which stops the outgoing emitters, restores
+///       their emission rate, clears wind-up charge, and drops any missile lock. Wind-up
+///       is included because wind-down lives in the same unreachable branch, so a
+///       minigun abandoned mid-spin used to keep its charge for free.
 ///
 /// Manages a list of weapon slots, cycles the active slot on input, and dispatches
 /// fire events to muzzle transforms or particle emitters.
@@ -166,9 +178,6 @@ public class HoverController_Weapons : MonoBehaviour
 
     /// <summary>Fired on every missile lock state transition.</summary>
     public event Action<MissileLockState> OnMissileLockStateChanged;
-
-    /// <summary>Fired when missile lock transitions to Locked.</summary>
-    public event Action OnMissileLocked;
 
     // =========================================================================
     // Public read-only state
@@ -344,13 +353,54 @@ public class HoverController_Weapons : MonoBehaviour
             attempts++;
         }
 
-        if (candidate == ActiveSlotIndex)
-            return;
+        SwitchToSlot(candidate);
+    }
 
-        if (ActiveSlot?.definition?.type == WeaponType.Missile)
-            ResetLockState();
+    /// <summary>
+    /// The single path for changing weapons. Both the input-driven cycle and the
+    /// public setter route through here, because they were previously line-for-line
+    /// copies of each other and a fix applied to one silently missed the other.
+    ///
+    /// Deactivating the OUTGOING slot is the load-bearing part, and it is the exact
+    /// failure HandleEmpFreeze already documents one screen up: Update only ticks the
+    /// ACTIVE slot, so the instant a slot stops being active, TickAutomatic can never
+    /// run for it again and the StopParticleEmitters call in its idle branch becomes
+    /// unreachable. Switching away from a firing Machine Gun or Chain Gun therefore
+    /// left that emitter running for the rest of the match, one more orphan per
+    /// switch, with no way to ever stop it. The freeze path worked out this reasoning
+    /// for EMP and nobody carried it across to switching, which is the same early-out
+    /// with a different trigger.
+    ///
+    /// windUpProgress is cleared on the same precedent. Wind-down also lives in that
+    /// unreachable idle branch, so a minigun switched away from mid-spin kept its
+    /// charge indefinitely and handed it straight back when reselected. Spinning up
+    /// should have to be paid for again.
+    ///
+    /// The emission rate is restored to its baseline because the wind-down path
+    /// leaves it scaled, and a slot abandoned mid-spool would otherwise be reselected
+    /// still throttled down.
+    ///
+    /// The same-index early-out is a correctness guard, not an optimisation: without
+    /// it, calling SetActiveSlot with the current index while firing would stop your
+    /// own emitters mid-burst.
+    /// </summary>
+    private void SwitchToSlot(int index)
+    {
+        if (index < 0 || index >= weaponSlots.Count) return;
+        if (index == ActiveSlotIndex)               return;
 
-        ActiveSlotIndex = candidate;
+        var outgoing = ActiveSlot;
+        if (outgoing != null)
+        {
+            if (outgoing.definition?.type == WeaponType.Missile)
+                ResetLockState();
+
+            StopParticleEmitters(outgoing);
+            SetEmitterRateMultiplier(outgoing, 1f);
+            outgoing.windUpProgress = 0f;
+        }
+
+        ActiveSlotIndex = index;
         aim?.NotifySlotChanged(ActiveSlot);
         OnWeaponSwitched?.Invoke(ActiveSlotIndex);
     }
@@ -561,10 +611,7 @@ public class HoverController_Weapons : MonoBehaviour
                 lockTimer   += Time.deltaTime;
                 LockProgress = Mathf.Clamp01(lockTimer / def.weaponLock.lockAcquireTime);
                 if (lockTimer >= def.weaponLock.lockAcquireTime)
-                {
                     TransitionLockState(MissileLockState.Locked);
-                    OnMissileLocked?.Invoke();
-                }
                 break;
 
             case MissileLockState.Locked:
@@ -814,15 +861,12 @@ public class HoverController_Weapons : MonoBehaviour
             weaponSlots[slotIndex]?.Initialize();
     }
 
-    /// <summary>Forces the active slot to a specific index from external code.</summary>
-    public void SetActiveSlot(int index)
-    {
-        if (index < 0 || index >= weaponSlots.Count) return;
-        if (ActiveSlot?.definition?.type == WeaponType.Missile) ResetLockState();
-        ActiveSlotIndex = index;
-        aim?.NotifySlotChanged(ActiveSlot);
-        OnWeaponSwitched?.Invoke(ActiveSlotIndex);
-    }
+    /// <summary>
+    /// Forces the active slot to a specific index from external code. Shares
+    /// SwitchToSlot with the input-driven cycle so the outgoing weapon is shut down
+    /// identically no matter which path selected the new one.
+    /// </summary>
+    public void SetActiveSlot(int index) => SwitchToSlot(index);
 
     // =========================================================================
     // 🎨 Debug Gizmos
