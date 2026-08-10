@@ -61,7 +61,7 @@ MonoBehaviour:
     boostBlendSeconds: 0.35
     boostEnergyPerSecond: 20
     dodgeForce: 650
-    dodgeDuration: 0.16
+    dodgeDuration: 0.15
     dodgeEnergyCost: 15
     dodgeCooldown: 0.8
     enableJump: 1
@@ -69,9 +69,9 @@ MonoBehaviour:
     jumpImpulseMax: 40
     jumpMaxChargeTime: 2
     jumpGroundedLockout: 0.2
-    jumpGroundedEnergyCost: 25
-    jumpAirEnergyCost: 25
-    airJumpImpulse: 25
+    jumpGroundedEnergyCost: 20
+    jumpAirEnergyCost: 20
+    airJumpImpulse: 20
     lateralDamp: 1
     forwardDamp: 1
     driftLateralDamp: 0.3

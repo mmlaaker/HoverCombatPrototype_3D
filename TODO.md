@@ -10,6 +10,13 @@ filed below: 2.6 to 2.10 (feel), 0.6 (what that session did NOT verify), 5.9 to 
 left open). The session's performance investigation is closed and lives in `CLAUDE.md`; the short
 version is that the chop was background applications, not the game.
 
+**Updated 2026-08-09** from a camera session. Two of 2.8's three complaints are closed, 2.6 is
+partly closed, and 2.1, 2.2 and 2.9 now name the mechanism that will close them. The camera work
+itself, its measurements and four new measurement traps are in `CLAUDE.md`. Two phases of that plan
+remain: the impulse router (2.1, 2.2, 2.9) and the reticle (2.8). Note a reported "camera jitter"
+turned out to be no antialiasing rather than anything in the camera, and the resolved entry for it
+is worth reading before investigating any similar symptom.
+
 **How this relates to the other docs.** Four documents, no overlap; a fact lives in exactly one.
 
 | Question | Document |
@@ -145,6 +152,13 @@ Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts
 7 data assets, 3 prefabs, 2 ProjectSettings files, 1 scene. **Commit before the tuning pass**, so
 tuning changes are separable from structural ones in history.
 
+**Grown since, and still uncommitted as of 2026-08-09.** The camera overhaul added
+`HoverCameraController` v1.2 -> v2.4, five `Tuning/Camera*Tuning.cs` classes,
+`CameraPreviewState.cs`, `Editor/HoverCameraControllerEditor.cs`, plus scene and prefab changes
+(camera tuning values, SMAA on the Main Camera) and a Quality setting (VSync every V blank). The
+longer this waits the more the structural audit work and the tuning work are tangled in one
+history, which is the exact thing this item was created to prevent.
+
 ### 0.3 There are no tests, at all
 No asmdef, no test assembly, no EditMode or PlayMode tests anywhere in `Assets/` outside the RVP
 third-party folder. Every regression so far has been caught by hand-driven measurement, which is
@@ -255,11 +269,21 @@ This matters more than a normal missing cue because **"Energy as Tempo" is one o
 pillars.** A resource the player is meant to manage as their primary tempo tool currently gives no
 feedback when it runs out. Cheapest real improvement to feel on this list.
 
+**Planned mechanism:** the impulse router, phase 2 of the camera plan. `HoverLandingCameraImpulse`
+generalises into the owner of every camera punch, with explicit per-channel
+`CinemachineImpulseSource` references. A denied jump gets the light channel: small and slightly
+unpleasant, because it is a failure signal. Audio is deliberately out of scope, which is exactly why
+this lands on the camera.
+
 ### 2.2 EMP launch has no acknowledgement
 `HoverController_EMP.OnEmpFired` is raised once and has no subscribers. No audio, no HUD cue, no
 cooldown indicator. The projectile carries its own particle visual so the shot is visible, but EMP
 costs 70 of 100 energy -- the most expensive ability in the game, and one that empties the meter you
 need in order to disengage. A commitment that large should confirm itself.
+
+**Planned mechanism:** its own impulse channel on the router (see 2.1). Both this and the denied
+jump are wiring rather than new events -- `OnEmpFired` and `OnJumpDenied` are already raised and
+have no subscribers at all.
 
 ### 2.3 ~~Drift feel is untuned~~ — DONE 2026-08-08, with two open questions
 Tuned in the 2026-08-08 session and confirmed good by the owner. Drift is now an **aiming tool**:
@@ -296,19 +320,28 @@ Detonations currently produce no visual at all. **Blocked on art, not code.**
 Note the dependency now runs the other way round from how it used to: the definition states
 `splashRadius` and the VFX is authored to match it, not the reverse.
 
-### 2.6 Boost reads flat
-Owner note, 2026-08-08 playtest: "the boost feels somewhat mid".
+### 2.6 Boost reads flat — PARTLY ADDRESSED 2026-08-09
+Owner note, 2026-08-08 playtest: "the boost feels somewhat mid". The multiplier was never the
+problem: `boostSpeedMultiplier` and `boostAccelMultiplier` are both 1.5, a real 50% increase, so
+this was always presentation.
 
-`boostSpeedMultiplier` and `boostAccelMultiplier` are both 1.5, so it IS a real 50% increase and the
-problem is likely presentation rather than magnitude. Two things to try before touching the
-multiplier:
+Done, and not repeated here (see `CLAUDE.md`):
+- **`boostBlendSeconds` cut to 0.125** by the owner. A boost that took a third of a second to
+  arrive read as gradual rather than as a kick.
+- **FOV kick added**, scaled by `BoostLerp` so it inherits the blend and can never disagree with the
+  thrust about when boost started. Written to both vcams against their own bases, since mode
+  switching is by priority and the brain blends them. Later gated on forward motion, because it was
+  also firing while reverse-boosting.
 
-- **`boostBlendSeconds` is 0.35 in both directions.** A boost that takes a third of a second to
-  arrive reads as gradual, not as a kick. Asymmetric (fast in ~0.1s, slow out at 0.35s) keeps the
-  smooth energy cutoff the slow fade was added for. Note the same trick already paid off on air
-  control, where the equivalent blend went to 0.01.
-- **There is no FOV kick anywhere in `HoverCameraController`.** FOV scaled by `BoostLerp` is the
-  highest sensation-per-effort change available.
+**Still open: the rest of the boost language.** FOV alone is a sustained cue, and sustained cues are
+adapted to within about a second, so transients and periphery are what actually sell speed. Planned:
+pull-back on Z, an FOV overshoot that settles rather than a step, camera lag on engage, and a return
+slower than the entry. This is phase 3 of the camera plan and it is deliberately easier to judge now
+that definitive states can be frozen and inspected rather than caught in a 0.125s window.
+
+Also unaddressed and arguably the real ceiling: **perceived speed is structurally low** on this
+chassis (see 6.2). 60 m/s over a 6.88m hull is 8.7 body-lengths per second against 15-16 for a fast
+road car.
 
 If the multiplier does go up afterwards, mind two interactions: boosted top speed is already 90
 against `hardLandingMaxSpeed` 85, so severity saturates; and boosted strafe already reaches 60 in
@@ -322,18 +355,24 @@ Related: 3.6 records `WD_MachineGuns.combat.fireRate` at 0.01, which is a separa
 emitter rate. Both need to move together, and the definition is the single author since
 `ParticleWeaponCollision.ApplyDefinitionToEmitter` pushes it.
 
-### 2.8 Camera, three separate complaints
-All from the 2026-08-08 playtest, all unaddressed.
+### 2.8 Camera, three separate complaints — TWO CLOSED 2026-08-09, ONE OPEN
+From the 2026-08-08 playtest. The first two were closed by the camera overhaul; outcomes are in
+`CLAUDE.md` and not repeated here.
 
-- **Drive cam cannot pitch high enough.** It swings back to roughly level with the vehicle roof,
-  which makes it hard to see where you are going up a steep slope. This is vcam configuration, not
-  code.
-- **Strafe cam feels wrong on jumps**, too rigidly locked to the back of the vehicle. Strafe uses
-  `LockToTargetNoRoll` with no damping; vertical position damping alone would soften jumps without
-  touching aim, since the crosshair is yaw and pitch.
-- **The reticle jars when aiming on slopes.** The HUD ray hits geometry at discontinuous depths,
-  made worse because `HoverController_Aim` points weapons along actual chassis pitch while the
-  reticle projects onto world geometry, so the two disagree on a slope.
+- ~~**Drive cam cannot pitch high enough.**~~ **Closed.** It was not a vcam configuration problem.
+  Raising the camera also angled it DOWN at the roof, because height and look direction were the
+  same knob, so more pitch showed more ground and less horizon -- the opposite of the complaint.
+  Split into an orbit that preserves the authored framing plus a look point the stick pushes up and
+  forward.
+- ~~**Strafe cam feels wrong on jumps.**~~ **Closed.** Vertical-only position damping, so jumps
+  soften without touching aim.
+- **The reticle jars when aiming on slopes.** STILL OPEN. The HUD ray hits geometry at
+  discontinuous depths, and because the ray originates at the vehicle while the projection origin is
+  the camera behind and above it, a change in hit depth slides the world point along the aim line and
+  **parallax throws it across the screen**. `reticleFollowSpeed` 15 smooths the symptom without
+  removing the cause. Decided approach: keep the vehicle-origin ray so the reticle stays honest about
+  chassis pitch, and remove the screen position's dependence on hit depth. Confined to
+  `VehicleHUD.SyncReticle`; no camera coupling. This is the last phase of the camera plan.
 
 ### 2.9 Impacts are under-intense, and big drops do not cost enough control
 Owner: crashes into walls, ground and other vehicles should hit harder; a mountain drop "should lose
@@ -347,8 +386,15 @@ which is why a badly angled high-speed landing snaps flat instead of tipping you
 that already scale `liftFactor`. Reuses existing machinery rather than adding a system, and it makes
 a bad landing angle actually cost something.
 
-For wall and vehicle crashes there is no shake at all, but `CinemachineImpulseSource` is already on
-the vehicle for landings, so routing collision impulses into the same source is cheap.
+For wall and vehicle crashes there is no shake at all. Planned as part of the impulse router (see
+2.1), with two details established while planning it. **One impulse source cannot serve every
+channel:** shape and duration are authored on the source, so a heavy landing thud and a light denial
+tick need separate sources, and the existing `[RequireComponent]` plus `GetComponent` pattern picks
+whichever it finds first. **And collisions must filter out floor-like contacts** using the same
+surface-angle idea Foundation already applies for `unstickMaxSurfaceAngle`, or every landing
+double-fires against the existing `OnHardLanding` path and the punch the owner likes regresses.
+There is currently no `OnCollisionEnter` on the vehicle at all; Foundation only has
+`OnCollisionStay` for contact tracking.
 
 **Measured context that changes the framing:** no jump can trigger a hard landing at all
 (full charge lands at 43.4 against `hardLandingMinSpeed` 58); the system fires only on mountain

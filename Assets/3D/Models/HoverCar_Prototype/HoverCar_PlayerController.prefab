@@ -9977,7 +9977,7 @@ ParticleSystem:
     startSpeed:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 150
+      scalar: 300
       minScalar: 5
       maxCurve:
         serializedVersion: 2
@@ -10678,7 +10678,7 @@ ParticleSystem:
     rateOverTime:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 8
+      scalar: 12
       minScalar: 10
       maxCurve:
         serializedVersion: 2
@@ -19587,8 +19587,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2893549940407336569}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.16883378, y: 0, z: 0, w: 0.9856446}
-  m_LocalPosition: {x: 0, y: 4.5, z: -8.5}
+  m_LocalRotation: {x: 0.18910752, y: 0.0000000327188, z: -0.000000006301064, w: 0.9819564}
+  m_LocalPosition: {x: 0, y: 4.5, z: -7.4999995}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -19655,7 +19655,7 @@ MonoBehaviour:
     AngularDampingMode: 0
     RotationDamping: {x: 1, y: 1, z: 1}
     QuaternionDamping: 1
-  FollowOffset: {x: 0, y: 4.5, z: -8.5}
+  FollowOffset: {x: 0, y: 4.5, z: -7.4999995}
 --- !u!114 &6940715604228495666
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -24642,7 +24642,7 @@ MonoBehaviour:
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
   m_RenderPostProcessing: 1
-  m_Antialiasing: 0
+  m_Antialiasing: 2
   m_AntialiasingQuality: 2
   m_StopNaN: 0
   m_Dithering: 0
@@ -44759,7 +44759,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 0}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 50
+    FieldOfView: 55
     OrthographicSize: 5
     NearClipPlane: 0.3
     FarClipPlane: 1000
@@ -44792,9 +44792,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineFollow
   TrackerSettings:
     BindingMode: 2
-    PositionDamping: {x: 1, y: 1, z: 1}
+    PositionDamping: {x: 0, y: 0.25, z: 0}
     AngularDampingMode: 0
-    RotationDamping: {x: 1, y: 1, z: 1}
+    RotationDamping: {x: 0, y: 0, z: 0}
     QuaternionDamping: 1
   FollowOffset: {x: 0, y: 3.5, z: -6}
 --- !u!114 &3541528524906933447
@@ -49748,17 +49748,39 @@ MonoBehaviour:
   vehicleTarget: {fileID: 5927693998371741120}
   inputProvider: {fileID: 5761321178091812356}
   propulsion: {fileID: 4964355425596500860}
-  pitchSensitivity: 0.8
-  minPitch: 10
-  maxPitch: 45
-  neutralPitch: 25
-  pitchRecenterSpeed: 2
-  shoulderShiftAmount: 1.8
-  shoulderLookAheadAmount: 2.5
-  shoulderShiftLerpSpeed: 8
-  maxStableTilt: 60
-  headingSyncSpeed: 12
-  strafeFovReduction: 5
+  framing:
+    driveFollowOffset: {x: 0, y: 4.5, z: -7.5}
+    driveTargetOffset: {x: 0, y: 1.5, z: 0}
+    baseFov: 65
+    pitchSensitivity: 0.8
+    pitchDownRange: 18
+    pitchUpRange: 25
+    pitchRecenterSpeed: 2
+    lookDeadzone: 0.05
+    turnBleedSuppression: 0.8
+    minFrameMargin: 2
+    pitchUpDistanceGain: 0
+    shoulderShiftAmount: 1.8
+    shoulderLookAheadAmount: 2.5
+    shoulderShiftLerpSpeed: 8
+  look:
+    speedLookAheadMax: 6
+    speedLookAheadReference: 60
+    pitchLookLift: 2.5
+    pitchLookAhead: 6
+    fadeLookAheadWhenInverted: 1
+  boost:
+    fovIncrease: 5
+    forwardGateSpeed: 2
+  strafe:
+    followOffset: {x: 0, y: 3.5, z: -6}
+    fovReduction: 10
+    verticalDamping: 0.25
+  stabilization:
+    maxStableTilt: 60
+    headingSyncSpeed: 12
+  previewInEditMode: 1
+  previewState: 0
 --- !u!1001 &471204068556280344
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -49785,11 +49807,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 150
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 8
+      value: 12
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
@@ -49801,11 +49823,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 150
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 8
+      value: 12
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
