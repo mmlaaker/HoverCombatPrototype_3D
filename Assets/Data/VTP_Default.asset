@@ -59,7 +59,7 @@ MonoBehaviour:
     boostAccelMultiplier: 1.5
     boostSpeedMultiplier: 1.5
     boostBlendSeconds: 0.35
-    boostEnergyPerSecond: 20
+    boostEnergyPerSecond: 0
     dodgeForce: 650
     dodgeDuration: 0.15
     dodgeEnergyCost: 15
@@ -85,7 +85,7 @@ MonoBehaviour:
     passiveBankAngle: 5
     bankLerpSpeed: 8
     enableAirControl: 1
-    airControlBlendSeconds: 0.01
+    airControlBlendSeconds: 0.1
     enableStrafe: 1
     strafeTopSpeed: 40
     strafeAccel: 35

@@ -3,8 +3,76 @@ using Unity.Cinemachine;
 using Unity.Cinemachine.TargetTracking;
 
 /// <summary>
-/// HoverCameraController v2.4
+/// HoverCameraController v2.8
 /// ------------------------------------------------
+/// v2.8: TRAVEL HEADING IS LATCHED, NOT RECOMPUTED.
+///
+///   v2.7 skipped its bound entirely whenever horizontal speed fell under
+///   travelHeadingMinSpeed, then 8 m/s. That guard was added for a real reason,
+///   since a near-stationary craft has no well-defined direction of travel, and
+///   it disabled the feature in precisely the case the feature existed for: a
+///   flip bleeds off horizontal speed, so the craft finishes one plummeting
+///   almost straight down. Measured at a real landing, 5 m/s of horizontal
+///   against 60 of descent. The bound switched itself off and divergence went
+///   back to accumulating, which the owner reported as a stutter "on landing
+///   after flips" while mid-air flips felt fixed.
+///
+///   Latching beats lowering the floor because ANY floor has that failure mode,
+///   and because the latched value stays correct through it: with no horizontal
+///   force acting, the heading a falling craft had a moment ago is still the
+///   heading it has. Refreshed OUTSIDE the air-control gate so engaging air
+///   control mid-flight cannot adopt a stale heading from the previous jump.
+///
+///   Verified by injection both ways: at 5 m/s horizontal the proxy held 120
+///   degrees off travel for an entire fall and the bound never fired; with the
+///   latch it unwinds to exactly 40.000 and holds. Confirmed in play across
+///   matched sessions: air-control frames breaching the 40 degree bound fell
+///   from 9.9% to 0.5%, worst divergence 113 -> 50.6 degrees.
+///
+/// v2.7: HEADING PROXY BOUNDED AGAINST THE DIRECTION OF TRAVEL.
+///
+///   The fix that actually worked. v2.6 capped how FAST the heading could
+///   unwind and did not touch how FAR it could drift first, so it converted a
+///   snap into 0.6s of sustained pan: proxy yaw sat frozen at exactly 93.29 for
+///   a whole stunt while the vehicle's swung through ~180 degrees. No catch-up
+///   rate makes 126 degrees of accumulated error feel good.
+///
+///   Bounding against TRAVEL rather than the nose is what makes a bound safe.
+///   Chassis yaw is exactly the untrustworthy signal mid-stunt: a flip sweeps
+///   the nose through vertical, which swings the real heading AND makes the
+///   euler decomposition jump, measured at up to 140 degrees in a single frame.
+///   Travel heading has neither problem and is very nearly constant on a
+///   ballistic arc, since gravity acts only on the vertical component. So the
+///   stunt keeps its still frame and the chassis realigns with travel on
+///   landing, leaving little to recentre.
+///
+///   This also explains why a FLIP provokes the stutter harder than a ROLL, an
+///   observation the owner made by feel before any instrument could confirm it:
+///   a roll spins about the travel axis and barely changes heading, so the
+///   bucket stays empty; a flip fills it.
+///
+///   Gated on air control, because bounding against travel during ordinary
+///   driving would fight drift, where pointing the nose off the racing line is
+///   the entire manoeuvre.
+///
+/// v2.6: RATE CEILING ON THE HEADING PROXY.
+///
+///   Kept, because it is what guarantees no single frame can snap whatever the
+///   branch or the travel bound do, and it is applied ONCE to the total move
+///   rather than to the branch step for exactly that reason. But recorded
+///   honestly: on its own it did NOT fix the reported stutter. Both converge
+///   branches are proportional to an error with no upper bound, so releasing
+///   air control spent whatever had accrued at a rate proportional to it, up to
+///   an implied 1393 deg/s. The ceiling halved the whip (mean peak 88.4 -> 46.2
+///   deg/s) and the owner could still barely feel the difference.
+///
+///   The general lesson is worth more than the fix: a measurable improvement in
+///   the metric you chose is not evidence you chose the right metric.
+///
+/// v2.5: BOOST FRAMING. The first contributor with MEMORY. See CLAUDE.md's
+///   module table for the full entry; it landed without a header note here and
+///   is listed for continuity rather than re-described.
+///
 /// v2.4: THREE FIXES FROM A TUNING SESSION, ONE OF THEM STRUCTURAL.
 ///
 ///   • FRAMING GUARD. "Keep the craft in frame" turned out not to be a tuning
@@ -484,6 +552,15 @@ public class HoverCameraController : MonoBehaviour
 
     // Heading stabilization proxy — the drive cam's actual Follow target.
     private Transform _headingProxy;
+
+    /// <summary>
+    /// Last well-conditioned horizontal travel heading, and whether one has been seen.
+    /// Latched rather than recomputed per frame so the travel bound keeps working while
+    /// the craft is falling too steeply for its horizontal velocity to define a
+    /// direction. See UpdateHeadingProxy for why that case is the important one.
+    /// </summary>
+    private float _lastTravelYaw;
+    private bool  _haveTravelYaw;
     private float     _headingYaw;    // degrees, world yaw of the proxy
     private Rigidbody _vehicleRb;     // yaw-rate source while tilted, and speed source
 
@@ -1484,13 +1561,15 @@ public class HoverCameraController : MonoBehaviour
 
         bool uprightEnough = vehicleTarget.up.y >= MinStableUpY;
 
+        float step;
+
         if (uprightEnough)
         {
             // Exponential converge: error is ~0 in normal driving so tracking is
             // effectively instant; after a flip lands with a changed heading it
             // catches up smoothly instead of snapping.
             float t = 1f - Mathf.Exp(-stabilization.headingSyncSpeed * trackAuthority * Time.deltaTime);
-            _headingYaw = Mathf.LerpAngle(_headingYaw, vehicleTarget.eulerAngles.y, t);
+            step = Mathf.DeltaAngle(_headingYaw, Mathf.LerpAngle(_headingYaw, vehicleTarget.eulerAngles.y, t));
         }
         else if (_vehicleRb != null)
         {
@@ -1498,9 +1577,85 @@ public class HoverCameraController : MonoBehaviour
             // A pure pitch flip or barrel roll has ~zero world-Y angular
             // velocity, so the heading holds; yaw during non-air-control tumbles
             // (EMP hits) still tracks.
-            _headingYaw += _vehicleRb.angularVelocity.y * Mathf.Rad2Deg * trackAuthority * Time.deltaTime;
+            step = _vehicleRb.angularVelocity.y * Mathf.Rad2Deg * trackAuthority * Time.deltaTime;
         }
-        // No Rigidbody on the target: heading simply holds while tilted.
+        else
+        {
+            // No Rigidbody on the target: heading simply holds while tilted.
+            step = 0f;
+        }
+
+        float desired = _headingYaw + step;
+
+        // TRAVEL BOUND. The rate ceiling below caps how fast the heading may unwind,
+        // and on its own that was not the fix: measured, it converted a snap into 0.6s
+        // of sustained pan, because `trackAuthority` freezes the heading absolutely and
+        // nothing bounded how far it could drift before the unwinding started. Divergence
+        // reached 126 degrees, and no catch-up rate makes 126 degrees feel good.
+        //
+        // Bounding against the DIRECTION OF TRAVEL rather than the nose is what makes a
+        // bound safe here. The chassis yaw is exactly the signal that is untrustworthy
+        // mid-stunt: a flip sweeps the nose through vertical, which both swings the real
+        // heading and makes the euler decomposition jump (measured at up to 140 degrees
+        // in a single frame, always airborne with air control held). Travel heading has
+        // neither problem, and on a ballistic arc it is very nearly constant because
+        // gravity acts only on the vertical component. So the stunt still gets its still
+        // frame, and there is little left to recentre on landing because the chassis
+        // realigns with travel anyway.
+        //
+        // Gated on air control because that is the only state that freezes tracking, and
+        // because bounding against travel during ordinary driving would fight drift,
+        // where pointing the nose off the racing line is the entire manoeuvre.
+        // The travel heading is LATCHED, and refreshed whether or not the bound is
+        // currently applying. The first version recomputed it inside the air-control
+        // gate and simply skipped the bound whenever horizontal speed fell under the
+        // threshold, which turned out to disable it in precisely the case it was built
+        // for. A flip bleeds off horizontal speed, so the craft finishes one plummeting
+        // almost straight down: measured at a real landing, 5 m/s of horizontal against
+        // 60 of descent, which sat under the old 8 m/s floor. The bound switched itself
+        // off and the divergence went back to accumulating freely, which is why the
+        // owner reported the remaining stutter as happening "on landing after flips".
+        // Verified by injection: at 5 m/s horizontal the proxy held 120 degrees off
+        // travel for an entire fall and the bound never fired, while the same test at
+        // 25 m/s pulled it to the limit immediately.
+        //
+        // Latching is better than merely lowering the floor because ANY floor has this
+        // failure mode, and because the latched value stays correct through it: with no
+        // horizontal force acting, the heading a falling craft had a moment ago is still
+        // the heading it has. Refreshed outside the air-control gate so engaging air
+        // control mid-flight cannot adopt a stale heading from the previous jump.
+        if (_vehicleRb != null)
+        {
+            Vector3 flatVel = _vehicleRb.linearVelocity;
+            flatVel.y = 0f;
+
+            float minSpeed = stabilization.travelHeadingMinSpeed;
+            if (flatVel.sqrMagnitude >= minSpeed * minSpeed)
+            {
+                _lastTravelYaw = Mathf.Atan2(flatVel.x, flatVel.z) * Mathf.Rad2Deg;
+                _haveTravelYaw = true;
+            }
+        }
+
+        float airWeight = propulsion != null ? propulsion.AirControlWeight : 0f;
+
+        if (airWeight > 0f && _haveTravelYaw)
+        {
+            float limit = stabilization.headingMaxTravelDivergence;
+            float off   = Mathf.DeltaAngle(_lastTravelYaw, desired);
+
+            if (off > limit || off < -limit)
+                desired = _lastTravelYaw + Mathf.Clamp(off, -limit, limit);
+        }
+
+        // RATE CEILING, applied ONCE to the whole move rather than to the branch step.
+        // Both branches are proportional to an error or to a raw angular velocity with no
+        // upper bound of their own, and the travel bound above can also jump if the
+        // velocity direction swings. Saturating the total is what guarantees none of the
+        // three can produce a snap, whatever the others do. Small errors still settle
+        // instantly; large ones take longer rather than arriving faster.
+        float maxStep = stabilization.headingCatchUpMaxRate * Time.deltaTime;
+        _headingYaw += Mathf.Clamp(Mathf.DeltaAngle(_headingYaw, desired), -maxStep, maxStep);
 
         _headingProxy.rotation = Quaternion.Euler(0f, _headingYaw, 0f);
     }

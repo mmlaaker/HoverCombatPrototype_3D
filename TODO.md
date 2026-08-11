@@ -24,7 +24,38 @@ question and the numbers only prove the punch arrives, not that it reads right. 
 measurements and four new measurement traps are in `CLAUDE.md`. Two phases of the camera plan remain:
 boost framing (2.6, 6.2) and the reticle (2.8). Note a reported "camera jitter" turned out to be no
 antialiasing rather than anything in the camera, and the resolved entry for it is worth reading
-before investigating any similar symptom.
+before investigating any similar symptom. **Qualified 2026-08-11: do not read that as "it is never
+the camera".** A second jitter report the same month WAS the camera. The two split on when they
+appear -- the antialiasing one in a straight line at steady speed, the camera one after a stunt on
+release or landing -- and `CLAUDE.md` now carries the separator alongside both entries.
+
+**Updated 2026-08-11** from a movement/camera tuning session that started with a reported jitter and
+"slight pulling". `MotionTrace` was built for it (see `CLAUDE.md`) because `FrameSpikeWatch` measures
+frame DURATION and cannot see either a sub-12ms pacing wobble or a directional artifact. **The
+headline is that frame delivery is not the problem**: p50 3.31ms, p90 3.71, p99 4.14 over 42151
+frames, and outside collision ticks the craft is drawn within 2-3mm of where the physics has it. The
+cause of the felt stutter was the camera heading proxy whipping on air-control release, recorded in
+`CLAUDE.md` as `HoverCameraController` v2.6 then v2.7. Four new measurement traps (15-18) came out of
+it, three of them about the instrument lying rather than the game. What that session did NOT close is
+filed below as 0.7, 0.8 and 0.9.
+
+**Worth reading before the next camera change:** v2.6 capped the catch-up RATE, measurably halved the
+whip, and the owner could still barely feel it, because it converted a snap into 0.6s of pan without
+touching the accumulation that caused it. v2.7 bounded the accumulation and is the real fix. The
+lesson generalises: **a measurable improvement in the metric you chose is not evidence you chose the
+right metric.** Both are still in place and both are needed, but only the second addresses the cause.
+v2.7 was judged by feel and reported "noticeably better", with a residual stutter **on landing after
+flips**. That observation was correct and found a hole v2.7 had opened: its speed gate disabled the
+bound during steep post-flip descents, which is the one case it existed for. v2.8 latches the travel
+heading instead. **v2.8 is now confirmed in real play**, not only by injection: across matched
+sessions the share of air-control frames breaching the 40 degree bound fell from **9.9% to 0.5%** and
+the worst divergence from **113 to 50.6 degrees**, the residual being the rate ceiling catching up,
+which is what it is for. The owner's remaining F8 markers on landing resolved to one ordinary frame
+hitch, one window with no signal in any channel, and one large uncommanded slide that is handling
+rather than camera (see 0.10).
+
+The owner's two feel-reports have now each identified a real mechanism ahead of the data (boost/air
+authority, then flips over rolls, then landing specifically). Worth weighting accordingly.
 
 **How this relates to the other docs.** Four documents, no overlap; a fact lives in exactly one.
 
@@ -130,6 +161,13 @@ arc still cannot be graphed against each other.
 Either extend it with a per-`FixedUpdate` tuning mode, or accept that the jump arc is now measured
 well enough by the impulse table in `CLAUDE.md` and narrow this item to boost and drift.
 
+**Partly overtaken 2026-08-11 by `MotionTrace`**, which does sample per `FixedUpdate` and does record
+signed forward/lateral/vertical velocity, yaw rate and support. What it still does NOT record is the
+live forward/lateral CAPS or which force branch acted, which is the half of this item that would let
+the boost ramp and drift bleed be graphed against each other. Propulsion already captures both for
+its gizmo in `_dbgFwdCap` / `_dbgLatCap` / `_dbgDrive` / `_dbgDrag` / `_dbgBleed`, so closing this is
+now mostly a matter of exposing those rather than computing anything new.
+
 ### 0.6 Consequences of the 2026-08-08 tuning session
 Two of the six original entries were verified in a play-mode pass the same day and are recorded
 here with their numbers. **What remains is four items, and every one of them is a feel judgement or
@@ -140,7 +178,7 @@ Verified 2026-08-08 in a play-mode pass:
 
 | Claim | Result |
 |---|---|
-| Six vehicles at once, the real performance question | **PASS, comfortably.** 1 vehicle 3.48ms mean / 4.08 p95; six vehicles **4.33ms mean / 5.13 p95 / 6.98 max**. That is +24% for 6x the vehicles, so roughly **0.17ms of marginal cost each** against a mostly fixed frame. Twelve would still sit near 5ms. **Caveat: AI driving only, no combat, because `AIHoverInput` never sets `FirePressed` (see 1.6). Particle collision at scale is still unmeasured** |
+| Six vehicles at once, the real performance question | **RE-MEASURED 2026-08-11 with `MotionTrace`, and the verdict needs qualifying: the MEAN was never the story.** Within one session, 1 vehicle then 5 AI spawned: mean 3.35 -> 4.51ms (+35%) and p50 3.27 -> 3.92, which reproduces the original finding. But **p90 3.71 -> 7.35 (+98%) and p99 5.06 -> 10.47 (+107%)**, and frames over 8ms go from **0.1% to 7.5%, a factor of 75.** The 2026-08-08 pass reported mean/p95/max only and so read as +24%; p95 genuinely does move little, and the degradation lives further out in the tail. That matters here more than elsewhere because this project's felt problem has consistently been consistency, not throughput. Against frame budgets at six vehicles: **60Hz misses 0.05%, 90Hz misses 0.57%, 144Hz misses 12.0%, 240Hz misses 32.7%.** Physics is NOT the constraint: the solver never fell behind (max 2 catch-up steps, 0.12% of frames above one). Allocation and GC are not either (2.8-5.6 MB/s, one gen-0 collection per 30s window, against ~5 MB/s of editor idle). The cost is main-thread per-frame work, and particles scale with it: 6 systems / 32 particles at one vehicle, **35 systems / 238 particles at six**, all before a shot is fired. Original 2026-08-08 figures retained: **PASS, comfortably.** 1 vehicle 3.48ms mean / 4.08 p95; six vehicles **4.33ms mean / 5.13 p95 / 6.98 max**. That is +24% for 6x the vehicles, so roughly **0.17ms of marginal cost each** against a mostly fixed frame. Twelve would still sit near 5ms. **Caveat: AI driving only, no combat, because `AIHoverInput` never sets `FirePressed` (see 1.6). Particle collision at scale is still unmeasured** |
 | The support fade, which is the mechanism behind the ledge claim | **PASS, exactly as designed.** Pinned at measured heights above rest: 0.00m support 1.000, 0.25m 0.667, 0.50m 0.333, **0.75m 0.000**. `IsHoverGrounded` stays true until between 2.40m and 2.60m, confirming the 2.5m sensor band it used to be gated on. So at 60 m/s the "still acting grounded" distance is ~12m rather than ~21m, which is the claim, within a metre |
 
 Still genuinely open:
@@ -155,6 +193,88 @@ Still genuinely open:
 The rare 400-550ms stalls also remain unexplained. `FrameSpikeWatch` now prints a CPU-throttling
 verdict on stop, which will settle whether they are thermal, and that costs nothing but one normal
 playtest.
+
+### 0.7 The periodic frame hitch is unexplained
+A very regular doublet, a ~9ms frame followed 0.03-0.08s later by an ~18-20ms one, recurred at 25.2,
+27.0 and 27.5 second gaps through the 2026-08-11 session, at unrelated speeds and locations.
+Regularity that clean means a process on a timer rather than anything the craft does. Adobe
+`CoreSync` / `AdobeCollabSync` were sampled and ruled out (trap 18). `FrameSpikeWatch` also reported
+the CPU benchmark drifting +35.5% worst-case in the same session, so thermal or power state is still
+live as a contributor.
+
+**The decisive test is a build, and it is cheap.** Editor play mode is not a performance measurement
+and the editor plus the MCP bridge are both untested suspects. `MotionTrace` runs unchanged in a
+player. If the doublet vanishes in a build, this closes as tooling and stops being worth attention.
+
+### 0.8 ~~Floor collisions, unattributed~~ — CLOSED 2026-08-11, they are hard landings
+`MotionTrace` v1.1 added contact names and v1.3 added world horizontal speed, and together they
+settle it. The 27 contacts in the 2026-08-11 session are **hard landings from big jumps, not the
+craft catching on geometry.** They are against `flatarea`, `loop`, `bridgearea`, `8trackterrain`,
+`mountainroad` and `mountain5`, essentially all with contact `normal.y` of 1.00, at impulses of
+44k-91k Ns. At 1000 kg an 90k Ns impulse is ~90 m/s of arrested velocity, which matches the measured
+descent rates: the craft was coming down at **60 to 95 m/s**. Exactly two contacts are anything else:
+one `walls` graze at `normal.y` 0.00 and 11 m/s, and a `mountain4` crash at 85-89 degrees of tilt
+that shows up as a flip recovery.
+
+**So the convex-hull theory was wrong and is dropped.** The suspicion was reasonable (the hull on
+`car.fbx` does carry a simplification warning) and the data simply does not support it: a bulging
+hull would catch on walls and edges, and there are none. What the numbers actually describe is a
+craft being flown off very large jumps and landing hard, which is the game working.
+
+Nothing here needs fixing. Retained only because "26 severe velocity discontinuities" was alarming
+before it was attributable, and the next person to see that number should not re-investigate it.
+
+<details><summary>Superseded original entry</summary>
+
+### 0.8 Nineteen floor collisions in one session, unattributed
+`MotionTrace` v1.1 recorded 19 contacts in the 2026-08-11 session and **all 19 were floor-normal
+(normal.y > 0.7), zero wall-ish**, hardest 89894 Ns against `mountain5`. The earlier session showed
+26 velocity discontinuities past 1000 m/s^2, confirmed against `rb.linearVelocity` rather than
+inferred, including one at t=42.82 where speed fell 83.19 -> 60.67 m/s in a single 10ms tick with
+lateral velocity jumping 6.31 -> 32.51 **while fully grounded at support 1.00**.
+
+**The open question is whether these are ordinary hard landings or the craft catching on terrain it
+should be hovering over.** A hover craft riding ~4.7m up should not be making floor contact often,
+and an all-floor split with no walls is not what aggressive racing into scenery would look like.
+Suspect worth checking first: the Body collider is a convex `MeshCollider` off `Assets/RVP/Models/
+Vehicles/car.fbx`, and the console baseline carries a convex-hull warning on that mesh. A hull
+simplified past 255 polys can bulge beyond the visual mesh, which would make the craft catch on
+geometry it visually clears. **Not investigated.** The data to settle it is already being captured.
+
+</details>
+
+### 0.9 Boost framing: measured, not judged
+Boost roughly triples apparent longitudinal motion. `rel_along`, the rate the craft moves toward or
+away from the camera in frame, runs mean 1.01 m/s with boost off and **2.88 with boost on**, peaking
+at 155.3 during air+boost. This is the v2.5 boost framing doing exactly what it was authored to do,
+not a defect, and it was ruled out as the cause of the air-control whip (the two worst whips both had
+`boost` exactly 0).
+
+**But nobody has judged whether 2.88 is the right number.** It is a feel question and the knobs are
+`CameraBoostTuning.zPullBack`, `zLagOnEngage` and `fovOvershoot`. Worth deciding deliberately now
+that the whip no longer masks it, since the owner's own hypothesis blamed boost and that instinct may
+be tracking this rather than nothing.
+
+### 0.10 Hard steering plus brake at speed produces a 78 degree slide. Decide if that is wanted
+Found while chasing a landing marker that turned out not to be a camera fault at all. Measured
+2026-08-11 at t=88.47: the craft lands at **84 m/s**, the player holds **full steering lock for 0.6s**
+while pulling **full reverse** (which doubles as the brake), and the craft ends up travelling **78
+degrees off its own nose**, lateral velocity building to **-56.7 m/s**, still doing 43 m/s.
+
+**`drift` was 0.00 for the entire manoeuvre.** So this is the drift pose without the drift button,
+reached by steering and braking alone, and it costs none of what drift costs. Compare `HoverController_Propulsion`
+v1.8, where drift was deliberately given an equilibrium (`maxDriftAngle` fading yaw authority as the
+slide widens, `driftLateralDamp` closing it) precisely so the angle could not run away. Ordinary
+cornering has no such limiter, and at these speeds it apparently does not need the button.
+
+**This is a design question, not a bug**, and it is the owner's call. It matters because drift's whole
+justification in v1.8 is that a held slide is the only way to aim off the line of travel at full
+speed, bought with acceleration. If braking into a hard turn reaches a wider angle for free, drift is
+competing with something cheaper. The camera behaves correctly throughout (it tracks the nose, which
+is what grounded framing is supposed to do), so nothing here argues for a camera change.
+
+Knobs if it should be narrowed: `lateralDamp`, and whether `maxDriftAngle`'s equilibrium should apply
+to ungated slides too.
 
 ### 0.2 Nothing is committed
 Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts, 1 new script,

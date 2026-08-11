@@ -10941,6 +10941,9 @@ MonoBehaviour:
   stabilization:
     maxStableTilt: 60
     headingSyncSpeed: 12
+    headingCatchUpMaxRate: 180
+    headingMaxTravelDivergence: 40
+    travelHeadingMinSpeed: 8
   previewInEditMode: 1
   previewState: 0
 --- !u!1001 &471204068556280344
