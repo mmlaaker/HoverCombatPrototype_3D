@@ -49772,6 +49772,11 @@ MonoBehaviour:
   boost:
     fovIncrease: 5
     forwardGateSpeed: 2
+    fovOvershoot: 6
+    zPullBack: 1
+    zLagOnEngage: 1.5
+    releaseSpeed: 2.5
+    settleSpeed: 3.5
   strafe:
     followOffset: {x: 0, y: 3.5, z: -6}
     fovReduction: 10
@@ -49975,7 +49980,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 150
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar

@@ -26,6 +26,14 @@ using UnityEngine;
 /// trick and drew them by hand; the attributes rendered anyway and every heading appeared twice.
 /// The only rule to respect is that each section's heading lives on whichever field is drawn
 /// FIRST in that group, so reordering a draw block means moving the [Header] with it.
+///
+/// **ADDING A FIELD TO A Weapon*Tuning CLASS? IT WILL NOT APPEAR UNTIL YOU ADD IT HERE.** Every
+/// property is looked up and drawn by name, so a new field serializes, holds its value and stays
+/// completely invisible, with no error to say why. `combat.recoilVelocity` was added and lost this
+/// way once already. The camera controller's inspector avoids the whole class of problem by
+/// iterating generically, but that is not available here: this editor exists precisely to hide
+/// sections a given WeaponType and ProjectileMode do not read, which requires naming them.
+/// So the cost of the conditional display is that the field list is a maintenance burden.
 /// </summary>
 [CustomEditor(typeof(WeaponDefinition))]
 [CanEditMultipleObjects]
@@ -34,7 +42,7 @@ public class WeaponDefinitionEditor : Editor
     // Identity
     private SerializedProperty type, displayName, projectileMode, projectilePrefab;
     // Sections
-    private SerializedProperty damage, maxAmmo, startingAmmo, fireRate;
+    private SerializedProperty damage, maxAmmo, startingAmmo, fireRate, recoilVelocity;
     private SerializedProperty impactForce, splashImpactForce, destabilizeFraction;
     private SerializedProperty speed, lifetime, armingDelay;
     private SerializedProperty turnRate, homingDelay, flareOffset, flareDuration, flareDirection;
@@ -53,10 +61,11 @@ public class WeaponDefinitionEditor : Editor
         projectileMode   = Find("projectileMode");
         projectilePrefab = Find("projectilePrefab");
 
-        damage       = Find("combat.damage");
-        maxAmmo      = Find("combat.maxAmmo");
-        startingAmmo = Find("combat.startingAmmo");
-        fireRate     = Find("combat.fireRate");
+        damage         = Find("combat.damage");
+        maxAmmo        = Find("combat.maxAmmo");
+        startingAmmo   = Find("combat.startingAmmo");
+        fireRate       = Find("combat.fireRate");
+        recoilVelocity = Find("combat.recoilVelocity");
 
         impactForce         = Find("impact.impactForce");
         splashImpactForce   = Find("impact.splashImpactForce");
@@ -124,6 +133,9 @@ public class WeaponDefinitionEditor : Editor
         if (maxAmmo.hasMultipleDifferentValues || maxAmmo.intValue > 0)
             EditorGUILayout.PropertyField(startingAmmo);
         EditorGUILayout.PropertyField(fireRate);
+        // Always drawn: OnWeaponFired is raised by the projectile path AND the particle path, so
+        // either kind of weapon can opt into camera recoil.
+        EditorGUILayout.PropertyField(recoilVelocity);
 
         EditorGUILayout.PropertyField(impactForce);
         // Splash only exists on the projectile path; the particle path has no blast.
@@ -229,6 +241,15 @@ public class WeaponDefinitionEditor : Editor
         if (!maxAmmo.hasMultipleDifferentValues && !startingAmmo.hasMultipleDifferentValues
             && maxAmmo.intValue > 0 && startingAmmo.intValue > maxAmmo.intValue)
             Warn(ref any, "startingAmmo exceeds maxAmmo and will be clamped.", MessageType.Warning);
+
+        // Camera recoil lands once per shot, so its right value is a function of fire rate. The
+        // same number that thumps on a missile becomes a permanent tremor on anything automatic.
+        if (!recoilVelocity.hasMultipleDifferentValues && !fireRate.hasMultipleDifferentValues
+            && recoilVelocity.floatValue > 0.2f && fireRate.floatValue > 10f)
+            Warn(ref any, $"Recoil Velocity {recoilVelocity.floatValue:F2} at {fireRate.floatValue:F0} "
+                        + "shots per second is a kick every few frames, which reads as a continuous "
+                        + "tremor rather than as impact. Keep it under 0.2 above 10/sec, or leave it "
+                        + "at 0 and sell the weapon through muzzle VFX.", MessageType.Warning);
 
         // The destabilizeFraction tooltip's own guidance: per-bullet torque accumulates every frame.
         if (!mixedType && !mixedMode && weaponType == WeaponType.Automatic

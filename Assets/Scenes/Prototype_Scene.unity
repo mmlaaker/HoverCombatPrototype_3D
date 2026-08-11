@@ -1670,11 +1670,15 @@ PrefabInstance:
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 150
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
       value: 100
+      objectReference: {fileID: 0}
+    - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: InitialModule.startSpeed.minMaxState
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 1254805148386242258, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: debugSettings
@@ -2465,6 +2469,10 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 1102521362177438387, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1102521362177438387, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: muzzlePoint
       value: 
       objectReference: {fileID: 1504178126}
@@ -2472,6 +2480,18 @@ PrefabInstance:
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: empVelocity
+      value: 0.4
+      objectReference: {fileID: 0}
+    - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: weaponRecoilScale
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: collisionMaxVelocity
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: 10
@@ -2505,6 +2525,10 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2032324910021574087, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
@@ -2533,20 +2557,124 @@ PrefabInstance:
       value: -7.4999995
       objectReference: {fileID: 0}
     - target: {fileID: 3437989404244087800, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3437989404244087800, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.ImpulseShape
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.ImpulseDuration
+      value: 0.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.size
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[1].time
+      value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].time
+      value: 0.4
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[3].time
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[0].value
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[1].value
+      value: -0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].value
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].inSlope
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[0].inWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[1].inWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].inWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].outSlope
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[3].inWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[0].outWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[1].outWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].outWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[3].outWeight
+      value: 0.33333334
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[0].tangentMode
+      value: 136
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[1].tangentMode
+      value: 136
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[2].tangentMode
+      value: 136
+      objectReference: {fileID: 0}
+    - target: {fileID: 3502904329053294049, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.CustomImpulseShape.m_Curve.Array.data[3].tangentMode
+      value: 136
+      objectReference: {fileID: 0}
     - target: {fileID: 3667334880870159510, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 3767705498381450651, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ImpulseDefinition.ImpulseShape
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 3864817075837935177, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: previewState
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: boost.fovIncrease
-      value: 10
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: look.pitchLookLift
@@ -2582,11 +2710,15 @@ PrefabInstance:
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 150
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
       value: 100
+      objectReference: {fileID: 0}
+    - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: InitialModule.startSpeed.minMaxState
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 5268664050975428085, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.w
@@ -2616,6 +2748,10 @@ PrefabInstance:
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 5714179822526051494, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.00000005960453
@@ -2630,19 +2766,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.9819561
+      value: 0.9819593
       objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.1891089
+      value: 0.18909293
       objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0.0000000842937
       objectReference: {fileID: 0}
     - target: {fileID: 6135998104294940864, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.000000010536712
+      value: -0.000000010536713
       objectReference: {fileID: 0}
     - target: {fileID: 6437614130089442384, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: debugSettings
@@ -2673,6 +2809,10 @@ PrefabInstance:
       value: 0.0000000029223584
       objectReference: {fileID: 0}
     - target: {fileID: 7048512796822282092, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_Enabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7048512796822282092, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
@@ -2696,6 +2836,10 @@ PrefabInstance:
       propertyPath: debugSettings
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
+    - target: {fileID: 8043566517561028817, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_Name
       value: HoverCar_Prototype
@@ -2738,19 +2882,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.9819561
+      value: 0.9819593
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.1891089
+      value: 0.18909293
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0.0000000842937
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.000000010536712
+      value: -0.000000010536713
       objectReference: {fileID: 0}
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar

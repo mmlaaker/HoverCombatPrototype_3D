@@ -21,8 +21,9 @@ MonoBehaviour:
     maxAmmo: 0
     startingAmmo: 0
     fireRate: 1.5
+    recoilVelocity: 0
   impact:
-    impactForce: 1800
+    impactForce: 2000
     splashImpactForce: 0
     destabilizeFraction: 1
     selfImpactScale: 0.5
@@ -69,7 +70,7 @@ MonoBehaviour:
   emitter:
     emissionRate: 0
     burstCount: 30
-    startSpeed: 150
+    startSpeed: 300
     startSpeedMin: 100
     startLifetime: 0.33
     coneAngle: 15

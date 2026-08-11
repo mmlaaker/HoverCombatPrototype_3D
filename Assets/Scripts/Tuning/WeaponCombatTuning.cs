@@ -33,4 +33,19 @@ public class WeaponCombatTuning
              "up will not make the gun look faster.")]
     [Min(0.01f)]
     public float fireRate = 10f;
+
+    [Tooltip("Camera recoil kick per shot, thrown backward. 0 is off, and 0 is the default, so " +
+             "recoil is OPT IN per weapon rather than something every gun inherits.\n\n" +
+             "Read by HoverCameraImpulseRouter on OnWeaponFired, which fires from both the " +
+             "projectile and the ParticleSystem paths, so this works for either kind of weapon. " +
+             "For scale: the hard landing punch is 2 and the EMP launch is 1.2.\n\n" +
+             "Pick this against FIRE RATE, not against how big the gun looks. The kick lands once " +
+             "per shot, so the same value that reads as a thump on a rocket becomes a permanent " +
+             "tremor on anything automatic. Rough guide: a single-shot weapon can take 0.5 to 1.5, " +
+             "anything over about 10 shots per second wants 0.2 or less, and above 20 it is " +
+             "probably better left at 0 and sold through the muzzle VFX instead.\n\n" +
+             "Only strength is per weapon. The SHAPE of the kick lives on the Impulse_Light source " +
+             "on the vehicle and is shared by every weapon.")]
+    [Min(0f)]
+    public float recoilVelocity = 0f;
 }

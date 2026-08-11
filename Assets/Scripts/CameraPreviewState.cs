@@ -28,11 +28,29 @@ public enum CameraPreviewState
     FullThrottle,
 
     /// <summary>
-    /// Flat out with boost engaged. Note the speed term is identical to
-    /// FullThrottle: speedLookAheadReference equals top speed and the term
-    /// clamps at 1, so boost adds FOV here and nothing else.
+    /// Flat out with boost engaged and fully SETTLED: the engage transient has
+    /// decayed and only the sustained pull-back and lens change remain. This is
+    /// what a long boost looks like, and the state to judge for comfort.
+    ///
+    /// Note the speed term is identical to FullThrottle: speedLookAheadReference
+    /// equals top speed and the term clamps at 1, so boost differs only in the
+    /// terms it owns.
     /// </summary>
     Boost,
+
+    /// <summary>
+    /// The PEAK of the engage transient, roughly a tenth of a second after you
+    /// commit. The widest lens and the furthest pull-back the camera ever
+    /// reaches.
+    ///
+    /// A real frame rather than an average of one, which is the reason it earns
+    /// a state: it exists for a fraction of a second while driving, so it is the
+    /// single hardest thing in the boost to judge by eye, and it is also the
+    /// frame doing most of the work. Judge Boost for comfort and this one for
+    /// impact. If the craft only leaves frame here and not in Boost, the
+    /// overshoot is too large rather than the framing being wrong.
+    /// </summary>
+    BoostPeak,
 
     /// <summary>
     /// Climbing at speed: stick full up AND flat out. This is the original

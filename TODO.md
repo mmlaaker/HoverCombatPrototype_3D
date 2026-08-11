@@ -10,12 +10,21 @@ filed below: 2.6 to 2.10 (feel), 0.6 (what that session did NOT verify), 5.9 to 
 left open). The session's performance investigation is closed and lives in `CLAUDE.md`; the short
 version is that the chop was background applications, not the game.
 
-**Updated 2026-08-09** from a camera session. Two of 2.8's three complaints are closed, 2.6 is
-partly closed, and 2.1, 2.2 and 2.9 now name the mechanism that will close them. The camera work
-itself, its measurements and four new measurement traps are in `CLAUDE.md`. Two phases of that plan
-remain: the impulse router (2.1, 2.2, 2.9) and the reticle (2.8). Note a reported "camera jitter"
-turned out to be no antialiasing rather than anything in the camera, and the resolved entry for it
-is worth reading before investigating any similar symptom.
+> **STANDING PRIORITY, set by the owner 2026-08-10: a movement-focused playtest with friends, as soon
+> as possible.** Everything that serves how the craft moves and how the camera frames it comes first;
+> weapons come after. This is why per-weapon recoil character (2.7) is written up and deliberately
+> unbuilt, and why the weapon items in Tier 3 are not being worked despite being cheap. Weapons are
+> placeholder, so tuning feel around them is tuning against a moving target. **Reassess this line
+> once the playtest has happened, not before.**
+
+**Updated 2026-08-09** from a camera session, then again the same day when the impulse router landed.
+Two of 2.8's three complaints are closed and 2.6 is partly closed. **2.1, 2.2 and the shake half of
+2.9 are now wired and measured, but none of the three has been JUDGED** -- every one is a feel
+question and the numbers only prove the punch arrives, not that it reads right. The camera work, its
+measurements and four new measurement traps are in `CLAUDE.md`. Two phases of the camera plan remain:
+boost framing (2.6, 6.2) and the reticle (2.8). Note a reported "camera jitter" turned out to be no
+antialiasing rather than anything in the camera, and the resolved entry for it is worth reading
+before investigating any similar symptom.
 
 **How this relates to the other docs.** Four documents, no overlap; a fact lives in exactly one.
 
@@ -256,11 +265,11 @@ Also deferred inside `AIHoverInput`: strafe, drift, jump, shield, EMP. All hardc
 
 ## Tier 2 — Feel and feedback
 
-### 2.1 A denied jump is completely silent
+### 2.1 ~~A denied jump is completely silent~~ — WIRED 2026-08-09, feel unjudged
 `OnJumpDenied(bool)` is raised in both `FireGroundedJump` and `FireAirJump` (the bool distinguishes
-grounded from air) and has **no subscribers**. The player presses jump, nothing happens, and there
-is no way to tell "out of energy" from "input didn't register" or "still in the 0.2s post-land
-lockout".
+grounded from air) and used to have **no subscribers**. The player pressed jump, nothing happened,
+and there was no way to tell "out of energy" from "input didn't register" or "still in the 0.2s
+post-land lockout".
 
 `jumpGroundedEnergyCost` is 25 against a 100 pool, so denial arrives on the fourth consecutive jump.
 This is a common state, not an edge case.
@@ -269,21 +278,37 @@ This matters more than a normal missing cue because **"Energy as Tempo" is one o
 pillars.** A resource the player is meant to manage as their primary tempo tool currently gives no
 feedback when it runs out. Cheapest real improvement to feel on this list.
 
-**Planned mechanism:** the impulse router, phase 2 of the camera plan. `HoverLandingCameraImpulse`
-generalises into the owner of every camera punch, with explicit per-channel
-`CinemachineImpulseSource` references. A denied jump gets the light channel: small and slightly
-unpleasant, because it is a failure signal. Audio is deliberately out of scope, which is exactly why
-this lands on the camera.
+**Shipped mechanism:** `HoverCameraImpulseRouter` (phase 2 of the camera plan) subscribes it to the
+`Impulse_JumpDenied` channel: `deniedJumpGroundedVelocity` 0.35 and `deniedJumpAirVelocity` 0.25, thrown down the
+chassis axis so a denial while banked still reads as failing to rise. The air value is smaller
+deliberately, because the token is not consumed and the failure is not final. Audio is out of scope,
+which is exactly why this landed on the camera.
 
-### 2.2 EMP launch has no acknowledgement
-`HoverController_EMP.OnEmpFired` is raised once and has no subscribers. No audio, no HUD cue, no
-cooldown indicator. The projectile carries its own particle visual so the shot is visible, but EMP
-costs 70 of 100 energy -- the most expensive ability in the game, and one that empties the meter you
-need in order to disengage. A commitment that large should confirm itself.
+**Still open: whether it reads as "out of energy" rather than as a glitch.** Owner's first pass on
+2026-08-10: "just feels bad". Unlike the crash and EMP, this one was NOT the direction bug (a denial
+punches down, and world-down and screen-down are nearly the same vector), so it is a genuine shape
+problem. Changed from Recoil over 0.12s to **Bump over 0.18s**: 0.12s is seven frames and reads as a
+frame hitch, and Bump returns to where it started, so it lands as a lurch rather than a one-way
+shove. **Unjudged.** If it still reads wrong the next lever is direction rather than duration: a
+denial is a failure to LAUNCH, so a brief up-twitch that falls back may be more legible than a
+downward sag. Judge it by draining under 25 and pressing jump, not with the F11 hotkey, since the
+hotkey fires without the empty meter that gives it meaning.
 
-**Planned mechanism:** its own impulse channel on the router (see 2.1). Both this and the denied
-jump are wiring rather than new events -- `OnEmpFired` and `OnJumpDenied` are already raised and
-have no subscribers at all.
+### 2.2 ~~EMP launch has no acknowledgement~~ — WIRED 2026-08-09, feel unjudged
+`HoverController_EMP.OnEmpFired` is raised once and used to have no subscribers. No audio, no HUD
+cue, no cooldown indicator. The projectile carries its own particle visual so the shot is visible,
+but EMP costs 70 of 100 energy -- the most expensive ability in the game, and one that empties the
+meter you need in order to disengage. A commitment that large should confirm itself.
+
+**Shipped mechanism:** its own impulse channel on the router, `Impulse_EMP`, a Recoil over 0.22s so
+the launch reads as a one-way shove. `empVelocity` 1.2, thrown backward along the chassis.
+
+Owner's first pass on 2026-08-10 was "feels bad", and **most of that was the screen-space direction
+bug** (see `CLAUDE.md` trap 11): the craft's world heading was being applied as a screen direction,
+so the recoil went sideways instead of backward. Now measured at screen fwd -0.93, up -0.37, right
+0.00, which is a clean pull away from the craft. Duration also cut from 0.35s, which was a wallow.
+**Needs re-judging after the fix.** Whether 1.2 is the right weight for the game's largest single
+energy commitment is still open; it is currently a little over half the landing punch.
 
 ### 2.3 ~~Drift feel is untuned~~ — DONE 2026-08-08, with two open questions
 Tuned in the 2026-08-08 session and confirmed good by the owner. Drift is now an **aiming tool**:
@@ -320,24 +345,41 @@ Detonations currently produce no visual at all. **Blocked on art, not code.**
 Note the dependency now runs the other way round from how it used to: the definition states
 `splashRadius` and the VFX is authored to match it, not the reverse.
 
-### 2.6 Boost reads flat — PARTLY ADDRESSED 2026-08-09
+### 2.6 Boost reads flat — BUILT 2026-08-10, UNJUDGED
 Owner note, 2026-08-08 playtest: "the boost feels somewhat mid". The multiplier was never the
 problem: `boostSpeedMultiplier` and `boostAccelMultiplier` are both 1.5, a real 50% increase, so
 this was always presentation.
 
 Done, and not repeated here (see `CLAUDE.md`):
-- **`boostBlendSeconds` cut to 0.125** by the owner. A boost that took a third of a second to
-  arrive read as gradual rather than as a kick.
+- ~~**`boostBlendSeconds` cut to 0.125** by the owner.~~ **THIS DID NOT STICK. The live value in
+  `VTP_Default.asset` is 0.35**, measured 2026-08-10, which is the "took a third of a second to
+  arrive and read as gradual rather than as a kick" case this item opened with. Either it was
+  reverted or the edit was never saved. **Still worth doing, and it is now worth more than it was:**
+  the camera's engage transient is measured as the gap between the boost level and a slower copy of
+  itself, so a snappier ramp opens a wider gap and sharpens the camera kick for free, with no camera
+  tuning at all. At 0.35 the surge peaks at 0.53 of its available range; the other half is being
+  left on the table by the thrust ramp rather than by the camera.
 - **FOV kick added**, scaled by `BoostLerp` so it inherits the blend and can never disagree with the
   thrust about when boost started. Written to both vcams against their own bases, since mode
   switching is by priority and the brain blends them. Later gated on forward motion, because it was
   also firing while reverse-boosting.
 
-**Still open: the rest of the boost language.** FOV alone is a sustained cue, and sustained cues are
-adapted to within about a second, so transients and periphery are what actually sell speed. Planned:
-pull-back on Z, an FOV overshoot that settles rather than a step, camera lag on engage, and a return
-slower than the entry. This is phase 3 of the camera plan and it is deliberately easier to judge now
-that definitive states can be frozen and inspected rather than caught in a 0.125s window.
+**The rest of the boost language is BUILT 2026-08-10, and unjudged.** All four planned terms shipped
+as phase 3 of the camera plan: a sustained Z pull-back, an FOV overshoot that settles rather than a
+step, extra camera lag at the moment of engaging, and a return slower than the entry. Mechanism and
+measurements are in `CLAUDE.md`; the short version is that the camera now keeps its own boost
+envelope instead of reading `BoostLerp` directly, because an overshoot and an asymmetric release
+cannot be written as a function of a value that only says how far into boost you currently are.
+
+Measured live at 40 m/s: FOV 65 to a peak of 73.2 at 0.37s, settling to 70.0 over about a second;
+follow Z from -8.70 to -10.49 and settling to -9.70; release taking roughly 1.7s against a 0.37s
+entry. **Judge it on how boost reads at the MOMENT OF ENGAGING**, which is entirely camera. Absolute
+sense of speed is not, and is partly blocked on arena props (6.2).
+
+Two things to watch while judging. **The reverse gate reads FORWARD speed only**, so boosting
+sideways in strafe produces no lens change at all; that may be right, since the gate exists to
+suppress the reverse case, but nobody has judged it. And **`boostBlendSeconds` at 0.35 is currently
+capping the kick** (see above).
 
 Also unaddressed and arguably the real ceiling: **perceived speed is structurally low** on this
 chassis (see 6.2). 60 m/s over a 6.88m hull is 8.7 body-lengths per second against 15-16 for a fast
@@ -354,6 +396,49 @@ Live emission is **8/sec per Machine Gun barrel and 20/sec on the Chain Gun**.
 Related: 3.6 records `WD_MachineGuns.combat.fireRate` at 0.01, which is a separate value from the
 emitter rate. Both need to move together, and the definition is the single author since
 `ParticleWeaponCollision.ApplyDefinitionToEmitter` pushes it.
+
+**Camera recoil is now wired, per weapon and opt-in.** `WeaponDefinition.combat.recoilVelocity`,
+0 on all six assets, read by `HoverCameraImpulseRouter` on `OnWeaponFired` (raised by both the
+projectile and the ParticleSystem paths, so either kind of weapon can opt in). The router keeps only
+a master switch and a global multiplier.
+
+**Do not tune recoil before this item and 3.6 are fixed.** Recoil lands once per shot, so its right
+value is a function of fire rate, and both automatics are currently misconfigured in opposite
+directions: the Chain Gun at 20/sec would blur any kick into a tremor, and the Machine Guns at 0.01
+would fire one kick every 100 seconds. Any number picked now gets invalidated when the rates move.
+The single-shot weapons (`WD_Missile`, `WD_HardLockMissile`, `WD_SoftHomingMissile` and `WD_Shotgun`,
+all at 1.5/sec) are tunable today and are the sensible place to start.
+
+#### Deferred: per-weapon recoil CHARACTER, not just strength
+Found by playtest on 2026-08-10 and **deliberately not built**, because the weapons are placeholder
+and shaping camera feel around them now would be tuning against a moving target. Recorded so the
+reasoning is not re-derived.
+
+Only strength is per weapon today. Shape and duration live on the single shared
+`Impulse_WeaponRecoil` source, so every gun that opts in shares one character. The owner found that
+insufficient immediately: **the shotgun wants a short snap and a missile wants a longer envelope with
+a wind-up dip**, which is a difference in kind rather than in size.
+
+**Do not infer the split from `projectileMode`.** It was considered because it happens to separate
+the current six correctly, and rejected: mode describes how a weapon spawns damage, not how it
+should feel. A railgun would be Instantiated and want a sharp crack; a plasma stream would be
+ParticleSystem and want a sustained push; a grenade lob would be Instantiated and want almost
+nothing. Worse, the failure would be silent, and the only way to author around it would be to change
+the projectile mode, which changes gameplay.
+
+**And do NOT solve it by writing shape and duration onto the shared source before each shot.** That
+is the obvious design and it is unsafe: an impulse reads its shape and duration off the live source
+component for its whole life, so a still-playing impulse adopts whatever the next shot wrote. Full
+mechanism in `CLAUDE.md` measurement trap 14. The consequence for this item is simply that
+**different characters need different sources.**
+
+**The shape it should take when it is worth building:** a `recoilCharacter` enum next to
+`recoilVelocity`, named for FEEL rather than for camera objects (`Snap`, `Swell`), with one source
+per character on the camera and the router picking by name. The weapon says what kind of event it
+is; the camera owns how that is expressed, so the weapon definition never learns a camera concept.
+Start with exactly the two that were empirically found. `recoilVelocity` 0 stays the off switch, so
+the enum only ever picks character. Cost per character is one GameObject, one serialized field and
+one enum value, all visible, so do not create them speculatively.
 
 ### 2.8 Camera, three separate complaints — TWO CLOSED 2026-08-09, ONE OPEN
 From the 2026-08-08 playtest. The first two were closed by the camera overhaul; outcomes are in
@@ -386,15 +471,32 @@ which is why a badly angled high-speed landing snaps flat instead of tipping you
 that already scale `liftFactor`. Reuses existing machinery rather than adding a system, and it makes
 a bad landing angle actually cost something.
 
-For wall and vehicle crashes there is no shake at all. Planned as part of the impulse router (see
-2.1), with two details established while planning it. **One impulse source cannot serve every
-channel:** shape and duration are authored on the source, so a heavy landing thud and a light denial
-tick need separate sources, and the existing `[RequireComponent]` plus `GetComponent` pattern picks
-whichever it finds first. **And collisions must filter out floor-like contacts** using the same
-surface-angle idea Foundation already applies for `unstickMaxSurfaceAngle`, or every landing
-double-fires against the existing `OnHardLanding` path and the punch the owner likes regresses.
-There is currently no `OnCollisionEnter` on the vehicle at all; Foundation only has
-`OnCollisionStay` for contact tracking.
+**The crash-shake half is DONE 2026-08-09.** `VehicleCollisionRelay` adds the vehicle's first
+`OnCollisionEnter` and hands it to the router, which fires the crash channel at
+`collisionMaxVelocity` 2.5 scaled between
+`collisionMinSpeed` 8 and `collisionMaxSpeed` 35 m/s. Verified with a 45 m/s head-on into a temporary
+wall: one shake, impact measured at 27.1 m/s, severity 0.52, and no double-fire on a separate 70 m/s
+drop that produced exactly one landing punch and zero collision callbacks. The mass normalisation,
+the 0.6 approach-to-impact ratio behind the 35, and the finding that hard landings never generate a
+collision callback at all are in `CLAUDE.md`. **Untested by anyone: vehicle-on-vehicle.** The AI
+`HoverCar` is on the AIVehicle layer with its own mesh colliders and should route identically, but
+that has not been driven.
+
+**Also open: TAKING A WEAPON HIT still produces no camera feedback at all.** Raised by the owner on
+2026-08-10, and the answer is no, the crash path does not cover it. Crash shake hangs off
+`OnCollisionEnter`, which needs a physical contact, and weapon damage does not arrive that way:
+rockets detonate from `ProjectileSweep` before touching, and particle weapons never had a collision
+to begin with. So being shot is currently as silent as the denied jump was. The hook already exists
+and has no camera subscriber: `VehicleHealth.OnDamaged(currentHealth, maxHealth)`. Note the
+signature carries HP rather than damage dealt, so the router would need to difference it to get a
+magnitude, or the event needs a third parameter. **Undecided, on purpose:** a shake on every hit is
+a real design choice, since it costs aim stability at exactly the moment the player most needs it,
+and some games deliberately refuse it. Worth deciding before wiring.
+
+**Still open here: the physics half, which is what the complaint was actually about.** Shake tells
+you that you crashed; it does not make a bad landing angle cost anything. That is the
+`levelingTorqueStrength` change above, and it is deliberately still unmade because it lives in
+`HoverController_Foundation`, which is marked do-not-modify-without-justification.
 
 **Measured context that changes the framing:** no jump can trigger a hard landing at all
 (full charge lands at 43.4 against `hardLandingMinSpeed` 58); the system fires only on mountain

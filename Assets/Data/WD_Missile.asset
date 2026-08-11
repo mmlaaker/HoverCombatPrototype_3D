@@ -21,6 +21,7 @@ MonoBehaviour:
     maxAmmo: 0
     startingAmmo: 0
     fireRate: 1.5
+    recoilVelocity: 0
   impact:
     impactForce: 100000
     splashImpactForce: 50000

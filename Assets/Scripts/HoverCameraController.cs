@@ -316,7 +316,13 @@ public class HoverCameraController : MonoBehaviour
         public float elevation;         // degrees above horizontal, absolute
         public float forwardSpeed;      // m/s along chassis forward
         public float driftLerp;         // 0..1
-        public float boostLerp;         // 0..1
+
+        // Boost arrives as TWO numbers rather than as Propulsion.BoostLerp, because
+        // BoostLerp only ever says "how far into boost am I right now" and two of
+        // the four boost effects need memory. See IntegrateBoostEnvelope.
+        public float boostHold;         // 0..1, sustained. Rises with the thrust, falls slower
+        public float boostSurge;        // 0..1, the engage transient. Spikes then self-cancels
+
         public float airControlWeight;  // 0..1
         public float uprightness;       // vehicle up.y, 1 level, 0 on its side or inverted
         public float shoulderOffset;    // metres, lateral; settled value, not mid-ease
@@ -426,6 +432,13 @@ public class HoverCameraController : MonoBehaviour
 
     // Smoothed shoulder shift offset (local X).
     private float _shoulderOffset;
+
+    // Boost envelope. _boostHold follows BoostLerp up and lags it down;
+    // _boostSettle is a slow copy of _boostHold, and the gap between them is the
+    // engage transient. See IntegrateBoostEnvelope for why BoostLerp alone
+    // cannot express an overshoot or an asymmetric release.
+    private float _boostHold;
+    private float _boostSettle;
 
     // Tracks previous strafe state for transition detection
     private bool _wasStrafingLastFrame;
@@ -821,6 +834,11 @@ public class HoverCameraController : MonoBehaviour
             IntegrateShoulderShift();
         }
 
+        // Outside the strafe branch on purpose: boost applies in both modes, and
+        // an envelope that only advanced in drive would freeze mid-transient the
+        // moment you raised the crosshair.
+        IntegrateBoostEnvelope();
+
         // ── Solve and commit ──────────────────────────────────────────────
         FramingInputs inputs = GatherLiveInputs(strafing);
 
@@ -843,7 +861,13 @@ public class HoverCameraController : MonoBehaviour
                                  ? Vector3.Dot(_vehicleRb.linearVelocity, vehicleTarget.forward)
                                  : 0f,
             driftLerp        = propulsion != null ? propulsion.DriftLerp        : 0f,
-            boostLerp        = propulsion != null ? propulsion.BoostLerp        : 0f,
+
+            // Read off the integrated envelope, not off BoostLerp. This method is
+            // the only place the world is read, and the envelope has already been
+            // advanced for this frame by IntegrateBoostEnvelope.
+            boostHold        = _boostHold,
+            boostSurge       = Mathf.Max(0f, _boostHold - _boostSettle),
+
             airControlWeight = propulsion != null ? propulsion.AirControlWeight : 0f,
             uprightness      = vehicleTarget != null ? vehicleTarget.up.y : 1f,
             shoulderOffset   = _shoulderOffset,
@@ -894,9 +918,22 @@ public class HoverCameraController : MonoBehaviour
                 inp.forwardSpeed = fullFast;
                 break;
 
+            // Settled: the transient has decayed and only the sustained terms
+            // remain. What a long boost actually looks like.
             case CameraPreviewState.Boost:
                 inp.forwardSpeed = fullFast;
-                inp.boostLerp    = 1f;
+                inp.boostHold    = 1f;
+                break;
+
+            // The peak of the engage transient. Surge at 1 is the theoretical
+            // maximum rather than a number the live envelope is guaranteed to
+            // reach, since the gap the surge measures depends on how snappy
+            // boostBlendSeconds is. So this is the worst case for framing, which
+            // is exactly what a preview state is for.
+            case CameraPreviewState.BoostPeak:
+                inp.forwardSpeed = fullFast;
+                inp.boostHold    = 1f;
+                inp.boostSurge   = 1f;
                 break;
 
             case CameraPreviewState.ClimbAtSpeed:
@@ -923,9 +960,21 @@ public class HoverCameraController : MonoBehaviour
                 inp.strafing = true;
                 break;
 
+            // Needs a forward speed, and the lack of one was a real bug rather
+            // than an omission of detail: every boost term is multiplied by the
+            // reverse gate, which reads forward speed, so at rest the gate is 0
+            // and this state rendered as plain Strafe. It had done so silently
+            // since the gate was added in v2.4.
+            //
+            // Worth knowing while judging it: the gate asks for FORWARD speed,
+            // and strafe can travel at full speed in any direction. Boosting
+            // sideways while aiming therefore produces no lens change at all.
+            // That may be right, since the gate exists to suppress the reverse
+            // case, but nobody has judged it.
             case CameraPreviewState.StrafeBoost:
-                inp.strafing  = true;
-                inp.boostLerp = 1f;
+                inp.strafing     = true;
+                inp.forwardSpeed = fullFast;
+                inp.boostHold    = 1f;
                 break;
 
             case CameraPreviewState.Inverted:
@@ -958,7 +1007,8 @@ public class HoverCameraController : MonoBehaviour
         ContributePitchOrbit(ref s, inp);
         ContributeLookAhead(ref s, inp);
         ContributeShoulderShift(ref s, inp);
-        ContributeBoostFraming(ref s, inp);
+        ContributeBoostLens(ref s, inp);
+        ContributeBoostPullback(ref s, inp);
 
         // LAST, and it has to be. It measures the finished frame, so it needs
         // the final camera position from the orbit and the final FOV from boost.
@@ -974,6 +1024,10 @@ public class HoverCameraController : MonoBehaviour
     /// is the authored pull-in and its composer is left entirely alone, because
     /// the crosshair is yaw and pitch and anything that moves the look point
     /// moves the player's aim. Only FOV is contributed to.
+    ///
+    /// Note that boost contributes its LENS here but not its pull-back, for the
+    /// same reason. The camera falling back during a boost is a drive cue; doing
+    /// it while the player is aiming would move the rig under the crosshair.
     /// </summary>
     private FramingSolution SolveStrafeFraming(in FramingInputs inp)
     {
@@ -985,7 +1039,7 @@ public class HoverCameraController : MonoBehaviour
             guardScale   = 1f              // nothing tips the strafe aim, so nothing to guard
         };
 
-        ContributeBoostFraming(ref s, inp);
+        ContributeBoostLens(ref s, inp);
 
         return s;
     }
@@ -1080,25 +1134,66 @@ public class HoverCameraController : MonoBehaviour
     }
 
     /// <summary>
-    /// Widens FOV in proportion to how far into boost the vehicle is. Driven by
-    /// Propulsion.BoostLerp, so it inherits boostBlendSeconds from the tuning
-    /// profile and can never disagree with the thrust about when boost started.
+    /// Gate that kills every boost term while reversing.
+    ///
+    /// Boost engages in reverse too (Propulsion v1.2 made that work deliberately)
+    /// and the camera was reacting to it. A wider lens and a camera falling back
+    /// are both forward-rush cues; there is no rush to sell while backing up, so
+    /// it read as the camera acting at random.
+    ///
+    /// Gates on DIRECTION rather than scaling by speed. Scaling would delay every
+    /// boost cue at onset, and they work precisely because they are transients
+    /// arriving on the same curve as the thrust.
     /// </summary>
-    private void ContributeBoostFraming(ref FramingSolution s, in FramingInputs inp)
-    {
-        // Gated on FORWARD motion. Boost engages in reverse too (Propulsion v1.2
-        // made that work deliberately), and this was widening the lens for it.
-        // A wider lens is a forward-rush cue; there is no rush to sell while
-        // backing up, so it read as the camera acting at random.
-        //
-        // Gates on direction rather than scaling by speed, because scaling would
-        // delay the kick at boost onset and the kick works precisely because it
-        // is a transient on the same curve as the thrust.
-        float forwardGate = boost.forwardGateSpeed > 0f
+    private float ForwardGate(in FramingInputs inp) =>
+        boost.forwardGateSpeed > 0f
             ? Mathf.Clamp01(inp.forwardSpeed / boost.forwardGateSpeed)
             : 1f;
 
-        s.fov += boost.fovIncrease * inp.boostLerp * forwardGate;
+    /// <summary>
+    /// The lens half of boost, in BOTH modes: a sustained widening plus an
+    /// overshoot that decays while boost is still held.
+    ///
+    /// The overshoot is the part that does the work. A wider lens held steady is
+    /// a sustained cue and the eye adapts to it within about a second, after
+    /// which it is just an odd lens. The spike is what the player actually reads
+    /// as speed, and fovIncrease is only what is left behind afterwards.
+    /// </summary>
+    private void ContributeBoostLens(ref FramingSolution s, in FramingInputs inp)
+    {
+        float gate = ForwardGate(inp);
+
+        s.fov += boost.fovIncrease  * inp.boostHold  * gate;
+        s.fov += boost.fovOvershoot * inp.boostSurge * gate;
+    }
+
+    /// <summary>
+    /// The rig half of boost, DRIVE ONLY: the camera falls back while boost is
+    /// held, and falls back further still at the moment of engaging.
+    ///
+    /// Not applied to strafe, and that is the same rule the rest of the strafe
+    /// rig follows. The strafe crosshair is yaw and pitch, so anything that moves
+    /// the rig moves the player's aim. Strafe gets the lens and nothing else.
+    ///
+    /// Applied along Z rather than by extending the orbit radius, deliberately.
+    /// Straight back makes the view further out AND slightly flatter, which shows
+    /// more horizon and more ground streaming past the edges; booming along the
+    /// radius would hold the elevation angle and only add distance. Both read as
+    /// "further away", only one reads as "faster".
+    ///
+    /// Runs after ContributePitchOrbit, which rebuilds Y and Z from the orbit, so
+    /// this genuinely lands on the finished position rather than being overwritten.
+    /// The framing guard runs after both and sees the result, and since pulling
+    /// back can only ever HELP the craft fit, it can only make the guard less
+    /// likely to engage.
+    /// </summary>
+    private void ContributeBoostPullback(ref FramingSolution s, in FramingInputs inp)
+    {
+        float gate = ForwardGate(inp);
+
+        // Negative Z is behind the craft, so pulling back is subtraction.
+        s.followOffset.z -= boost.zPullBack    * inp.boostHold  * gate;
+        s.followOffset.z -= boost.zLagOnEngage * inp.boostSurge * gate;
     }
 
     /// <summary>
@@ -1240,6 +1335,57 @@ public class HoverCameraController : MonoBehaviour
 
         _shoulderOffset = Mathf.Lerp(_shoulderOffset, target,
                                      framing.shoulderShiftLerpSpeed * Time.deltaTime);
+    }
+
+    /// <summary>
+    /// Advances the boost envelope: the sustained level and the engage transient.
+    ///
+    /// WHY THIS EXISTS. Propulsion.BoostLerp is a pure statement of "how far into
+    /// boost am I right now". It rises, holds at 1, falls. Two of the four boost
+    /// effects cannot be written as a function of it at all:
+    ///
+    ///   an FOV overshoot has to exceed the sustained value and come back DOWN
+    ///   while boost is still held, and BoostLerp is flat at 1 by then;
+    ///
+    ///   a release slower than the entry has to know which direction it is
+    ///   travelling, and a single 0..1 number does not carry that.
+    ///
+    /// So the camera keeps its own memory. Two values, and the transient is the
+    /// gap between them:
+    ///
+    ///   _boostHold    tracks BoostLerp EXACTLY on the way up, so the camera and
+    ///                 the thrust still cannot disagree about when boost started,
+    ///                 which was the whole reason the old FOV kick scaled by
+    ///                 BoostLerp. On the way down it lags, at releaseSpeed.
+    ///
+    ///   _boostSettle  a slow copy of _boostHold in both directions.
+    ///
+    ///   surge = hold - settle
+    ///
+    /// Measuring the transient as a value minus a slower copy of itself is worth
+    /// the trick: it needs no timers and no edge detection, and it CANCELS ITSELF.
+    /// Hold boost and settle catches up, the gap closes to zero, and the spike is
+    /// over without anything having to remember to end it. A decaying counter
+    /// would need a reset path for re-engaging mid-decay; this has none to get
+    /// wrong.
+    ///
+    /// It also scales with how snappy the thrust ramp is, for free: a shorter
+    /// boostBlendSeconds opens a wider gap and produces a bigger camera kick.
+    /// That is the correct coupling. The camera should be more emphatic about a
+    /// boost that arrives more suddenly.
+    /// </summary>
+    private void IntegrateBoostEnvelope()
+    {
+        float target = propulsion != null ? propulsion.BoostLerp : 0f;
+
+        // Asymmetric by construction. Rising is not smoothed at all, because
+        // BoostLerp is already the authored ramp and smoothing it again would
+        // add lag the tuning profile did not ask for.
+        _boostHold = target >= _boostHold
+            ? target
+            : Mathf.Lerp(_boostHold, target, boost.releaseSpeed * Time.deltaTime);
+
+        _boostSettle = Mathf.Lerp(_boostSettle, _boostHold, boost.settleSpeed * Time.deltaTime);
     }
 
     // ── Framing: commit ───────────────────────────────────────────────────
