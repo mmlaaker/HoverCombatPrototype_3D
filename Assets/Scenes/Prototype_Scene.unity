@@ -2481,12 +2481,24 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: empSource
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: empVelocity
       value: 0.4
       objectReference: {fileID: 0}
     - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: jumpDeniedSource
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: weaponRecoilScale
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: weaponRecoilSource
+      value: 
       objectReference: {fileID: 0}
     - target: {fileID: 1173753388233969048, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: collisionMaxVelocity
@@ -2673,8 +2685,20 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: boost.zPullBack
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: boost.fovIncrease
-      value: 5
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: boost.releaseSpeed
+      value: 3.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: boost.zLagOnEngage
+      value: 2.5
       objectReference: {fileID: 0}
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: look.pitchLookLift

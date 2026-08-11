@@ -351,14 +351,15 @@ problem: `boostSpeedMultiplier` and `boostAccelMultiplier` are both 1.5, a real 
 this was always presentation.
 
 Done, and not repeated here (see `CLAUDE.md`):
-- ~~**`boostBlendSeconds` cut to 0.125** by the owner.~~ **THIS DID NOT STICK. The live value in
-  `VTP_Default.asset` is 0.35**, measured 2026-08-10, which is the "took a third of a second to
-  arrive and read as gradual rather than as a kick" case this item opened with. Either it was
-  reverted or the edit was never saved. **Still worth doing, and it is now worth more than it was:**
-  the camera's engage transient is measured as the gap between the boost level and a slower copy of
-  itself, so a snappier ramp opens a wider gap and sharpens the camera kick for free, with no camera
-  tuning at all. At 0.35 the surge peaks at 0.53 of its available range; the other half is being
-  left on the table by the thrust ramp rather than by the camera.
+- ~~**`boostBlendSeconds` cut to 0.125** by the owner.~~ That did not stick: the live value was
+  found at **0.35** on 2026-08-10, which is the "took a third of a second to arrive and read as
+  gradual rather than as a kick" case this item opened with. **Now set to 0.15.** It is the
+  highest-leverage knob in the whole boost system for two reasons: time-to-peak on the camera
+  transient tracks the thrust ramp almost exactly, and the transient is measured as the gap between
+  the boost level and a slower copy of itself, so a snappier ramp opens a wider gap. The cut took
+  peak surge from 0.56 to 0.77 with no camera tuning at all. **This is the one boost change that
+  touches gameplay rather than presentation** (it is how fast thrust arrives), so if the car now
+  feels twitchy to commit, revert THIS before touching any camera value.
 - **FOV kick added**, scaled by `BoostLerp` so it inherits the blend and can never disagree with the
   thrust about when boost started. Written to both vcams against their own bases, since mode
   switching is by priority and the brain blends them. Later gated on forward motion, because it was
@@ -371,10 +372,19 @@ measurements are in `CLAUDE.md`; the short version is that the camera now keeps 
 envelope instead of reading `BoostLerp` directly, because an overshoot and an asymmetric release
 cannot be written as a function of a value that only says how far into boost you currently are.
 
-Measured live at 40 m/s: FOV 65 to a peak of 73.2 at 0.37s, settling to 70.0 over about a second;
-follow Z from -8.70 to -10.49 and settling to -9.70; release taking roughly 1.7s against a 0.37s
-entry. **Judge it on how boost reads at the MOMENT OF ENGAGING**, which is entirely camera. Absolute
-sense of speed is not, and is partly blocked on arena props (6.2).
+**Tuned 2026-08-10 against the pillars**, as a starting point for the owner rather than a final
+answer. Pillar 1 makes boost a weapon, so the commit should feel like firing one; pillar 2 expects
+the player to be FIGHTING while boosting, so the held state has to stay readable. Hence a big
+transient over a modest sustained: `fovIncrease` 4 with `fovOvershoot` 12, `zPullBack` 0.7 with
+`zLagOnEngage` 2.5, `releaseSpeed` 3.5, `settleSpeed` 3.5.
+
+Measured live at 40 m/s: FOV 65 to a peak of **78.2 about 0.16s after engaging**, settling to
+**69.0**; camera pulling back **2.58m** at the peak and settling to **0.71m**; release to 5% in
+**0.61s**, roughly four times the entry. The transient is down to a fifth of its peak within half a
+second, which is the pillar-2 requirement: dramatic to commit, fightable again almost immediately.
+
+**Judge it on how boost reads at the MOMENT OF ENGAGING**, which is entirely camera. Absolute sense
+of speed is not, and is partly blocked on arena props (6.2).
 
 Two things to watch while judging. **The reverse gate reads FORWARD speed only**, so boosting
 sideways in strafe produces no lens change at all; that may be right, since the gate exists to

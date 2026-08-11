@@ -1422,8 +1422,11 @@ public class HoverController_Propulsion : MonoBehaviour
     ///            failed.
     ///
     ///   SHOULDER the signed angle between heading and velocity. This is THE drift metric
-    ///            and nothing displayed it. driftLateralDamp is currently 0, so this is the
-    ///            number to watch when tuning how a drift should feel.
+    ///            and nothing displayed it. It is an equilibrium rather than a setting:
+    ///            driftYawMultiplier opens it, driftLateralDamp closes it, and maxDriftAngle
+    ///            caps it by fading yaw authority as the slide widens. Watch this number
+    ///            when tuning how a drift should feel, and read the live values off the
+    ///            profile rather than from here.
     /// </summary>
     private void OnDrawGizmos()
     {

@@ -15,13 +15,17 @@ public class ShieldTuning
     [Tooltip("Master toggle. When false, the shield component is inert and TryActivate always fails.")]
     public bool enableShield = true;
 
-    [Tooltip("How long the shield stays active after a successful activation. " +
-             "Cannot be cancelled by the player. EMP cancels it immediately.")]
+    [Tooltip("How long the shield stays up once raised.\n\n" +
+             "You cannot drop it early, so this is also how long you are COMMITTED. Longer is safer " +
+             "against sustained fire but easier for an opponent to simply wait out. An EMP hit " +
+             "cancels it immediately, which is the intended counter.")]
     [Min(0.05f)]
     public float shieldDuration = 2f;
 
-    [Tooltip("Flat energy cost paid once on activation. Higher than other abilities " +
-             "since shield is the only one granting full damage immunity.")]
+    [Tooltip("Energy paid once on activation.\n\n" +
+             "Read it against Max Energy and against the EMP cost: shield is the only thing that " +
+             "grants full immunity, so it should cost enough that raising it means giving up your " +
+             "next boost or dodge.")]
     [Min(0f)]
     public float shieldEnergyCost = 35f;
 }

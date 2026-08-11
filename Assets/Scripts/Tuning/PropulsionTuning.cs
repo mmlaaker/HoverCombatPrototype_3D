@@ -4,6 +4,11 @@ using UnityEngine;
 /// <summary>
 /// Tuning fields consumed by HoverController_Propulsion. Pure designer-facing
 /// values. No scene refs, no runtime state.
+///
+/// See FoundationTuning's doc comment for the tooltip convention these follow:
+/// what it does, what raising or lowering feels like, what else moves with it.
+/// No history, no derivations, no session measurements. Live numbers belong in
+/// the inspector's derived readouts, which recompute and cannot go stale.
 /// </summary>
 [Serializable]
 public class PropulsionTuning
@@ -12,32 +17,32 @@ public class PropulsionTuning
     // 🚀 Drive
     // -------------------------------------------------------------------------
     [Header("🚀 Drive")]
-    [Tooltip("How hard the chassis accelerates forward at full throttle, before boost.\n" +
-             "Cannot be 0: boost scaling for the reverse path is expressed as a ratio against this, " +
-             "so a zero here would divide by zero and push NaN into the rigidbody.")]
+    [Tooltip("How hard the craft accelerates forward at full throttle, before boost.\n\n" +
+             "This is the pickup knob. Raise it to leap off the line, lower it for weight and " +
+             "inertia. Top Speed decides where you end up; this decides how fast you get there.\n\n" +
+             "Cannot be 0.")]
     [Min(0.01f)]
     public float maxForwardAccel = 25f;
 
-    [Tooltip("Forward top speed before boost. Also the reference the strafe and reverse caps are " +
-             "scaled against, so it can never be 0.")]
+    [Tooltip("Forward top speed before boost.\n\n" +
+             "Also the reference the strafe and reverse caps are measured against, so moving it " +
+             "quietly rescales both. Cannot be 0.")]
     [Min(0.01f)]
     public float topSpeed = 40f;
 
-    [Tooltip("How hard the chassis accelerates in reverse at full throttle.")]
+    [Tooltip("How hard the craft accelerates backwards, and also THE BRAKE.\n\n" +
+             "Pulling reverse while still moving forward slows you at this rate, so set it by how " +
+             "fast you want to STOP rather than how fast you want to reverse.\n\n" +
+             "Deliberately not blended by strafe, so braking feels identical in both modes.")]
     public float maxReverseAccel = 15f;
 
-    [Tooltip("Reverse top speed in DRIVE MODE ONLY. Strafe mode does not use this value: the cap " +
-             "blends toward Strafe Top Speed as strafe blends in, so at full strafe the forward, " +
-             "reverse and lateral ceilings are all the same number and the craft reads as one " +
-             "consistent omnidirectional speed. Raising this therefore makes drive-mode reverse " +
-             "faster WITHOUT touching strafe mode, which is the whole reason the two were split.\n" +
-             "Boost scales it by Boost Speed Multiplier the same way it scales the forward cap, so " +
-             "boosting in reverse really does go faster.\n" +
-             "Note Max Reverse Accel doubles as the BRAKE: pulling reverse while moving forward " +
-             "decelerates at that rate, so it is set by how fast you want to stop, not by how fast " +
-             "you want to reverse. It is deliberately NOT strafe-blended, so braking is identical " +
-             "in both modes; the trade is that reverse reaches the shared strafe cap faster than " +
-             "forward or lateral do.")]
+    [Tooltip("Reverse top speed in DRIVE MODE ONLY.\n\n" +
+             "Strafe mode ignores this. The cap blends toward Strafe Top Speed as strafe comes in, " +
+             "so at full strafe forward, reverse and sideways all share one ceiling and the craft " +
+             "reads as a single omnidirectional speed. Raising this therefore speeds up drive-mode " +
+             "reverse without touching strafe at all, which is the reason the two are separate.\n\n" +
+             "Boost scales it the same way it scales the forward cap, so boosting in reverse really " +
+             "does go faster.")]
     [Min(0.01f)]
     public float reverseTopSpeed = 20f;
 
@@ -45,26 +50,35 @@ public class PropulsionTuning
     // 🔄 Turning
     // -------------------------------------------------------------------------
     [Header("🔄 Turning")]
-    [Tooltip("How fast the chassis rotates at full turn input. Higher feels twitchier and more arcade.")]
+    [Tooltip("How fast the craft rotates at full turn input. Higher is twitchier and more arcade.\n\n" +
+             "Moves with: Yaw Damping, which decides how cleanly that rotation stops.")]
     public float yawAccel = 8f;
 
-    [Tooltip("Widest angle, in degrees, that drift will open between where you POINT and where you are " +
-             "MOVING. Yaw authority fades to nothing as the slide approaches this, so the drift settles " +
-             "at an angle you can hold and aim from instead of rotating for as long as you hold the stick.\n" +
-             "This is the knob that decides what a drift is FOR. The gap between heading and velocity is " +
-             "the product of the manoeuvre: weapons fire along chassis forward, so a held slide is the " +
-             "only way to aim off your line of travel at full speed. Strafe mode buys the same thing for " +
-             "a third of your top speed; drift buys it for acceleration instead.\n" +
-             "Only the WIDENING direction is limited. Steering back toward your line always has full " +
-             "authority, or a drift could strand you sideways. Try 25 to 35.")]
+    [Tooltip("The widest gap drift will open between where you POINT and where you are MOVING.\n\n" +
+             "This knob decides what a drift is FOR. Weapons fire along the nose, so a held slide " +
+             "is the only way to aim off your line of travel at full speed. Strafe buys you the " +
+             "same freedom for a third of your top speed; drift buys it for acceleration instead.\n\n" +
+             "Turning authority fades as the slide approaches this angle, so a drift settles " +
+             "somewhere you can hold and shoot from instead of spinning for as long as you hold the " +
+             "stick. Only the widening direction is limited: steering back toward your line always " +
+             "has full authority, so a drift can never strand you sideways.\n\n" +
+             "Pick it by what you want the manoeuvre to BE. Around 25 to 35 is a lean through a " +
+             "corner that barely changes what you can shoot at. Around 45 to 60 is a committed " +
+             "sideways slide you aim out of, and it is a different move.\n\n" +
+             "Authority fades as you approach, so this is an asymptote rather than a wall: the " +
+             "last few degrees arrive slowly and you will usually settle just under it.")]
     [Min(1f)]
     public float maxDriftAngle = 30f;
 
-    [Tooltip("How firmly turning settles. Counter-torque proportional to current yaw rate. Higher kills wobble.")]
+    [Tooltip("How firmly turning settles, as resistance proportional to how fast you are already " +
+             "rotating.\n\n" +
+             "Raise it to kill wobble and have the nose stop where you left it. Lower it for a " +
+             "looser, floatier turn. Raise Yaw Accel alongside it to keep the same turn speed.")]
     [Range(0f, 20f)]
     public float yawDamping = 6f;
 
-    [Tooltip("How much steering authority is retained airborne. 0 disables air turning, 1 is full ground response.")]
+    [Tooltip("How much steering you keep in the air. 0 is none, 1 is full ground response.\n\n" +
+             "This is ordinary turning, separate from the air control trick system.")]
     [Range(0f, 1f)]
     public float airTurnMultiplier = 0.5f;
 
@@ -75,20 +89,29 @@ public class PropulsionTuning
     [Tooltip("Master switch for boost.")]
     public bool enableBoost = true;
 
-    [Tooltip("How much harder the chassis accelerates while boosting.")]
+    [Tooltip("How much harder the craft accelerates while boosting.\n\n" +
+             "This is the part you FEEL on engage. Boost Speed Multiplier decides where you end up; " +
+             "this decides how violently you get there.")]
     [Range(1f, 3f)]
     public float boostAccelMultiplier = 1.75f;
 
-    [Tooltip("How much higher the top speed climbs while boosting.")]
+    [Tooltip("How much higher the top speed climbs while boosting.\n\n" +
+             "Scales the forward, reverse and strafe caps together.")]
     [Range(1f, 3f)]
     public float boostSpeedMultiplier = 1.5f;
 
-    [Tooltip("How long it takes for boost to ramp in and ramp out. Longer feels smoother, shorter feels punchier.")]
+    [Tooltip("How long boost takes to ramp in and out. Shorter is punchier.\n\n" +
+             "Worth knowing: the CAMERA reads this same ramp. Shortening it sharpens the field of " +
+             "view kick and the pull-back for free, without touching any camera setting.")]
     [Min(0.01f)]
     public float boostBlendSeconds = 0.35f;
 
-    [Tooltip("Energy drained per second of continuous boost. " +
-             "Defaults assume a full 100-energy tank lasts about 5 seconds of pure boost.")]
+    [Tooltip("Energy burned per second of continuous boost.\n\n" +
+             "How long a boost lasts is a tug of war between this and the Energy section: this " +
+             "sets the burn, Regen Rate and Regen Delay set how soon you can go again. The readout " +
+             "below shows the whole cycle.\n\n" +
+             "To keep boost a tempo decision rather than a permanent state, keep the recovery time " +
+             "at or above the burn time.")]
     [Min(0f)]
     public float boostEnergyPerSecond = 20f;
 
@@ -96,29 +119,31 @@ public class PropulsionTuning
     // 💨 Strafe Dodge
     // -------------------------------------------------------------------------
     [Header("💨 Strafe Dodge")]
-    [Tooltip("Peak strength of the dodge burst. Front-loaded and tapers to zero. Mass independent.\n" +
-             "Tune this by the speed it adds, not by the number itself. The burst tapers linearly, so the " +
-             "dodge adds this x (Dodge Duration + Fixed Timestep) / 2 metres per second sideways. The " +
-             "timestep term is not a rounding detail: ApplyDodgeForce samples the taper BEFORE " +
-             "decrementing its timer, so the first tick runs at full strength and the last runs at one " +
-             "timestep's worth rather than zero. At 1000 over 0.1s at the project's 100Hz that is 55 m/s, " +
-             "where the continuous form would say 50.\n" +
-             "Compare the result against Strafe Top Speed: anything above it is over-cap and bleeds off " +
-             "through Strafe Lateral Cap Strength rather than being sustainable. A burst worth 30 to 60% " +
-             "of Strafe Top Speed reads as a sharp sidestep; at or above 100% it reads as a teleport and " +
-             "gets hard to follow at speed. Try 300 to 700 at a 0.2s duration.")]
+    [Tooltip("Peak strength of the dodge burst. Front-loaded, fading to zero.\n\n" +
+             "Tune this by the sideways speed it produces, not by the number itself. The readout " +
+             "below shows that speed as a SHARE OF YOUR STRAFE CAP, which is the figure that " +
+             "matters: 30 to 60% reads as a sharp sidestep, and at or above 100% it reads as a " +
+             "teleport and gets hard to follow at speed.\n\n" +
+             "Anything above the cap is not sustainable and bleeds back down through Strafe Lateral " +
+             "Cap Strength.")]
     [Min(0f)]
     public float dodgeForce = 120f;
 
-    [Tooltip("How long the dodge burst lasts as it tapers to zero. Shorter is snappier, longer is more jet-like. Try 0.15 to 0.35.")]
+    [Tooltip("How long the dodge burst lasts as it fades out.\n\n" +
+             "Shorter is snappier, longer is more jet-like. It also changes how far you actually " +
+             "travel, so to keep the same sidestep and simply make it faster, raise Dodge Force and " +
+             "shorten this together. Try 0.15 to 0.35.")]
     [Min(0.01f)]
     public float dodgeDuration = 0.25f;
 
-    [Tooltip("Flat energy cost per dodge.")]
+    [Tooltip("Flat energy cost per dodge.\n\n" +
+             "Read it against Max Energy: that ratio is how many dodges a full tank buys, and how " +
+             "much boost each dodge costs you.")]
     [Min(0f)]
     public float dodgeEnergyCost = 20f;
 
-    [Tooltip("Seconds between dodges. Prevents spam.")]
+    [Tooltip("Seconds between dodges. Prevents spam.\n\n" +
+             "Whichever bites first, this or the energy cost, is what actually limits dodging.")]
     [Min(0f)]
     public float dodgeCooldown = 0.5f;
 
@@ -129,15 +154,21 @@ public class PropulsionTuning
     [Tooltip("Master switch for jump.")]
     public bool enableJump = true;
 
-    [Tooltip("Jump strength on a quick tap (minimum charge). Mass independent so all vehicles reach the same height.")]
+    [Tooltip("Jump strength on a quick tap.\n\n" +
+             "Sets the floor for what a hop can do. Keep the apex it produces BELOW Air Control Min " +
+             "Clearance, or a tap grants attitude authority and hopping through a drift flips you. " +
+             "The readout below shows both figures together.")]
     [Min(0f)]
     public float jumpImpulseMin = 4f;
 
-    [Tooltip("Jump strength on a fully charged hold. Mass independent so all vehicles reach the same height.")]
+    [Tooltip("Jump strength on a fully charged hold.\n\n" +
+             "The readout below turns this into apex height and airtime.\n\n" +
+             "Moves with: Hard Landing Min Speed, which has to stay above the speed this lands at.")]
     [Min(0f)]
     public float jumpImpulseMax = 12f;
 
-    [Tooltip("How long the player must hold to reach a full charge. Charge holds at full until release.")]
+    [Tooltip("How long you hold to reach a full charge. The charge holds at full until you release.\n\n" +
+             "Longer makes the big jump a real commitment. Shorter makes full height the default.")]
     [Min(0.05f)]
     public float jumpMaxChargeTime = 2f;
 
@@ -145,15 +176,19 @@ public class PropulsionTuning
     [Min(0f)]
     public float jumpGroundedLockout = 0.2f;
 
-    [Tooltip("Energy cost for a grounded jump. Flat cost regardless of charge level.")]
+    [Tooltip("Energy for a grounded jump. Flat, regardless of how long you charged.")]
     [Min(0f)]
     public float jumpGroundedEnergyCost = 25f;
 
-    [Tooltip("Energy cost for an air jump.")]
+    [Tooltip("Energy for an air jump.")]
     [Min(0f)]
     public float jumpAirEnergyCost = 25f;
 
-    [Tooltip("Air jump strength. Not charge-based. Mass independent so all vehicles reach the same height.")]
+    [Tooltip("Air jump strength. Not charge-based.\n\n" +
+             "Adds to whatever rise you have left rather than replacing it, so jumping again near " +
+             "the top of a jump stacks into something higher than either alone.\n\n" +
+             "That stacked jump produces the fastest ordinary landing in the game, and it is the " +
+             "one Hard Landing Min Speed has to clear.")]
     [Min(0f)]
     public float airJumpImpulse = 7f;
 
@@ -161,17 +196,16 @@ public class PropulsionTuning
     // 🧲 Drag
     // -------------------------------------------------------------------------
     [Header("🧲 Drag")]
-    [Tooltip("Sideways resistance to UNWANTED lateral velocity. " +
-             "Controls how tightly the chassis tracks its heading and how fast residual slide dies. " +
-             "The player's intended strafe velocity is excluded from damping, so this no longer fights strafe input " +
-             "or caps strafe speed (Strafe Top Speed is the real ceiling). 0 is fully slippery sideways.")]
+    [Tooltip("How hard the craft resists sliding sideways when you did not ask it to. Sets how " +
+             "tightly it tracks its nose and how fast a leftover slide dies out.\n\n" +
+             "Your intended strafe movement is excluded from this, so it never fights strafe input " +
+             "or caps strafe speed. 0 is fully slippery sideways.")]
     [Range(0f, 50f)]
     public float lateralDamp = 2f;
 
-    [Tooltip("Forward and reverse resistance to longitudinal velocity. " +
-             "Controls coasting bleed-off when throttle is released. " +
-             "Only applies near-zero throttle (drive and drag are mutually exclusive). " +
-             "0 means the chassis coasts indefinitely.")]
+    [Tooltip("How fast you bleed off speed when you let go of the throttle.\n\n" +
+             "Only applies near zero throttle, so it never fights the drive. 0 means you coast " +
+             "forever.")]
     [Range(0f, 50f)]
     public float forwardDamp = 2f;
 
@@ -179,65 +213,64 @@ public class PropulsionTuning
     // 🌀 Drift
     // -------------------------------------------------------------------------
     [Header("🌀 Drift")]
-    [Tooltip("Lateral resistance while fully drifting. " +
-             "Lower than Lateral Damp so the chassis slides through the turn. 0 is fully free.")]
+    [Tooltip("Sideways grip while fully drifting.\n\n" +
+             "Lower than Lateral Damp so the craft slides through the turn. 0 is a completely free " +
+             "slide.")]
     [Range(0f, 50f)]
     public float driftLateralDamp = 0f;
 
-    [Tooltip("Forward resistance while fully drifting. " +
-             "Typically close to Forward Damp; drift changes how the chassis slides sideways, not how it coasts forward. " +
-             "Lower this slightly to carry more forward momentum through a drift.")]
+    [Tooltip("Forward bleed while fully drifting.\n\n" +
+             "Usually close to Forward Damp, since a drift changes how you slide sideways rather " +
+             "than how you coast. Lower it to carry more speed out of a drift.")]
     [Range(0f, 50f)]
     public float driftForwardDamp = 2f;
 
-    [Tooltip("Yaw rate multiplier while fully drifting. " +
-             "Above 1 means the nose rotates faster than the momentum vector, creating the shouldering angle. Try 1.2 to 1.6.")]
+    [Tooltip("How much faster the nose rotates than your momentum while drifting.\n\n" +
+             "This is what actually opens the slide angle: above 1 the nose gets ahead of where you " +
+             "are going. Max Drift Angle decides where it stops. Try 1.2 to 1.6.")]
     [Range(1f, 3f)]
     public float driftYawMultiplier = 1.4f;
 
-    [Tooltip("Minimum turn input required to engage drift. Prevents drift from triggering on gentle steering. Try 0.3 to 0.5.")]
+    [Tooltip("How far you have to turn before drift engages. Keeps gentle steering from tripping " +
+             "it. Try 0.3 to 0.5.")]
     [Range(0f, 1f)]
     public float driftTurnThreshold = 0.4f;
 
-    [Tooltip("Minimum forward speed required to start a drift. " +
-             "Once drifting, speed is no longer checked: you own the drift until the button releases.\n" +
-             "The intent is that this MATCHES Strafe Top Speed, so that outpacing strafe is exactly what " +
-             "earns you the drift and the two modes divide the speed range cleanly between them. That is a " +
-             "relationship to maintain by hand, not something the code enforces. They currently DO match, at " +
-             "40 each, so the split is clean; it has been out of step before. " +
-             "Move this whenever you move Strafe Top Speed.")]
+    [Tooltip("How fast you must be going to START a drift. Once drifting, speed is no longer " +
+             "checked: you own the drift until you release the button.\n\n" +
+             "Meant to MATCH Strafe Top Speed, so that outrunning strafe is exactly what earns you " +
+             "a drift and the two modes split the speed range cleanly between them. Nothing in code " +
+             "enforces that, so move this whenever you move Strafe Top Speed.")]
     [Min(0f)]
     public float minDriftSpeed = 20f;
 
-    [Tooltip("How long it takes for drift to ramp in and out. Faster is snappier. Try 0.1 to 0.25.")]
+    [Tooltip("How long drift takes to ramp in and out. Faster is snappier. Try 0.1 to 0.25.")]
     [Min(0.01f)]
     public float driftBlendSeconds = 0.15f;
 
-    [Tooltip("Upward kick when a drift STARTS, in m/s. The punctuation on the entry: without it the " +
-             "transition is a silent crossfade of numbers and the drift has no moment of commitment.\n" +
-             "Deliberately tiny, and it must stay that way. Drift only sustains while the craft reads as " +
-             "grounded, which ends Sensor Range minus Hover Height above ride height (2.5m at the shipped " +
-             "tuning), so a hop past that CANCELS THE DRIFT IT JUST STARTED. 5.5 gives about 0.4m and a " +
-             "third of a second, comfortably inside. It also cannot reach Air Control Min Clearance, so it " +
-             "cannot hand over attitude authority.\n" +
-             "This is why the jump button cannot serve: a tap jump apexes at 5.2m, which is outside the " +
-             "grounded band, costs energy, and ends the drift rather than starting one.\n" +
-             "Free side effect worth knowing: at 0.4m the support dial falls to about half, so drag and " +
-             "leveling ease off for the hop. That is real unweighting, not a fake. Set 0 to disable.")]
+    [Tooltip("A small upward kick when a drift STARTS.\n\n" +
+             "The punctuation on the entry. Without it the transition is a silent crossfade of " +
+             "numbers and the drift has no moment of commitment.\n\n" +
+             "Keep it tiny, and understand why. A drift only survives while you still count as " +
+             "grounded, so a hop past the float band (Sensor Range minus Hover Height) CANCELS the " +
+             "drift it just started. It also must not reach Air Control Min Clearance, or entering " +
+             "a drift would hand over attitude control.\n\n" +
+             "Free side effect worth having: the hop genuinely unweights the craft, so drag and " +
+             "leveling ease off for a moment. Set 0 to disable.")]
     [Min(0f)]
     public float driftHopImpulse = 5.5f;
 
-    [Tooltip("Maximum chassis lean at full drift. Try 15 to 25. " +
-             "Exaggerate slightly: readability matters at speed.")]
+    [Tooltip("How far the craft leans at full drift.\n\n" +
+             "Exaggerate slightly. Readability matters at speed. Try 15 to 25.")]
     [Range(0f, 45f)]
     public float maxBankAngle = 20f;
 
-    [Tooltip("Subtle bank applied during normal turns (not drift). " +
-             "Gives the chassis a constant carving look. Stacks with drift bank, so keep it low. Try 3 to 5.")]
+    [Tooltip("A subtle lean on ordinary turns, for a constant carving look.\n\n" +
+             "Stacks with drift bank, so keep it low. Try 3 to 5.")]
     [Range(0f, 15f)]
     public float passiveBankAngle = 4f;
 
-    [Tooltip("How fast the chassis lean catches up to the target angle. Try 6 to 10.")]
+    [Tooltip("How fast the lean catches up to its target angle. Try 6 to 10.")]
     [Range(1f, 20f)]
     public float bankLerpSpeed = 8f;
 
@@ -245,13 +278,17 @@ public class PropulsionTuning
     // 🛩 Air Control
     // -------------------------------------------------------------------------
     [Header("🛩 Air Control")]
-    [Tooltip("Master switch for airborne air control. While airborne and holding drift, left stick Y pitches " +
-             "(up = nose down) and left stick X rolls; right stick X stays yaw. Torque authority and damping " +
-             "live in Foundation: Air Control.")]
+    [Tooltip("Master switch for air control. Airborne and holding drift, the left stick pitches " +
+             "(up is nose down) and rolls, while the right stick still yaws.\n\n" +
+             "How strong and how snappy lives in Foundation, under Air Control.")]
     public bool enableAirControl = true;
 
-    [Tooltip("How long air control authority ramps in and out on drift press / release or takeoff / landing. " +
-             "Matches Drift Blend Seconds so a hop out of a drift hands off cleanly. Try 0.1 to 0.25.")]
+    [Tooltip("How long air control fades in and out on drift press, release, takeoff and landing.\n\n" +
+             "Intended to MATCH Drift Blend Seconds, so that hopping out of a drift hands over " +
+             "cleanly instead of one system arriving before the other. Nothing in code enforces " +
+             "that; the inspector warns when they disagree.\n\n" +
+             "Near zero, attitude control snaps on the instant you leave the ground, which is " +
+             "sharper for tricks but means a bump can hand you full authority with no warning.")]
     [Min(0.01f)]
     public float airControlBlendSeconds = 0.15f;
 
@@ -262,42 +299,48 @@ public class PropulsionTuning
     [Tooltip("Master switch for strafe / aim mode (Left Trigger).")]
     public bool enableStrafe = true;
 
-    [Tooltip("Maximum speed sustainable in strafe mode. This is the REAL lateral ceiling: lateral damp excludes " +
-             "intended strafe velocity, so raising this needs no Strafe Accel compensation. " +
-             "Cannot be re-built above this threshold once in strafe.\n" +
-             "SIDEWAYS, entry speed above this bleeds off on its own through Strafe Lateral Cap Strength.\n" +
-             "FORWARD it does not, and this is worth knowing before you tune around it. Drive stops pushing " +
-             "at this speed, but the forward over-speed bleed does not start until the full Top Speed, and " +
-             "forward drag only applies below 0.15 throttle. Hold the stick forward in strafe anywhere " +
-             "between this and Top Speed (40 to 60 today) and nothing acts on you at all: the craft coasts " +
-             "there for as long as you hold it. Widening the gap between the two speeds widens that band.")]
+    [Tooltip("Top speed in strafe mode, in every direction at once.\n\n" +
+             "This is the trade strafe asks for: you give up speed to aim freely. It is the real " +
+             "lateral ceiling, and Lateral Damp does not fight it, so raising this needs no other " +
+             "compensation.\n\n" +
+             "One gap worth knowing before you tune around it. SIDEWAYS, entry speed above this " +
+             "bleeds off on its own. FORWARD it does not: drive stops pushing here, but the forward " +
+             "over-speed bleed does not start until full Top Speed, and forward drag only applies " +
+             "near zero throttle. Hold forward in strafe anywhere between the two speeds and " +
+             "nothing acts on you at all, so you coast there as long as you like. Widening the gap " +
+             "between them widens that band.\n\n" +
+             "Moves with: Min Drift Speed, which is meant to match it.")]
     [Min(1f)]
     public float strafeTopSpeed = 20f;
 
-    [Tooltip("Acceleration for omni-directional strafe movement on the ground plane. " +
-             "Lower than forward accel: strafe is maneuvering, not charging.")]
+    [Tooltip("How fast you reach strafe speed, in any direction.\n\n" +
+             "Deliberately lower than forward accel: strafe is manoeuvring, not charging.")]
     [Min(0f)]
     public float strafeAccel = 15f;
 
-    [Tooltip("Maximum nose tilt (up or down) in strafe mode. " +
-             "The accumulated aim angle is clamped to this range; Foundation's leveling drives the nose toward it " +
-             "(response feel lives in Foundation: Aim Pitch Tracking Strength / Pitch Roll Damping).")]
+    [Tooltip("How far the nose can tilt up or down while aiming. This is your vertical aim range.\n\n" +
+             "How the nose FEELS getting there lives in Foundation, under Aim Pitch Tracking.")]
     [Range(5f, 45f)]
     public float strafePitchLimit = 15f;
 
-    [Tooltip("Aim sensitivity in degrees per second at full stick deflection. " +
-             "Controls how fast the pitch angle changes with stick input. Try 60 to 120.")]
+    [Tooltip("Aim speed in degrees per second at full stick.\n\n" +
+             "How fast you cross the range set by Strafe Pitch Limit, so the two together decide " +
+             "how long a full sweep from floor to ceiling takes. Raising Strafe Pitch Limit without " +
+             "raising this makes aiming feel slower even though nothing about the speed changed.\n\n" +
+             "Roughly 60 to 150. Low is deliberate and easy to hold steady; high is quick to " +
+             "reacquire but harder to settle on a target.")]
     [Range(10f, 300f)]
     public float strafePitchSensitivity = 90f;
 
-    [Tooltip("How long it takes strafe mode to ramp in or out on trigger press / release.")]
+    [Tooltip("How long strafe mode takes to fade in and out on the trigger.")]
     [Min(0.05f)]
     public float strafeModeBlendSeconds = 0.2f;
 
-    [Tooltip("Over-speed bleed per unit of excess lateral speed in strafe. Lateral drive is gated at the cap " +
-             "(exact-cap clamp), so this only acts on speed ABOVE Strafe Top Speed: dodge bursts, entry momentum, " +
-             "boost fade. Keep it gentle so a dodge fired at the cap reads as an additive surge that glides back " +
-             "down (~1s at 3) instead of being crushed (40 = gone in a tenth of a second). Try 2 to 6.")]
+    [Tooltip("How fast over-cap sideways speed bleeds back down.\n\n" +
+             "Only acts ABOVE Strafe Top Speed, so it never fights normal strafing. What it really " +
+             "tunes is how a DODGE feels: gentle values let a dodge fired at the cap read as an " +
+             "additive surge that glides back down, high values crush it in a tenth of a second. " +
+             "Try 2 to 6.")]
     [Range(0f, 120f)]
     public float strafeLateralCapStrength = 3f;
 }
