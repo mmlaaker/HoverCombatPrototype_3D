@@ -16,6 +16,11 @@ version is that the chop was background applications, not the game.
 > unbuilt, and why the weapon items in Tier 3 are not being worked despite being cheap. Weapons are
 > placeholder, so tuning feel around them is tuning against a moving target. **Reassess this line
 > once the playtest has happened, not before.**
+>
+> **SHARPENED 2026-08-11: `Tier M` now outranks everything in this file, including Tier 0.** It is
+> the consolidated output of a full movement and camera playtest and the owner set it as top
+> priority explicitly. Work it in the stated order, because M.5 (speed) moves numbers that most of
+> the rest are tuned against.
 
 **Updated 2026-08-09** from a camera session, then again the same day when the impulse router landed.
 Two of 2.8's three complaints are closed and 2.6 is partly closed. **2.1, 2.2 and the shake half of
@@ -57,6 +62,21 @@ rather than camera (see 0.10).
 The owner's two feel-reports have now each identified a real mechanism ahead of the data (boost/air
 authority, then flips over rolls, then landing specifically). Worth weighting accordingly.
 
+**Updated 2026-08-11 (second entry, evening) from a full movement and camera playtest.** Weapons were
+disabled and boost made free for the first half, then both restored so drift-and-fire and strafe
+could be judged; the environment was doubled to match the 2x vehicle mesh. Output is **`Tier M`,
+which the owner set as top priority above every other tier in this file.** Fifteen positive
+judgements moved to `CLAUDE.md` > Judged By Play, six TODO items were closed or downgraded (5.9 keep
+the air jump, 0.10 withdrawn, most of 2.9, the arena assumption in 6.2, plus slope parking and strafe
+acceleration unification declined), and two documentation defects were corrected in place.
+
+**The owner's instinct beat the record twice more this session, which now makes four times.** They
+rejected 0.10's "drift is competing with something cheaper" framing on the grounds that no increased
+turn rate and no banking meant a line should not be holdable that way, and they were right on every
+point: it is a decaying 0.6s transient costing 41 m/s, only reachable above top speed. They also
+called the dodge validator wrong (M.4) and it is. **Weight owner feel-reports above both the docs and
+the derived readouts, and check the instrument before checking the game.**
+
 **How this relates to the other docs.** Four documents, no overlap; a fact lives in exactly one.
 
 | Question | Document |
@@ -78,6 +98,257 @@ limitations, and theories disproved by measurement. See the closing section.
 - Never trust a zero you have not proven can be non-zero.
 
 Priority tiers are about what unblocks the prototype, not about effort.
+
+---
+
+## Tier M — Movement pass, 2026-08-11. HIGHEST PRIORITY
+
+**Set by the owner at the end of the 2026-08-11 movement playtest: everything in this tier outranks
+every other tier in this file, including Tier 0.** Weapons were disabled and boost made free for the
+first half of the session, then both restored so drift-and-fire and strafe could be judged. The
+environment was doubled to match the 2x vehicle mesh, so anything below dated to this session was
+felt in a world twice the size of every earlier measurement.
+
+Fifteen things were judged GOOD in this session and are recorded in `CLAUDE.md` > Judged By Play,
+not here. Read that list before changing anything in this tier: several items below are bounded by
+something already confirmed to feel right, and the confirmations are the acceptance criteria.
+
+### M.1 Flip recovery has an unrecoverable band on the ARM side
+
+The craft can come to rest at a tilt just under `flipRecoveryAngleThreshold` (80), too flipped to
+drive and not flipped enough to authorize righting. Caught on screenshot 2026-08-08, gizmo reading:
+
+```
+FLIP 0.00/1.00s  BLOCKED: tilt below threshold
+tilt 80deg (need 80)      speed 0.65 (need < 2.00)
+contact True  hoverGrounded True  authorized False
+UNSTICK FIRED   Unstick 0.09 / 0.20s
+```
+
+Speed is not the blocker (0.65 against 2.00). Unstick fires repeatedly and cannot help, because it
+pushes **up** and the problem is rotational. Leveling torque at 12 evidently cannot climb out while
+the hover springs hold the craft in that pose.
+
+**`CLAUDE.md` v1.4 already records this exact hover-supported equilibrium at ~78 degrees**, and fixed
+it on the RELEASE side only by adding `flipRecoveryReleaseAngle` 35. The arm side was never
+addressed. This is the same defect at the other end of the same gate.
+
+Rare in practice: one occurrence in several days of play, and the owner rates unstick and flip
+recovery as consistent otherwise. It is in this tier because the mechanism is known and named, not
+because it is frequent.
+
+**This is the justification `HoverController_Foundation` requires for modification.** Caveat to check
+first: the gizmo rounds, so 80 may be 79.6. That does not change the mechanism.
+
+### M.2 Boost camera effects stack onto strafe mode. They must not
+
+Owner rule, stated 2026-08-11: **strafe mode gets full crosshair authority with zero modifiers.**
+Resting in strafe with throttle forward currently makes the camera look up.
+
+`ContributeBoostLens` applies to BOTH modes while only `ContributeBoostPullback` is drive-only, so
+the FOV half stacks on strafe by design. That design is overruled.
+
+**This closes an open question rather than opening one.** 2.6 recorded that the boost forward-gate
+reads forward speed only, so boosting sideways in strafe produced no lens change, and noted nobody
+had judged whether that was right. It was right, and it should go further.
+
+Two candidates for the look-up specifically, to be separated rather than guessed between: the speed
+look-ahead term (`speedLookAheadMax` 6 against `speedLookAheadReference` 60) and the strafe aim
+pitch. The first scales with throttle exactly as described.
+
+### M.3 The vehicle briefly leaves frame while the camera pitches up
+
+Part of the craft clips offscreen mid-transition as the camera pitches up to look down on it. Both
+endpoints are fine; the motion between them is not. Requirement: **vehicle fully onscreen at all
+times.**
+
+The per-frame framing guard (`minFrameMargin` 2) should already prevent this, so the question is
+whether it is being outrun by the pitch rate rather than mis-tuned. Note `CameraPreviewState` cannot
+catch this by construction: it evaluates settled poses, and this is the motion between two of them.
+Do not expect the editor's framing verdict to reproduce it.
+
+### M.4 The dodge validator models an unopposed impulse and cries wolf
+
+`VehicleTuningProfileEditor.DerivedDodge` computes delta-v as `force x (duration + fixedDeltaTime) / 2`
+and divides by `strafeTopSpeed` 40. At `dodgeForce` 650 over `dodgeDuration` 0.15 that exceeds 100%
+of the cap, printing "reads as a TELEPORT, hard to follow at speed".
+
+**The owner disagrees and is right.** Judged 2026-08-11: it reads as the intended quick sidestep
+juke, with possible room to push it further.
+
+The formula is arithmetically correct about a quantity the player never experiences. `lateralDamp` 1
+and the over-speed bleed oppose the burst DURING and AFTER it, so realized peak lateral velocity is
+well below the open-loop figure. **Not yet measured; one play-mode run settles it** and gives the
+validator a real denominator.
+
+**Third instance of this exact mistake in this project**, after the Movement gizmo's drive/drag
+warning and the camera framing verdict, both of which had to be corrected for firing during correct
+play. A check that fires during good tuning gets ignored, which costs more than having no check.
+
+### M.5 Speed. Raise top speed, lower the boost multiplier
+
+Owner, 2026-08-11: top speed feels too slow. `VTP_Default` is the "Sedan", average in everything,
+and it is still too slow. **Reported both before and after the environment rescale**, so it stands on
+its own rather than being an artifact of the bigger world, though the rescale amplifies it.
+
+Direction: **raise `topSpeed`, lower `boostSpeedMultiplier`** (currently 1.5). 1.5x is high as boost
+multipliers go, most racing games sit nearer 1.15x to 1.3x, and 50% already reads as merely "okay",
+which is close to proof that more multiplier is not the lever.
+
+**Do this cluster FIRST. It has the widest blast radius and everything else gets retuned against it.**
+Five couplings:
+
+1. **`speedLookAheadReference` is 60, which IS `topSpeed`.** The camera's speed look-ahead normalizes
+   against it and clamps at 1. Raise `topSpeed` without raising this and look-ahead saturates before
+   you reach top speed, so the camera stops responding to your fastest driving. **A camera value
+   pinned to a vehicle value with nothing enforcing the link.** Highest-risk item in this cluster.
+2. **`minDriftSpeed` 40 and `strafeTopSpeed` 40 are held equal by hand**, the rule being that
+   outpacing strafe is what earns the drift. Decide explicitly whether they follow `topSpeed`, or
+   drift entry difficulty changes silently.
+3. `hardLandingMaxSpeed` 85 is already saturated by boosted 90. A lower multiplier relieves this.
+4. Lowering the multiplier also narrows 5.11, where boosted strafe reaches unboosted drive top speed.
+5. Perceived speed is structurally low (8.7 body-lengths/sec against 15-16 for a fast road car) and
+   **doubling the environment halved how fast the world goes past you.** See 6.2, and note the arena
+   is now confirmed to be deliberately sparse, so props are NOT coming to fix this.
+
+### M.6 Airtime. Raise fall force, and decide what that costs the trick economy
+
+Owner: long airtime reads "a tad floaty". Wants more falling force. Also wants the tap jump slightly
+less floaty.
+
+**The rebalance the owner budgeted for is not needed.** Rise and fall run on separate gravity
+(`extraGravityMultiplier` 3 on the way up, `extraFallGravity` 13 added only while descending), so
+fall force does not change jump height at all, only descent time and landing speed.
+
+**Owner's acceptance criterion, set 2026-08-11: a full charge jump must still land two barrel rolls
+or one flip.** Computed budget against that, full charge jump (`jumpImpulseMax` 40, rise gravity
+39.24, apex 20.39m, rise time 1.019s which is IMMUNE to fall gravity):
+
+| `extraFallGravity` | Fall time | Total airtime | Landing speed | What binds |
+|---|---|---|---|---|
+| 13 (live) | 0.88s | 1.90s | ~46 m/s | nothing |
+| ~43 | 0.70s | 1.72s | 58 m/s | **full charge jumps start hard-landing** |
+| ~138 | 0.48s | 1.50s | 85 m/s | **`hardLandingMaxSpeed` saturates** |
+| infinite | 0 | **1.02s floor** | - | the two-roll invariant, eventually |
+
+**The invariant is the LAST constraint to bind, by a wide margin.** Hard landings arrive first at
+roughly 3.3x the current value. More than half the trick window (the 1.02s climb) cannot be taken
+away by fall gravity at any value.
+
+**One measurement closes this: time two barrel rolls.** Under 1.50s and the saturation point is
+reachable while keeping the invariant. Deliberately not estimated here, because the only rotation
+rate in the docs comes from a different context (a downed craft levering off the ground) and is not
+a safe basis for a budget.
+
+**The conflict to decide before tuning:** tricks are meant to pay energy back (2.10), scaled by
+rotations landed. Less airtime is fewer rotations, so falling faster shrinks the economy being built.
+The air jump was also kept specifically as a hang-time extender (5.9). Owner's position 2026-08-11:
+acceptable as long as the two-roll invariant holds. Options if it turns out to bite: front-load the
+fall gravity so only long falls feel heavy, or pay trick energy by rotation COUNT rather than
+airtime, so a faster tighter trick pays the same.
+
+Note the crossover at ~43 means jumps would begin triggering hard landings, which 2.9 records as
+never happening today. That may be desirable. It should be a decision, not a surprise.
+
+### M.7 Drift. Add a time cost, and more path curvature control
+
+**Target named by the owner 2026-08-11: the Crash Team Racing power slide, without the boost
+mechanics.** That is now the reference. Confirmed working already: holding line of sight on a target
+while maintaining a different velocity angle, which is v1.8's stated purpose.
+
+Two changes wanted, and they are NOT the same kind of work:
+
+**(a) Sustained drift should bleed speed over time, even on full throttle.** A long drift should
+eventually cost you everything. **This needs a new term and is not a knob.** `driftForwardDamp` is a
+coefficient, so forward throttle and drift drag settle at an equilibrium speed and hold there
+indefinitely; raising it only lowers the plateau. What is wanted is a cost that GROWS with drift
+duration, which does not exist.
+
+**(b) More control over drift path curvature.** Tight around the outside of the figure-eight curves,
+easing out on the straights. This half genuinely is existing knobs: `maxDriftAngle` 60,
+`driftLateralDamp` 0.3, `driftYawMultiplier` 1.5. The v1.8 two-knob model applies, `maxDriftAngle` is
+the pose and `driftLateralDamp` is the path.
+
+**No spinout consequence wanted.** Deliberately excluded, it is a hovercraft. Do not add one as a
+way of implementing (a).
+
+Watch: the drift entry hop is live at `driftHopImpulse` 10, which is 1.70m of climb into a 2.5m float
+band. That is the value the owner approved on 2026-08-08, not a regression, but it leaves little
+margin and (a) will change how the entry reads.
+
+### M.8 Air jump fires along world up. It should fire along the craft's local up
+
+Owner, 2026-08-11: **the air jump is worth keeping** (this closes 5.9), and its value is as a mid-air
+juke and trick-height extender. But the impulse should be relative to the bottom of the craft, so
+tilting toward a wall propels you away from it.
+
+**Cheapest single change on this list with the largest character payoff.** It converts the air jump
+from a height extender into a directional juke, which is what the owner actually described wanting it
+for. It also partially pre-builds 5.10 (wall jump / wall riding).
+
+### M.9 Jump energy costs should differ per jump type
+
+Currently flat: `jumpGroundedEnergyCost` 20 and `jumpAirEnergyCost` 20. The grounded jump is also
+variable-height on a charge, and charges nothing extra for a full charge.
+
+Pairs with M.10 and with 2.10. Do it after airtime settles, since the right cost depends on what a
+jump buys.
+
+### M.10 Trick energy economy, with the owner's risk/reward framing
+
+Owner's plan, stated 2026-08-11 and consistent with what they described in earlier sessions:
+**replenish boost energy by waiting for regen OR by landing tricks, with more flips and rolls paying
+more.** Energy is a "constant feeling" of being short, which matches 2.10.
+
+**New this session: the risk/reward framing.** Going for more rotation risks landing badly and
+banking nothing, which is what makes it a decision rather than a payout. That is the part worth
+protecting in implementation.
+
+Mechanism is already specced in 2.10 and not repeated here. Note the coupling to M.6: if trick
+energy is paid by ROTATION COUNT rather than airtime, the fall-gravity conflict mostly dissolves.
+
+### M.11 Camera authority when the player has none. One feature, two triggers
+
+Two requests from this session that are the same feature:
+
+- **While flipped and helpless.** The camera settles to the side of a flipped craft. The owner wants
+  to swing it where they like, since there is no other agency until the craft rights itself.
+- **While mid-air doing tricks.** Right stick moves the camera during heavy air, so a long trick
+  sequence can be used to set up for landing.
+
+Both are moments where the player has input available and nothing useful to spend it on, and in both
+the thing they want to do is look at where they are about to end up.
+
+**The mode conflict is tractable for exactly that reason:** right stick X is yaw, and yaw is near
+worthless in both states. Airborne yaw is confirmed working at half authority (`airTurnMultiplier`
+0.5) and the owner is happy with that, but also confirmed it "doesn't really feel like it's
+contributing to my direction" during tricks. Downed already suppresses commanded yaw entirely.
+
+Note the coordinate-frame finding behind this, verified in code and confirmed in play 2026-08-11:
+`ApplyTurning` uses `AddRelativeTorque(Vector3.up ...)`, the craft's LOCAL up, and is never scaled by
+air-control weight. So air control does not suppress yaw, it **rotates the axis yaw acts about**.
+Rolled 90 degrees, yaw input pitches you in world terms. That is why steering feels absent during a
+trick while measuring as fully live.
+
+### M.12 Boost presentation FX: vignette, speed lines, duration-based rumble
+
+Owner: boost camera effects are liked in general but want small tweaks, hard to verbalize. Concrete
+additions requested, **none of which exist today**: a vignette, speed lines, and a subtle camera
+rumble that **fades in over sustained boost**.
+
+All three are presentation rather than framing, so they sit outside the v2.5 boost envelope work and
+do not touch the single-write-authority solver.
+
+**The rumble is the interesting one.** It is the first camera effect requested that builds with
+DURATION HELD rather than firing on an event, and the boost envelope already tracks exactly that in
+`_boostHold`. Everything else on the impulse router is event-driven.
+
+### M.13 Small, isolated, no dependencies
+
+- **`yawAccel` 13 -> 12.** Steering judged tight and not twitchy; the owner wants it a single unit
+  slower to turn. No other coupling.
+- **Strafe camera view retune** after the camera update changed it. Owner's own task.
+- **Tap jump slightly less floaty.** Falls out of M.6 rather than needing its own change.
 
 ---
 
@@ -267,14 +538,34 @@ v1.8, where drift was deliberately given an equilibrium (`maxDriftAngle` fading 
 slide widens, `driftLateralDamp` closing it) precisely so the angle could not run away. Ordinary
 cornering has no such limiter, and at these speeds it apparently does not need the button.
 
-**This is a design question, not a bug**, and it is the owner's call. It matters because drift's whole
-justification in v1.8 is that a held slide is the only way to aim off the line of travel at full
-speed, bought with acceleration. If braking into a hard turn reaches a wider angle for free, drift is
-competing with something cheaper. The camera behaves correctly throughout (it tracks the nose, which
-is what grounded framing is supposed to do), so nothing here argues for a camera change.
+**DOWNGRADED 2026-08-11. The "drift is competing with something cheaper" framing was wrong and is
+withdrawn.** The owner challenged it on the grounds that there is no increased turn rate and no
+banking, so a line should not be holdable this way, and re-reading the measurement shows they are
+right on every point that matters.
 
-Knobs if it should be narrowed: `lateralDamp`, and whether `maxDriftAngle`'s equilibrium should apply
-to ungated slides too.
+- **It is not free. It is the most expensive thing in the game.** The craft went 84 -> 43 m/s during
+  the manoeuvre. It costs 41 m/s of actual velocity, where drift costs acceleration and keeps speed.
+- **It is not holdable.** 0.6 seconds, and it decays on its own as `lateralDamp` bleeds the lateral
+  component and yaw brings the nose round.
+- **It is not reachable in normal driving.** It happened at 84 m/s, above `topSpeed` 60, only because
+  the craft had just landed from a mountain drop still carrying speed.
+
+Mechanism, for the record: braking kills the velocity component ALONG the nose and does almost
+nothing to the component ACROSS it, since lateral velocity only bleeds through `lateralDamp` 1. So
+full reverse plus full lock opens the heading-versus-velocity angle by removing one side of the ratio
+rather than by adding slide. No extra turn rate is needed, which is exactly why it looked impossible
+from the cockpit.
+
+**What survives is narrow:** at speeds above the normal cap, a transient wider than `maxDriftAngle`
+60 is briefly reachable. Whether a decaying 0.6s window is usable for aiming is a genuine question
+and worth one test with weapons live, but this is a curiosity rather than a rival to drift.
+
+**It does NOT gate the drift work in M.7.** The owner has never experienced it in play. The camera
+behaves correctly throughout (it tracks the nose, which is what grounded framing is supposed to do),
+so nothing here argues for a camera change either.
+
+Knobs if it should ever be narrowed: `lateralDamp`, and whether `maxDriftAngle`'s equilibrium should
+apply to ungated slides too.
 
 ### 0.2 Nothing is committed
 Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts, 1 new script,
@@ -436,13 +727,23 @@ the gap between heading and velocity is the product, bought with acceleration. C
 the two-knob tuning model are in `CLAUDE.md` > Propulsion v1.8. `driftLateralDamp` is 0.25,
 `driftForwardDamp` 0.3, plus `maxDriftAngle` and `driftHopImpulse`.
 
+**SUPERSEDED 2026-08-11 by M.7, which carries the live drift work.** Judged this session: the aiming
+purpose works (line of sight held while velocity runs at a different angle), and the target is now
+named as **the Crash Team Racing power slide without the boost mechanics.** Two new requests, a
+duration-based speed bleed and more path curvature control, live in M.7. Note the live values are
+`driftLateralDamp` **0.3** and `driftHopImpulse` **10**, not the 0.25 and 5.5 written below; the
+higher pair is what was committed on 2026-08-08 and approved, so the numbers below are the stale
+ones.
+
 Still open, both feel questions rather than bugs:
 - **Is the angle ceiling settling or hitting a wall?** At low `driftLateralDamp` the slide runs
   right up to `maxDriftAngle` and stops. Raising damping pulls the balance point below the cap so
   it eases in instead: at a 45 cap, damping 0.25 settles at 42 and damping 1.0 settles at ~34.
   Same cap, completely different character.
 - **No exit payout exists and that is deliberate.** The owner rejected a boost reward: drift is
-  about angle, not speed. Revisit only if the angle stops feeling worth the acceleration.
+  about angle, not speed. Revisit only if the angle stops feeling worth the acceleration. **Still
+  true 2026-08-11**, and reconfirmed: the CTR reference was given explicitly WITHOUT its boost
+  mechanics. A spinout consequence was also explicitly rejected, since it is a hovercraft.
 
 Invariant still maintained by hand and still unenforced in code: `minDriftSpeed` MATCHES
 `strafeTopSpeed`, so outpacing strafe is what earns the drift. Both 40. `VehicleTuningProfileEditor`
@@ -470,10 +771,24 @@ Owner note, 2026-08-08 playtest: "the boost feels somewhat mid". The multiplier 
 problem: `boostSpeedMultiplier` and `boostAccelMultiplier` are both 1.5, a real 50% increase, so
 this was always presentation.
 
+> **DOCUMENTATION DEFECT, found 2026-08-11. The cut below never happened in the asset.**
+> `boostBlendSeconds` has been **0.35 in every commit from `4a34f21` (2026-08-01) through today**. It
+> has never been 0.125 and never been 0.15. So the bullet beneath, including its measurement of peak
+> surge moving 0.56 -> 0.77, describes a value that was set live in the inspector and never
+> persisted. Everything downstream that was "tuned against" the cut was in fact tuned at 0.35.
+>
+> **This is the second instance of the serialized-value-wins trap**, after `travelHeadingMinSpeed`
+> being lowered to 3 in code while the prefab kept 8. Both times a real change was believed to be in
+> effect and was not. When a tuning value matters, read it back from the ASSET, not from the doc and
+> not from the inspector during play.
+>
+> Owner decision 2026-08-11: **leave it at 0.35 and judge boost as-is.** If boost still reads flat
+> after M.5 lowers the multiplier, 0.15 is the first thing to try, ahead of any camera value.
+
 Done, and not repeated here (see `CLAUDE.md`):
 - ~~**`boostBlendSeconds` cut to 0.125** by the owner.~~ That did not stick: the live value was
   found at **0.35** on 2026-08-10, which is the "took a third of a second to arrive and read as
-  gradual rather than as a kick" case this item opened with. **Now set to 0.15.** It is the
+  gradual rather than as a kick" case this item opened with. ~~**Now set to 0.15.**~~ It is the
   highest-leverage knob in the whole boost system for two reasons: time-to-peak on the camera
   transient tracks the thrust ramp almost exactly, and the transient is measured as the gap between
   the boost level and a slower copy of itself, so a snappier ramp opens a wider gap. The cut took
@@ -589,7 +904,32 @@ From the 2026-08-08 playtest. The first two were closed by the camera overhaul; 
   chassis pitch, and remove the screen position's dependence on hit depth. Confined to
   `VehicleHUD.SyncReticle`; no camera coupling. This is the last phase of the camera plan.
 
-### 2.9 Impacts are under-intense, and big drops do not cost enough control
+### 2.9 Impacts are under-intense, and big drops do not cost enough control — MOSTLY CLOSED 2026-08-11
+
+**JUDGED 2026-08-11, and the complaint that opened this item has been withdrawn by the owner.** Three
+separate confirmations, all by feel in the movement playtest:
+
+- **Crash camera effects: liked.** That judges the crash-shake half, wired 2026-08-09 and unjudged
+  since.
+- **Hard landing camera punch: liked, keep as-is.** Unchanged from the original note.
+- **Tumble on a bad-angle mountain landing: good.** "If I jump off the mountain top and land at a bad
+  angle, I can really get knocked around, which is great."
+
+**That last one probably removes the physics half entirely.** This item's remaining work was scaling
+`levelingTorqueStrength` by `hardLandingSeverity`, and it existed ONLY because the owner previously
+said a mountain drop should tumble more. They now say it tumbles well. The environment rescale is the
+likely cause, since doubling it made every drop taller.
+
+**Do not make that change without a fresh complaint.** It was also the only queued reason to modify
+`HoverController_Foundation`, which is marked do-not-modify-without-justification; M.1 is now that
+justification instead, for an unrelated reason.
+
+Still genuinely open, and NOT judged this session: **taking a weapon hit still produces no camera
+feedback at all** (see the paragraph below). Vehicle-on-vehicle collision is also still untested, and
+the owner has an easy path to it: park the AI craft and drive into it.
+
+<details><summary>Original item, kept because the reasoning behind the deferred physics change is worth preserving</summary>
+
 Owner: crashes into walls, ground and other vehicles should hit harder; a mountain drop "should lose
 more control and tumble more than it does". The hard-landing camera punch is liked and should stay.
 
@@ -632,6 +972,12 @@ you that you crashed; it does not make a bad landing angle cost anything. That i
 (full charge lands at 43.4 against `hardLandingMinSpeed` 58); the system fires only on mountain
 drops, confirmed live at 58.0 to 87.6 m/s. If landings should matter more generally, that threshold
 is the knob, and it needs the measured pass the owner already asked for.
+
+**Superseded 2026-08-11 by M.6:** the threshold is no longer the only knob. Raising `extraFallGravity`
+past roughly 43 brings a full charge jump's landing speed up to 58 and starts triggering hard
+landings from jumps for the first time, without touching `hardLandingMinSpeed` at all.
+
+</details>
 
 ### 2.10 Energy is permanently tight, and tricks should probably pay it back
 Owner: "I feel like I'm always in need of more energy, mostly for boosting and jumping", plus the
@@ -863,20 +1209,27 @@ If it is ever revisited, the cheapest single improvement is **narrowing the hull
 against 1.46x length is what makes it read stubby, and width is the least coupled dimension to the
 tuning, since the attitude torques ignore the inertia tensor.
 
-### 5.9 The air jump has never been justified or cut
-Owner, 2026-08-08: "I'm not sure if the double jump is fully justified, I might consider removing
-it." No decision was reached.
+### 5.9 ~~The air jump has never been justified or cut~~ — DECIDED 2026-08-11: KEEP
 
-The argument for keeping it is that it does not function as a second jump. It is a **hang-time
-extender** that buys the window to finish a trick, and tricks are the part of the build the owner
-rates highest. The argument against is the energy budget (2.10): 25 per air jump against a 100 pool
-that already feels short.
+Owner, 2026-08-11: "I questioned the air jump before, but I think it's worth keeping." Its value is
+as a **mid-air juke and trick-height extender**, which is the argument this item was holding open.
 
-Decide it against 2.10 rather than on its own. If tricks start paying energy back, the air jump
-stops competing with boost and the case for cutting it weakens considerably.
+Two consequences moved to Tier M rather than closing here:
+
+- **M.8**: the impulse should fire along the craft's LOCAL up rather than world up, so tilting toward
+  a wall propels you away from it. That is what makes it a juke rather than only a height extender,
+  and it was the owner's one caveat on keeping it.
+- **M.9**: its energy cost should differ from the grounded jump's, rather than both sitting at 20.
+
+The old advice to decide this against 2.10 still holds for the COST, not for the existence.
 
 ### 5.10 Wall jump / wall riding, speculative
 Owner idea: count as grounded when deliberately oriented against a wall with sensors in range.
+
+**Partly pre-built by M.8, 2026-08-11.** Making the air jump fire along the craft's LOCAL up means
+tilting toward a wall already propels you away from it, which is most of a wall jump reached from a
+different direction and for a different reason. Do M.8 first and re-read this item afterwards; the
+remaining gap may be small enough that this stops being speculative.
 
 **Test before building.** It may already partly work: hover points cast along `-point.up`, which
 rotates with the craft, so orienting against a wall does put rays on it and the springs will push
@@ -928,6 +1281,26 @@ Perceived speed has the same problem: 60 m/s over a 6.88m craft is 8.7 body-leng
 against roughly 15-16 for a fast road car, so it reads about half as fast as 216 km/h sounds. **Both
 are judgements that cannot be made until props exist,** and both feed 5.8 (vehicle scale), which is
 explicitly gated on arena blockout.
+
+> **REVISED 2026-08-11, and this changes the plan rather than adding to it. The arena is
+> deliberately SPARSE.** Owner: "I hadn't really imagined an arena to be dense with props, maybe just
+> some environmental hazards and exploding barrels or something, but by no means full of objects on
+> the ground."
+>
+> **So props are NOT coming to fix speed and height readability, and this item can no longer be
+> treated as the blocker for either.** The paragraph above assumed the opposite. What is left to read
+> speed and height against is ground texture density, road markings, the height and spacing of the
+> large structures, and screen-space effects such as the speed lines requested in M.12.
+>
+> Ride height itself is now **judged good** independently of this (see `CLAUDE.md` > Judged By Play),
+> so only the speed half remains open. Note the environment was doubled on 2026-08-11 to match the 2x
+> vehicle mesh, which halved how fast the world goes past you at a given m/s and makes M.5 more
+> urgent, not less.
+>
+> Two constraints from this session that any blockout must respect: the owner wants **platforms you
+> can bump from underneath, not spaces to duck under**, so the ceiling duck is not a design
+> dependency; and the existing figure-eight loop is the reference for the drift curvature work in
+> M.7.
 
 ### 6.3 No match flow
 No menu, no match start or end, no scoring, no round structure. Combined with 1.1, there is

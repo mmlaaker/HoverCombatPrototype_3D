@@ -59,7 +59,7 @@ MonoBehaviour:
     boostAccelMultiplier: 1.5
     boostSpeedMultiplier: 1.5
     boostBlendSeconds: 0.35
-    boostEnergyPerSecond: 0
+    boostEnergyPerSecond: 20
     dodgeForce: 650
     dodgeDuration: 0.15
     dodgeEnergyCost: 15
