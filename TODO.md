@@ -325,6 +325,60 @@ Five couplings:
 
 </details>
 
+### M.6 ~~Airtime. Raise fall force~~ — APPLIED 2026-08-13, `extraFallGravity` 13 -> 30
+
+**Owner decision, made against the measurements below and validated by driving:** 30, having confirmed
+in play that one flip and two barrel rolls still land. They accepted a tighter trick margin for a
+~13% shorter fall on big drops.
+
+**The headline finding, which killed the framing this item was written with: gravity is a WEAK lever
+on hang time, and the fall was never slow.** Dropped from 260m and logged:
+
+| Time | Descent | Measured accel |
+|---|---|---|
+| 0.5s | 26.0 m/s | 50.6 |
+| 1.0s | 52.6 m/s | 52.3 |
+| 2.0s | **104.9 m/s** | 52.1 |
+| 3.0s | **157.1 m/s** | 53.9 |
+
+Rock steady at **52.2 m/s^2, 5.3x Earth gravity**, with `maxLinearVelocity` effectively infinite and
+zero drag. So the craft already accelerates without limit, which was the owner's direct question.
+**Fall time scales as sqrt(height/gravity)**, so a 130% gravity increase buys only ~13% less airtime
+on an ~86m drop. Do not expect large hang-time changes from this knob at any value.
+
+Charge-jump measurements, flat ground, pinned starts, `jumpImpulseMax` 40:
+
+| `extraFallGravity` | Apex | Airtime | Two rolls at | Margin |
+|---|---|---|---|---|
+| 13 (was) | 21.0m | 1.93s | 1.67s | 0.26s |
+| **30 (shipped)** | 21.0m | 1.79s | 1.67s | **0.12s** |
+| 45 | 20.9m | 1.74s | 1.67s | 0.07s |
+
+**Apex never moves**, confirming fall gravity does not touch jump height. **Two rolls take 1.67s
+regardless**, confirming roll rate is independent of it. One flip is slightly FASTER than two rolls
+(pitch 4.56 rad/s over 360 vs roll 8.56 rad/s over 720), so two rolls is the binding case and is what
+was measured.
+
+**Recorded disagreement, since it may need revisiting:** the assistant's opinion was that 0.12s is too
+tight, being ~7 frames at 60fps against typical human input variance of 50-150ms, and recommended 20
+(~0.18s). The owner tested 30 directly and found the trick still lands. **Direct play beats the
+estimate, and this is the number to suspect first if landing tricks starts feeling inconsistent.**
+
+**Constraint clarified by the owner 2026-08-13, which corrected an assistant error:** "normal jumps"
+means a tap jump and a fully charged jump **from flat ground**. Hard landings off ramps and ledges are
+explicitly WELCOME, since the effects are severity-scaled. That removed a constraint that had been
+wrongly narrowing the options. For the record, a flat-ground charge jump stays under
+`hardLandingMinSpeed` 58 up to `extraFallGravity` **43**, and a charge jump plus air jump (~25.5m) up
+to **27**, so at the shipped 30 a stacked jump can now hard-land. The owner had not yet decided
+whether the stacked jump counts as "normal"; if it should not hard-land, the ceiling is 27.
+
+**Still to judge:** whether the shorter fall is felt at all. The measurement says ~13% on a big drop,
+which may be below perception. If it is not felt, the cause is likely perceptual rather than physical
+(the doubled environment halved apparent speed, and the craft is 6.88m long), and the lever is M.12's
+speed lines rather than more gravity.
+
+<details><summary>Original item</summary>
+
 ### M.6 Airtime. Raise fall force, and decide what that costs the trick economy
 
 Owner: long airtime reads "a tad floaty". Wants more falling force. Also wants the tap jump slightly
@@ -364,6 +418,64 @@ airtime, so a faster tighter trick pays the same.
 Note the crossover at ~43 means jumps would begin triggering hard landings, which 2.9 records as
 never happening today. That may be desirable. It should be a decision, not a surprise.
 
+</details>
+
+### M.8 ~~Air jump fires along world up~~ — DONE 2026-08-13, unjudged
+
+`FireAirJump` now fires along `transform.up`, **clamped so it can never push downward**. The grounded
+jump deliberately keeps world up: levelling already aligns the craft to the surface, so the two agree
+there, and a craft on a slope should still jump up rather than off down the hill.
+
+Owner decision on the inverted case: **never fire downward.** The clamp zeroes the vertical component
+rather than blending toward world up, which keeps the FULL lateral direction at any attitude, so lying
+on one flank gives a clean horizontal shove off a wall. Reasoning: tricks mean inversion, and the air
+jump's job during a trick is to buy hang time, so a version that fired the craft groundward whenever
+it was upside down would be at its most harmful in exactly the situation it exists for.
+
+Verified in play with gravity subtracted via a no-jump control at each attitude:
+
+| Roll | Craft up | Jump delta-v | Result |
+|---|---|---|---|
+| 0 deg | (0.00, 1.00) | (0.0, 23.0) | straight up |
+| 45 deg | (-0.71, 0.71) | (-14.1, 16.8) | up and away |
+| 90 deg | (-1.00, 0.00) | (-20.0, 0.0) | pure horizontal off the wall |
+| 135 deg | (-0.71, -0.71) | (-20.0, 0.0) | clamped, horizontal |
+| 179 deg | (-0.02, -1.00) | (-20.0, 0.7) | clamped, horizontal |
+
+Continuous through 90 degrees. The only discontinuity is at EXACTLY inverted, where no lateral
+direction remains and world up is the fallback; that is a measure-zero pose and both outcomes are
+harmless.
+
+**Re-read 5.10 (wall jump / wall riding) now.** The 90-degree row is most of a wall jump already.
+
+**Measurement trap worth keeping:** `ForceMode.VelocityChange` does not show up in `rb.linearVelocity`
+until the next physics step, so reading velocity immediately after an injected call returns zeros. A
+first pass at this test reported the air jump doing nothing at every attitude. Step physics before
+reading, and subtract a no-jump control at the same pose or gravity contaminates the delta.
+
+### M.9 ~~Jump energy costs should differ per jump type~~ — DONE 2026-08-13, unjudged
+
+Cost now ramps on the **same `chargeT` that sets the impulse**, so what you pay and what you get can
+never disagree. New tunable `jumpGroundedChargedEnergyCost`; the existing `jumpGroundedEnergyCost`
+becomes the tap price.
+
+Shipped: tap **10**, full charge **25**, air jump **15** (was a flat 20 / 20). Verified in play:
+
+| Charge | Cost | Impulse | Apex | Jumps per full tank |
+|---|---|---|---|---|
+| 0.0s (tap) | 10.0 | 20.0 m/s | 5.1m | 10 |
+| 1.0s | 17.5 | 30.0 m/s | 11.5m | 5 |
+| 2.0s (full) | 25.0 | 40.0 m/s | 20.4m | 4 |
+
+Rationale: a tap jump is used constantly just to clear things on the ground and previously cost the
+same as a 20m launch that buys a whole trick window. The air jump sits below a full charge because it
+is a hang-time extender and a juke rather than a second full jump, and it competes with boost for the
+same meter.
+
+**Feeds 2.10 directly.** The owner's standing complaint is that energy is permanently tight; this
+makes the most common jump 2.5x cheaper without making the committed one cheaper at all. Judge the
+energy economy after this rather than before it.
+
 ### M.7 Drift. Add a time cost, and more path curvature control
 
 **Target named by the owner 2026-08-11: the Crash Team Racing power slide, without the boost
@@ -389,24 +501,6 @@ way of implementing (a).
 Watch: the drift entry hop is live at `driftHopImpulse` 10, which is 1.70m of climb into a 2.5m float
 band. That is the value the owner approved on 2026-08-08, not a regression, but it leaves little
 margin and (a) will change how the entry reads.
-
-### M.8 Air jump fires along world up. It should fire along the craft's local up
-
-Owner, 2026-08-11: **the air jump is worth keeping** (this closes 5.9), and its value is as a mid-air
-juke and trick-height extender. But the impulse should be relative to the bottom of the craft, so
-tilting toward a wall propels you away from it.
-
-**Cheapest single change on this list with the largest character payoff.** It converts the air jump
-from a height extender into a directional juke, which is what the owner actually described wanting it
-for. It also partially pre-builds 5.10 (wall jump / wall riding).
-
-### M.9 Jump energy costs should differ per jump type
-
-Currently flat: `jumpGroundedEnergyCost` 20 and `jumpAirEnergyCost` 20. The grounded jump is also
-variable-height on a charge, and charges nothing extra for a full charge.
-
-Pairs with M.10 and with 2.10. Do it after airtime settles, since the right cost depends on what a
-jump buys.
 
 ### M.10 Trick energy economy, with the owner's risk/reward framing
 

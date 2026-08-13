@@ -777,10 +777,16 @@ public class HoverController_Propulsion : MonoBehaviour
         float chargeT = Mathf.Clamp01(jumpChargeTimer / P.jumpMaxChargeTime);
         float impulse = Mathf.Lerp(P.jumpImpulseMin, P.jumpImpulseMax, chargeT);
 
+        // Cost ramps on the SAME chargeT that sets the impulse, so what you pay and
+        // what you get can never disagree. A flat price made a tap jump -- used
+        // constantly just to clear things on the ground -- cost exactly as much as a
+        // 20m launch that buys a whole trick window.
+        float cost = Mathf.Lerp(P.jumpGroundedEnergyCost, P.jumpGroundedChargedEnergyCost, chargeT);
+
         // Reset charge unconditionally. The player released the button.
         jumpChargeTimer = 0f;
 
-        if (!energy.TryConsume(P.jumpGroundedEnergyCost))
+        if (!energy.TryConsume(cost))
         {
             OnJumpDenied?.Invoke(true);
             return;
@@ -808,11 +814,36 @@ public class HoverController_Propulsion : MonoBehaviour
 
         airJumpAvailable = false;
 
+        // Fires along the CRAFT'S OWN UP, not world up, so the air jump is a
+        // directional juke rather than only a height extender: tilt toward a wall
+        // and it shoves you off it, which is what the owner asked for and what
+        // makes this ability worth keeping (TODO 5.9). The grounded jump keeps
+        // world up deliberately -- levelling already aligns the craft to the
+        // surface, so local and world up agree there, and a craft on a slope
+        // should still jump UP rather than off down the hill.
+        //
+        // Clamped so it can never push DOWNWARD. Tricks mean inversion, and the
+        // air jump's job during a trick is to buy hang time; a version that fired
+        // the craft groundward whenever it was upside down would be at its most
+        // harmful in exactly the situation it exists for. Zeroing the vertical
+        // component rather than blending toward world up keeps the full lateral
+        // direction at any attitude, so lying on one flank still gives a clean
+        // horizontal shove off a wall. Continuous through 90 degrees; the only
+        // discontinuity is at EXACTLY inverted, where there is no lateral
+        // direction left to keep and world up is the sane fallback.
+        Vector3 jumpDir = transform.up;
+
+        if (jumpDir.y < 0f)
+        {
+            jumpDir.y = 0f;
+            jumpDir = jumpDir.sqrMagnitude > 1e-4f ? jumpDir.normalized : Vector3.up;
+        }
+
         // VelocityChange: adds m/s directly, ignoring mass.
-        rb.AddForce(Vector3.up * P.airJumpImpulse, ForceMode.VelocityChange);
+        rb.AddForce(jumpDir * P.airJumpImpulse, ForceMode.VelocityChange);
 
         if (ShouldDrawDebug)
-            Debug.DrawRay(transform.position, Vector3.up * P.airJumpImpulse * 0.5f, Color.magenta, 0.5f);
+            Debug.DrawRay(transform.position, jumpDir * P.airJumpImpulse * 0.5f, Color.magenta, 0.5f);
     }
 
     // -------------------------------------------------------------------------

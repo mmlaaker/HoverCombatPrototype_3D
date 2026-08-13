@@ -176,13 +176,27 @@ public class PropulsionTuning
     [Min(0f)]
     public float jumpGroundedLockout = 0.2f;
 
-    [Tooltip("Energy for a grounded jump. Flat, regardless of how long you charged.")]
+    [Tooltip("Energy for a TAP jump, with no charge held.\n\n" +
+             "The cost ramps from this to Jump Grounded Charged Energy Cost on the SAME charge " +
+             "fraction that sets the impulse, so height and price can never disagree.\n\n" +
+             "Keep it cheap. A tap jump is used constantly to clear things on the ground, and " +
+             "charging it for a full jump's worth of energy taxes ordinary driving.")]
     [Min(0f)]
-    public float jumpGroundedEnergyCost = 25f;
+    public float jumpGroundedEnergyCost = 10f;
 
-    [Tooltip("Energy for an air jump.")]
+    [Tooltip("Energy for a FULLY CHARGED grounded jump.\n\n" +
+             "This is the one that buys ~20m of altitude and a whole trick window, so it should " +
+             "read as a real commitment against a 100 pool. Set it equal to Jump Grounded Energy " +
+             "Cost to go back to a flat price regardless of charge.")]
     [Min(0f)]
-    public float jumpAirEnergyCost = 25f;
+    public float jumpGroundedChargedEnergyCost = 25f;
+
+    [Tooltip("Energy for an air jump.\n\n" +
+             "Deliberately cheaper than a full charge: it is a hang-time extender and a mid-air " +
+             "juke rather than a second full jump, and it competes directly with boost for the " +
+             "same meter.")]
+    [Min(0f)]
+    public float jumpAirEnergyCost = 15f;
 
     [Tooltip("Air jump strength. Not charge-based.\n\n" +
              "Adds to whatever rise you have left rather than replacing it, so jumping again near " +
