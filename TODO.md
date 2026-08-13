@@ -376,6 +376,22 @@ do not touch the single-write-authority solver.
 DURATION HELD rather than firing on an event, and the boost envelope already tracks exactly that in
 `_boostHold`. Everything else on the impulse router is event-driven.
 
+### M.14 ~~Micro-bumpiness on rounded slopes~~ — CLOSED 2026-08-12, judged good
+
+Fixed by `HoverController_Foundation` v1.9 (smooth ground normals) and confirmed by the owner on the
+bumpy terrain away from the mountains, with slope behaviour separately re-judged good afterwards.
+**Cause, measurements and the two disproved theories are in `CLAUDE.md`** and not repeated here.
+
+Two traps it created are open as **3.10** (Read/Write Enabled is a silent dependency) and **3.11**
+(the mesh cache is never cleared).
+
+One measurement lesson worth keeping in this file, because it will recur during the tuning pass:
+**the first live A/B on this fix reported only a 15% improvement and was wrong.** A 9-second
+full-throttle run covered ~690m across many surfaces and went airborne, so it measured real terrain
+and airborne resets rather than the artifact. Constraining to grounded samples, a single surface and
+a fixed 28 m/s is what made the signal visible. **Handling and camera A/Bs here need pinned starts
+and constrained routes**, the same lesson M.3 produced.
+
 ### M.13 Small, isolated, no dependencies
 
 - **`yawAccel` 13 -> 12.** Steering judged tight and not twitchy; the owner wants it a single unit
@@ -1112,6 +1128,48 @@ arguably correct (disabling recovery should disable the lockout recovery exists 
 is a trap worth knowing.
 
 Minor: it also does not clear `unstickForceTimer`, so an in-flight unstick push finishes.
+
+### 3.10 Smooth ground normals depend on Read/Write Enabled, and fail SILENTLY without it
+
+`HoverController_Foundation.ResolveSurfaceNormal` (v1.9) interpolates a mesh's vertex normals so the
+hover system reads the smooth surface the player sees rather than the flat triangle underneath. It
+needs `Mesh.isReadable`, which means **Read/Write Enabled ticked in the model's import settings.**
+
+All 24 collision meshes in `Prototype_Scene` currently have it. Nothing enforces that.
+
+**The failure mode is the problem, not the dependency.** A terrain asset imported without it does not
+error, warn, or behave oddly in any visible way. It silently falls back to flat triangle normals **for
+that object only**, and the craft goes back to being nudged a few degrees several times a second while
+crossing it. It will read as "this one part of the arena feels bumpy", which is not a description that
+points anywhere near an import setting.
+
+**When this will bite:** arena blockout (6.2), when new geometry arrives from outside the RVP package.
+
+Options if it becomes a nuisance rather than a one-off: log a one-time warning naming the offending
+mesh the first time a non-readable one is hit, or add an editor validation pass over the scene's
+`MeshCollider`s. Deliberately not built yet, because a warning that fires legitimately on primitive
+colliders would be the fourth instrument in this project to cry wolf.
+
+**Cost note if anyone is ever tempted to untick it to save memory:** Read/Write Enabled keeps a CPU-side
+copy of the mesh, so it doubles that mesh's memory. This feature is why it must stay on.
+
+### 3.11 The smooth-normal mesh cache is never cleared
+
+`_meshNormalCache` in `HoverController_Foundation` is a `static Dictionary<Mesh, MeshNormalData>` holding
+triangle and vertex-normal arrays, filled lazily per mesh driven over. The cache itself is **required,
+not an optimisation**: `Mesh.triangles` and `Mesh.normals` allocate a fresh array on every access, so
+reading them per hover ray would generate garbage four times per `FixedUpdate` forever.
+
+What is missing is eviction. It is never emptied and it holds strong references to `Mesh` objects.
+
+- **In a build this is harmless.** The cache lives as long as the level does, roughly 80KB per large
+  terrain mesh, so a couple of MB for the current scene, and only for meshes actually driven on.
+- **In the EDITOR it accumulates**, because statics survive exiting play mode. Held references also stop
+  those meshes being unloaded. Negligible today with one scene; it grows once there are several.
+
+**Fix when convenient:** clear it on play-mode state change in the editor, and consider
+`RuntimeInitializeOnLoadMethod` for domain-reload-disabled setups. Left out deliberately for now, since
+adding lifecycle code that cannot be exercised in a single-scene project is its own risk.
 
 ### 3.9 Scene wiring noise
 Cosmetic, no runtime effect, but misleading when reading the inspector:

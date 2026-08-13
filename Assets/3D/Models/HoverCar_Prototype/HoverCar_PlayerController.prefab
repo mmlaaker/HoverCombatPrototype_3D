@@ -10273,6 +10273,7 @@ MonoBehaviour:
   groundLayers:
     serializedVersion: 2
     m_Bits: 4294967295
+  useSmoothGroundNormals: 1
   drawDebugRays: 1
   debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!114 &4964355425596500860

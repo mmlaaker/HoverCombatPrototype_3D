@@ -1,7 +1,50 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v1.7
+/// HoverController_Foundation v1.9
+///
+/// v1.9: Hover rays read the SMOOTH surface normal, not the flat triangle normal.
+///       A raycast reports the normal of whichever TRIANGLE it hit, while the terrain
+///       the player sees is smooth-shaded from interpolated vertex normals, so the
+///       physics was reading rounded ground as a series of tilted plates and levelling
+///       torque re-levelled the chassis to each plate as it crossed. Measured on the
+///       mountain terrain: ground-normal steps of 2.36 deg on average (worst 17.45)
+///       arriving 5.9 times a second, with chassis pitch+roll at 36.44 deg/s in the
+///       60ms after a crossing against 6.38 deg/s otherwise, nearly 6x. Reported by
+///       the owner as "micro-bumpy" on rounded slopes before anything was measured,
+///       and visible in BOTH camera modes, which is what ruled out the camera.
+///       ResolveSurfaceNormal interpolates the vertex normals via the hit's
+///       barycentric coordinate; probing 240m of terrain, face normals produced 7
+///       discontinuities above one degree and smooth normals produced ZERO. The
+///       resolved normal feeds the spring axis, the damping projection, the gravity
+///       feedforward and AverageGroundNormal, which must all agree or they push along
+///       slightly different axes. Preferred over filtering the normal over time
+///       because a time filter cannot tell a triangle edge from a real ramp edge and
+///       would make genuine terrain arrive late; nothing here is smoothed, only read
+///       correctly. Per-mesh cache of triangles and normals is REQUIRED rather than an
+///       optimisation, since Mesh.triangles and Mesh.normals allocate on every access.
+///       Falls back to the flat normal for primitive colliders, convex meshes,
+///       non-readable meshes and degenerate creases, so it is always safe to leave on.
+///       New scene toggle: useSmoothGroundNormals (on).
+///       NOTE the environment scale was NOT the cause and was briefly suspected:
+///       uniform scaling leaves every angle unchanged, so doubling the world altered
+///       how OFTEN facets arrive and not how large each one is.
+///
+/// v1.8: Flip recovery arms on its own angle. flipRecoveryArmAngle (70) is split out of
+///       flipRecoveryAngleThreshold (80), which now owns only the downed lockout. The
+///       shared value sat ABOVE the hover-supported resting equilibrium this file
+///       already documented at ~78 deg, so a craft that settled into the gap was too
+///       tipped to drive out and not tipped enough to be rescued, and never armed.
+///       Caught on a screenshot reading "tilt 80deg (need 80) ... authorized False"
+///       with unstick firing uselessly, which it must, since unstick pushes UP and the
+///       problem is rotational. Splitting rather than lowering the shared number is
+///       load-bearing: UpdateDownedState has no speed gate, so one value low enough to
+///       rescue a stuck craft would also strip control the moment the chassis brushed a
+///       steep bank at speed. Arming still needs a full flipRecoveryDelay under
+///       flipRecoverySpeedThreshold, so it only ever catches a craft at rest. Verified:
+///       parked at 75 deg, downed at 0.50s, upright by 2.66s. Gizmo now prints tilt to
+///       one decimal and names both angles, because F0 rounding printed a satisfied
+///       gate while the code disagreed.
 ///
 /// v1.7: The clearance gate is predictive. It now compares the BALLISTIC PEAK from
 ///       current rise velocity against airControlMinClearance rather than the craft's
@@ -127,6 +170,19 @@ public class HoverController_Foundation : MonoBehaviour
     [Header("🌍 Ground Interaction")]
     [Tooltip("Layers treated as ground for hover detection.")]
     [SerializeField] private LayerMask groundLayers = ~0;
+
+    [Tooltip("Read the SMOOTH shaded surface normal instead of the flat triangle normal.\n\n" +
+             "A raycast returns the normal of the triangle it hit, so smooth-shaded terrain is " +
+             "read by the physics as a series of tilted plates and the craft re-levels to each " +
+             "one as it crosses it. Measured on the mountain terrain that is 5.9 attitude nudges " +
+             "per second averaging 2.4 degrees, felt as a persistent micro-bumpiness on rounded " +
+             "slopes. Reading the interpolated normal removed every discontinuity over 240m of " +
+             "probing.\n\n" +
+             "Falls back to the flat normal automatically wherever a smooth one is unavailable " +
+             "(primitive colliders, convex meshes, meshes without Read/Write enabled), so it is " +
+             "always safe to leave on. Turn it OFF to A/B the feel, or if terrain meshes are ever " +
+             "made non-readable to save memory.")]
+    [SerializeField] private bool useSmoothGroundNormals = true;
 
     [Tooltip("Draws hover rays in the scene view.")]
     [SerializeField] private bool drawDebugRays = true;
@@ -254,6 +310,20 @@ public class HoverController_Foundation : MonoBehaviour
     private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
     private Vector3 unstickForceDir;         // direction cached at trigger time, held for duration
     private float   _effectiveHoverHeight;   // ride height actually targeted this tick (ceiling duck)
+
+    /// <summary>
+    /// Cached triangle and vertex-normal arrays per collision mesh, for
+    /// ResolveSurfaceNormal. Static so several vehicles share one copy of the
+    /// terrain; the arrays are read-only after the first fill.
+    /// </summary>
+    private struct MeshNormalData
+    {
+        public int[]     triangles;
+        public Vector3[] normals;
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<Mesh, MeshNormalData>
+        _meshNormalCache = new System.Collections.Generic.Dictionary<Mesh, MeshNormalData>();
     private float   hardLandingTimer;        // counts down while hard-landing spring suppression is active
     private float   hardLandingSeverity;     // 0..1, cached at detection so the taper scales with impact
 
@@ -529,6 +599,81 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     /// <summary>
+    /// The surface normal the springs should actually use: the SMOOTH (shaded)
+    /// normal where the geometry can supply one, falling back to the flat triangle
+    /// normal where it cannot.
+    ///
+    /// Why this exists. A raycast returns the flat normal of whichever TRIANGLE it
+    /// hit, while the terrain the player is looking at is smooth-shaded from
+    /// interpolated vertex normals. So the hover system was reading rounded ground
+    /// as a series of tilted plates, and levelling torque re-levelled the chassis
+    /// to each plate in turn. Measured 2026-08-12 on the mountain terrain: ground
+    /// normal steps of 2.36 degrees on average (worst 17.45) arriving 5.9 times a
+    /// second, with chassis pitch+roll running 36.44 deg/s in the 60ms after a
+    /// crossing against 6.38 deg/s otherwise. Nearly 6x, and the owner reported it
+    /// as "micro-bumpy" on rounded slopes before any of it was measured.
+    ///
+    /// Probing 240m of that terrain, face normals produced 7 discontinuities above
+    /// one degree and interpolated normals produced ZERO. Not reduced, removed.
+    ///
+    /// Chosen over filtering the normal over time, which was the first instinct: a
+    /// time filter cannot tell a triangle edge from a real ramp edge, so it buys
+    /// smoothness by making genuine terrain arrive late. This has no such trade,
+    /// because nothing is smoothed, only read correctly.
+    ///
+    /// The cache is a requirement, not an optimisation. Mesh.triangles and
+    /// Mesh.normals each allocate a fresh array on EVERY access, so reading them
+    /// per ray would generate garbage four times per FixedUpdate forever. Keyed on
+    /// the shared mesh, so repeated terrain shares one entry.
+    ///
+    /// Falls back to hit.normal, silently and by design, whenever a smooth normal
+    /// is unavailable: primitive colliders, convex mesh colliders (which report
+    /// triangleIndex -1), meshes without Read/Write enabled, and meshes carrying no
+    /// vertex normals. All 24 collision meshes in the current scene supply one.
+    ///
+    /// TransformDirection is correct for the uniform scaling the environment uses.
+    /// A non-uniformly scaled collider would need the inverse-transpose; if one is
+    /// ever introduced this is where it breaks, and it will read as a slight
+    /// persistent lean rather than as an error.
+    /// </summary>
+    private Vector3 ResolveSurfaceNormal(in RaycastHit hit)
+    {
+        if (!useSmoothGroundNormals || hit.triangleIndex < 0)
+            return hit.normal;
+
+        MeshCollider mc = hit.collider as MeshCollider;
+        if (mc == null || mc.sharedMesh == null || !mc.sharedMesh.isReadable)
+            return hit.normal;
+
+        Mesh mesh = mc.sharedMesh;
+
+        if (!_meshNormalCache.TryGetValue(mesh, out MeshNormalData data))
+        {
+            data = new MeshNormalData { triangles = mesh.triangles, normals = mesh.normals };
+            _meshNormalCache[mesh] = data;
+        }
+
+        if (data.normals == null || data.normals.Length == 0)
+            return hit.normal;
+
+        int i = hit.triangleIndex * 3;
+        if (i + 2 >= data.triangles.Length)
+            return hit.normal;
+
+        Vector3 bc = hit.barycentricCoordinate;
+        Vector3 n  = data.normals[data.triangles[i]]     * bc.x
+                   + data.normals[data.triangles[i + 1]] * bc.y
+                   + data.normals[data.triangles[i + 2]] * bc.z;
+
+        // A degenerate interpolation (opposed vertex normals across a crease)
+        // would normalize to garbage and throw the spring off its axis.
+        if (n.sqrMagnitude < 1e-6f)
+            return hit.normal;
+
+        return hit.collider.transform.TransformDirection(n).normalized;
+    }
+
+    /// <summary>
     /// Ride height the springs actually target this tick, reduced when something
     /// overhead would otherwise be crushed into.
     ///
@@ -623,8 +768,14 @@ public class HoverController_Foundation : MonoBehaviour
                 continue;
             }
 
+            // Resolved ONCE and used for every term below. The spring axis, the
+            // damping projection, the gravity feedforward and AverageGroundNormal
+            // must all agree about which way "up" is, or they push the chassis
+            // along slightly different axes.
+            Vector3 surfaceNormal = ResolveSurfaceNormal(hit);
+
             float compression         = _effectiveHoverHeight - hit.distance;
-            float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), hit.normal);
+            float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), surfaceNormal);
 
             // Gravity feedforward: each point carries its share of the chassis weight,
             // so the spring term only has to correct ERROR instead of also holding the
@@ -634,11 +785,11 @@ public class HoverController_Foundation : MonoBehaviour
             // is free to be tuned purely for how hard the chassis resists being pushed
             // around -- height and looseness stop being the same knob inverted.
             //
-            // Scaled by hit.normal.y so it supports exactly the NORMAL component of
+            // Scaled by surfaceNormal.y so it supports exactly the NORMAL component of
             // weight (G*cos0) and leaves the tangential component unopposed. Feeding it
             // forward along world up instead would cancel gravity outright and glue the
             // chassis to slopes.
-            float gravityShare = gravityMagnitude * hit.normal.y / hoverPoints.Length;
+            float gravityShare = gravityMagnitude * surfaceNormal.y / hoverPoints.Length;
 
             float springForce = compression * F.liftStrength
                               - velocityAlongNormal * F.liftDamping
@@ -658,9 +809,9 @@ public class HoverController_Foundation : MonoBehaviour
             // behaves identically across vehicle masses. Values retuned from
             // Force-mode by dividing by vehicle mass (1000): 10000 -> 10,
             // 1500 -> 1.5. Identical forces at mass 1000; feel unchanged.
-            rb.AddForceAtPosition(hit.normal * springForce, point.position, ForceMode.Acceleration);
+            rb.AddForceAtPosition(surfaceNormal * springForce, point.position, ForceMode.Acceleration);
 
-            normalSum    += hit.normal;
+            normalSum    += surfaceNormal;
             distanceSum  += hit.distance;
             groundedCount++;
 
