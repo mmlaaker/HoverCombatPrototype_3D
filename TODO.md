@@ -156,16 +156,49 @@ Two candidates for the look-up specifically, to be separated rather than guessed
 look-ahead term (`speedLookAheadMax` 6 against `speedLookAheadReference` 60) and the strafe aim
 pitch. The first scales with throttle exactly as described.
 
-### M.3 The vehicle briefly leaves frame while the camera pitches up
+### M.3 The vehicle briefly leaves frame while the camera pitches up — STILL OPEN, two theories killed
 
 Part of the craft clips offscreen mid-transition as the camera pitches up to look down on it. Both
 endpoints are fine; the motion between them is not. Requirement: **vehicle fully onscreen at all
 times.**
 
-The per-frame framing guard (`minFrameMargin` 2) should already prevent this, so the question is
-whether it is being outrun by the pitch rate rather than mis-tuned. Note `CameraPreviewState` cannot
-catch this by construction: it evaluates settled poses, and this is the motion between two of them.
-Do not expect the editor's framing verdict to reproduce it.
+**Confirmed real and quantified 2026-08-11.** Driving real terrain, hull margin ran +0.2086 of the
+viewport before the pitch, **-0.0404 during it (fully off screen) at t+0.385s**, and +0.0806 settled
+at full stick-up. Reproduced a second time at -0.1090. The BOTTOM edge is the one breached.
+
+**Theory 1, orbit geometry: DEAD.** The settled pose at full stick-up fits comfortably, so
+`pitchUpDistanceGain` was never the cause. It would have bought margin without touching the mechanism.
+
+**Theory 2, camera lag: DEAD, and this one was tried and reverted.** The rig really does trail its
+solved pose by up to **2.498m** during a fast stick-up (solved Y 9.552 against an actual 8.645), with
+the aim lagging on top of that (composer damping 0.5s against position damping 0.1-0.2s). So the
+guard genuinely is certifying a frame nobody is looking through. Feeding it the rig's REAL position
+was implemented, measured, and backed out: on a pinned repeatable manoeuvre it changed the worst
+margin by **-0.0009 at 60 m/s**, and at 45 m/s the guard performed slightly WORSE than being switched
+off entirely. Correcting the position while still assuming an ideal aim makes the model less
+self-consistent, not more.
+
+**What the measurements actually point at, and the next thing to test.** The clip reproduces readily
+on real terrain and **does not reproduce at all on flat ground with the craft held level, at any
+speed, with the guard on, off, or modified.** So the missing variable is **chassis attitude**, not
+camera lag. The likely mechanism: `Measure` treats the hull as a bounding SPHERE, which is
+attitude-independent, while the thing that actually leaves frame is the **rear-bottom corner of an
+oriented box**. `CLAUDE.md` > Vehicle Scale already warns that the rear-bottom corner is the first to
+leave frame and that the collider union is not centred on the origin. A sphere model cannot see a
+corner swinging down as the nose pitches up over a crest.
+
+**Test before building anything:** reproduce with the craft pitched, on a slope or a crest, and
+compare the sphere margin the guard computes against the true oriented-box margin. If they diverge,
+the fix is in `Measure`, not in the guard's inputs.
+
+**Verification harness worth reusing:** the oriented-box viewport check written for this
+investigation. Eight corners of the measured collider union through `Camera.WorldToViewportPoint`,
+reporting worst margin and which edge broke. It is the only instrument here that measures the frame
+the player sees rather than the frame the solver intended.
+
+**Measurement lesson, and it cost three bad conclusions:** the first runs let the craft accelerate
+from wherever the previous test left it, so no two were comparable and one apparent regression was
+pure starting-state noise. **Pin position, rotation and velocity before any camera framing test.**
 
 ### M.4 The dodge validator models an unopposed impulse and cries wolf
 

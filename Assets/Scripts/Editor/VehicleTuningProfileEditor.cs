@@ -399,10 +399,29 @@ public class VehicleTuningProfileEditor : Editor
         float deltaV    = DodgeDeltaV;
         float share     = strafeCap > 0f ? deltaV / strafeCap * 100f : 0f;
 
+        // BANDS RE-CALIBRATED 2026-08-11 against a playtest, and the formula was
+        // left alone because measurement says it is right: open-loop predicted a
+        // 52.00 m/s peak and the craft measured 52.81. What was wrong was the
+        // PERCEPTUAL claim bolted to it. The shipped tuning sits at ~130% of the
+        // strafe cap, which the old top band called "a TELEPORT, hard to follow at
+        // speed"; driven, it reads as the quick sidestep juke it was designed as,
+        // and the owner wants room to push it FURTHER. So the teleport band began
+        // roughly 100 points of share too low.
+        //
+        // Measured at the shipped values: 25.81 m/s of realized delta-v over an
+        // undodged baseline, and 12.87m of extra lateral displacement in half a
+        // second, which is 3.38 body widths. That is a big juke, not a blink.
+        //
+        // Third time a readout in this project has cried wolf during correct play,
+        // after the Movement gizmo's drive/drag warning and the camera framing
+        // verdict. A check that fires while the tuning is good gets ignored, which
+        // is worse than having no check, so bands here are only ever tightened
+        // against something somebody has actually driven.
         string reads = strafeCap <= 0f ? "strafe cap is 0"
                      : share < 30f     ? "reads as a nudge"
-                     : share <= 60f    ? "reads as a sharp sidestep"
-                     : share < 100f    ? "reads as a strong lunge"
+                     : share <= 90f    ? "reads as a sharp sidestep"
+                     : share < 200f    ? "reads as a strong juke"
+                     : share < 300f    ? "reads as a hard displacement, check it is still readable"
                                        : "reads as a TELEPORT, hard to follow at speed";
 
         float energy   = Get("propulsion.dodgeEnergyCost");
@@ -428,6 +447,11 @@ public class VehicleTuningProfileEditor : Editor
               + "over 100% is not sustainable: it is an additive burst that bleeds back down "
               + "through Strafe Lateral Cap Strength, which is what makes a dodge read as a surge "
               + "rather than a speed change.\n\n"
+              + "This figure is a PEAK VELOCITY and it is accurate: measured against the shipped "
+              + "values it predicted 52.00 m/s and the craft hit 52.81. What it does not tell you "
+              + "is how far you actually go, which is what decides whether a dodge reads as a juke "
+              + "or as a blink. At the shipped values that is 12.87m in half a second, about 3.4 "
+              + "body widths, and it reads as a sidestep. Judge a big change by driving it.\n\n"
               + "Same distance but snappier: raise Dodge Force and shorten Dodge Duration together. "
               + "Bigger sidestep: raise Dodge Force alone. Make dodging a resource decision rather "
               + "than a reflex: raise Dodge Energy Cost, since that competes directly with boost.");

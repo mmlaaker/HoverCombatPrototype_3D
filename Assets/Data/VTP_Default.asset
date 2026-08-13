@@ -35,6 +35,7 @@ MonoBehaviour:
     unstickLiftForce: 60
     unstickLiftDuration: 0.15
     flipRecoveryAngleThreshold: 80
+    flipRecoveryArmAngle: 70
     flipRecoveryReleaseAngle: 35
     flipRecoveryDelay: 1
     flipRecoveryTorque: 60

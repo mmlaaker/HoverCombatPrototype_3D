@@ -367,6 +367,13 @@ public class HoverCameraController : MonoBehaviour
         /// </summary>
         public float guardScale;
         public float guardRemoved;
+
+        /// <summary>
+        /// Vertical position damping for the strafe rig, in seconds. Solved rather
+        /// than read straight off the tuning, because it is rate-gated: see
+        /// ContributeStrafeDamping. Unused by the drive solution.
+        /// </summary>
+        public float strafeVerticalDamping;
     }
 
     /// <summary>
@@ -395,6 +402,13 @@ public class HoverCameraController : MonoBehaviour
         public float uprightness;       // vehicle up.y, 1 level, 0 on its side or inverted
         public float shoulderOffset;    // metres, lateral; settled value, not mid-ease
         public bool  strafing;
+
+        // How much of the craft's weight the hover springs are actually carrying,
+        // 1 grounded and 0 in free air. Only the strafe rig's damping reads it.
+        // This is Foundation's own signal rather than anything derived here, for
+        // the same reason Propulsion uses it: it is the project's answer to "am I
+        // still on my springs", and it crossfades instead of switching.
+        public float hoverSupport;
     }
 
     /// <summary>
@@ -563,6 +577,7 @@ public class HoverCameraController : MonoBehaviour
     private bool  _haveTravelYaw;
     private float     _headingYaw;    // degrees, world yaw of the proxy
     private Rigidbody _vehicleRb;     // yaw-rate source while tilted, and speed source
+    private HoverController_Foundation _vehicleFoundation;  // hover support, for strafe damping
 
     // ── Unity Lifecycle ───────────────────────────────────────────────────
 
@@ -609,7 +624,8 @@ public class HoverCameraController : MonoBehaviour
 
         // Heading proxy: the drive cam follows this instead of the vehicle so
         // its yaw frame stays stable through air-control flips (see v1.2 notes).
-        _vehicleRb = vehicleTarget.GetComponent<Rigidbody>();
+        _vehicleRb         = vehicleTarget.GetComponent<Rigidbody>();
+        _vehicleFoundation = vehicleTarget.GetComponent<HoverController_Foundation>();
 
         _headingProxy = new GameObject("CameraHeadingProxy").transform;
         _headingProxy.position = vehicleTarget.position;
@@ -948,7 +964,8 @@ public class HoverCameraController : MonoBehaviour
             airControlWeight = propulsion != null ? propulsion.AirControlWeight : 0f,
             uprightness      = vehicleTarget != null ? vehicleTarget.up.y : 1f,
             shoulderOffset   = _shoulderOffset,
-            strafing         = strafing
+            strafing         = strafing,
+            hoverSupport     = _vehicleFoundation != null ? _vehicleFoundation.HoverSupport : 1f
         };
     }
 
@@ -1102,9 +1119,18 @@ public class HoverCameraController : MonoBehaviour
     /// the crosshair is yaw and pitch and anything that moves the look point
     /// moves the player's aim. Only FOV is contributed to.
     ///
-    /// Note that boost contributes its LENS here but not its pull-back, for the
-    /// same reason. The camera falling back during a boost is a drive cue; doing
-    /// it while the player is aiming would move the rig under the crosshair.
+    /// Boost contributes NOTHING here, lens included. That is an owner rule set
+    /// 2026-08-11 after a playtest: strafe mode gets full crosshair authority with
+    /// zero modifiers. The previous version contributed the lens and withheld only
+    /// the pull-back, on the reasoning that FOV does not move the rig under the
+    /// crosshair. True as far as it goes, and overruled: a lens change while aiming
+    /// still rescales the whole frame under a fixed reticle, which is a modifier on
+    /// aim whether or not it moves the camera.
+    ///
+    /// This also settles the open question in TODO 2.6 about the boost forward-gate
+    /// reading forward speed only, so boosting sideways in strafe produced no lens
+    /// change. That was right, and it now goes further: no lens change in strafe at
+    /// all, in any direction.
     /// </summary>
     private FramingSolution SolveStrafeFraming(in FramingInputs inp)
     {
@@ -1116,9 +1142,52 @@ public class HoverCameraController : MonoBehaviour
             guardScale   = 1f              // nothing tips the strafe aim, so nothing to guard
         };
 
-        ContributeBoostLens(ref s, inp);
+        ContributeStrafeDamping(ref s, inp);
 
         return s;
+    }
+
+    /// <summary>
+    /// Vertical damping for the strafe rig, applied only while the craft is OFF
+    /// its hover springs.
+    ///
+    /// The damping softens jumps, which is what it was added for and which the
+    /// owner confirmed as good. Applied flat, it also lagged something nobody was
+    /// thinking about: throttling forward in strafe lifts the craft about 0.56m,
+    /// and a camera that lags that lift sits LOW relative to the chassis, which
+    /// flattens the angle it looks down at. Measured 2026-08-11 at full throttle in
+    /// strafe: the rig sat 0.91m below its authored height and the view tipped up
+    /// 8.70 degrees. The arithmetic closes exactly -- atan(3.50/6.00) is 30.3
+    /// degrees and atan(2.59/6.53) is 21.6 -- so that was the whole of the reported
+    /// "camera looks up in strafe", and neither the boost lens (FOV moved 0.00) nor
+    /// aim pitch (the chassis moved 0.03 degrees) was involved.
+    ///
+    /// GATED ON HOVER SUPPORT, AND THE FIRST ATTEMPT GATED ON VERTICAL SPEED, WHICH
+    /// WAS WRONG AND SHIPPED BRIEFLY. The reasoning for rate sounded clean -- a jump
+    /// is a fast vertical transient, the throttle lift is a slow one -- and it fell
+    /// apart on slopes, which the owner found within minutes. Driving undulating
+    /// ground produces vertical speeds up to 13.92 m/s against a 6 m/s saturation,
+    /// so the gate swept its whole range, crossed its midpoint 5 times in 8 seconds
+    /// and changed at up to 39 per second. A damping coefficient that moves that
+    /// fast generates motion of its own: the rig starts lagging, then snaps to
+    /// catch up, repeatedly. Smooth on flat ground, bumpy on every slope.
+    ///
+    /// Hover support is the right signal because it asks the question that actually
+    /// separates the two cases: not "how fast am I moving vertically" but "am I
+    /// still standing on my springs". Climbing a slope, the answer is yes and the
+    /// rig tracks rigidly. Jumping, it goes to zero and the damping arrives in
+    /// full. Measured over the same terrain it changes at a mean rate of 0.09 per
+    /// second against the rate gate's 0.23, peaks at 7.6 against 12.7, and still
+    /// reaches a full 1.000 during a real jump, so nothing is lost.
+    ///
+    /// It is also the signal Foundation and Propulsion already use for exactly this
+    /// distinction, and it crossfades rather than switching, so there is no cliff
+    /// to tune around. Cresting a bump dips support to about 0.28 and lets a little
+    /// damping in, which is correct: a crest IS a small jump.
+    /// </summary>
+    private void ContributeStrafeDamping(ref FramingSolution s, in FramingInputs inp)
+    {
+        s.strafeVerticalDamping = strafe.verticalDamping * (1f - Mathf.Clamp01(inp.hoverSupport));
     }
 
     // ── Framing: contributors ─────────────────────────────────────────────
@@ -1293,6 +1362,28 @@ public class HoverCameraController : MonoBehaviour
     /// Never touches the orbit, the resting framing or the FOV. If the base
     /// framing itself does not fit, this cannot rescue it, and the inspector
     /// readout says so rather than pretending otherwise.
+    ///
+    /// KNOWN BLIND SPOT, measured 2026-08-11 and deliberately NOT patched here.
+    /// This method reasons about the SOLVED camera pose, and Cinemachine damping
+    /// sits downstream of the commit, so during a fast stick-up the rig trails its
+    /// request by up to 2.498m (solved Y 9.552 against an actual 8.645) with the
+    /// aim lagging too on 0.5s of composer damping. The guard therefore certifies
+    /// a frame that is not the one being rendered.
+    ///
+    /// Feeding it the rig's real position was tried and REVERTED, because the
+    /// measurements did not support it: on a pinned, repeatable manoeuvre at 60 m/s
+    /// it changed the worst margin by -0.0009, and at 45 m/s it was slightly worse
+    /// than leaving the guard off entirely. Correcting the position while still
+    /// assuming an ideal aim makes the model less self-consistent, not more.
+    ///
+    /// What is actually unexplained: clipping reproduces readily while driving real
+    /// terrain (measured to -0.0404 and -0.1090 of the viewport) and does NOT
+    /// reproduce on flat ground at any speed with the craft held level. So the
+    /// missing variable is chassis attitude, not camera lag. Note this method
+    /// measures the hull as a bounding SPHERE, which is attitude-independent, while
+    /// the thing that leaves frame is the rear-bottom corner of an oriented box --
+    /// the exact corner CLAUDE.md warns is the first to go. Investigate that before
+    /// touching anything here.
     /// </summary>
     private void ContributeFramingGuard(ref FramingSolution s, in FramingInputs inp)
     {
@@ -1510,7 +1601,10 @@ public class HoverCameraController : MonoBehaviour
         // would dirty the scene on open for no visible gain.
         if (!Application.isPlaying) return;
 
-        var wanted = new Vector3(0f, strafe.verticalDamping, 0f);
+        // Rate-gated by ContributeStrafeDamping rather than read flat off the
+        // tuning, so the throttle lift no longer drags the crosshair. Committing a
+        // SOLVED value keeps this the same shape as every other output here.
+        var wanted = new Vector3(0f, s.strafeVerticalDamping, 0f);
         var ts     = _strafeTransposer.TrackerSettings;
 
         if (ts.PositionDamping != wanted || ts.RotationDamping != Vector3.zero)

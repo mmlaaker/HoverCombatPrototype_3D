@@ -997,7 +997,27 @@ public class HoverController_Foundation : MonoBehaviour
             return;
 
         float tiltAngle = Vector3.Angle(transform.up, Vector3.up);
-        bool  isFlipped = tiltAngle >= F.flipRecoveryAngleThreshold;
+
+        // flipRecoveryArmAngle, NOT flipRecoveryAngleThreshold. The two were one
+        // value and the shared value was ABOVE the resting balance point this
+        // method's own comment documents at ~78 degrees, so a craft that settled
+        // into that band could never arm: too tipped to drive out, not tipped
+        // enough to be rescued. Caught 2026-08-08 with the gizmo reading
+        // "tilt 80deg (need 80) ... authorized False" while unstick fired
+        // uselessly, which it must, because unstick pushes UP and the problem is
+        // rotational. This is the same equilibrium the release angle already had
+        // to be split out for; only the arm side was left sharing.
+        //
+        // Splitting rather than just lowering the shared number is the load-bearing
+        // part. UpdateDownedState reads flipRecoveryAngleThreshold with NO speed
+        // gate, so one number low enough to rescue a stuck craft would also strip
+        // control the instant the chassis brushed a steep bank at speed. Arming
+        // cannot do that: it needs a full flipRecoveryDelay under
+        // flipRecoverySpeedThreshold, so it only ever catches a craft at rest.
+        //
+        // isFlipped also suppresses the unstick path below, and that is correct
+        // at the new angle: past 70 degrees the craft needs righting, not a lift.
+        bool  isFlipped = tiltAngle >= F.flipRecoveryArmAngle;
         bool  isSlow    = rb.linearVelocity.sqrMagnitude < F.flipRecoverySpeedThreshold * F.flipRecoverySpeedThreshold;
 
         // --- Righting torque (runs every frame while authorized) ---
@@ -1018,7 +1038,8 @@ public class HoverController_Foundation : MonoBehaviour
         //
         // Min() keeps the release at or below the arm angle if the two are ever
         // tuned to cross, which would otherwise disarm on the same frame it armed.
-        float releaseAngle = Mathf.Min(F.flipRecoveryReleaseAngle, F.flipRecoveryAngleThreshold);
+        // Guards against flipRecoveryArmAngle, since that is what arming now reads.
+        float releaseAngle = Mathf.Min(F.flipRecoveryReleaseAngle, F.flipRecoveryArmAngle);
 
         // The previous condition also disarmed on
         // IsHoverGrounded, which broke recovery outright: a craft lying on its
@@ -1252,9 +1273,13 @@ public class HoverController_Foundation : MonoBehaviour
         if (profile != null && Application.isPlaying)
         {
             float tiltNow = Vector3.Angle(transform.up, Vector3.up);
-            if (tiltNow >= F.flipRecoveryAngleThreshold * 0.5f)
+            if (tiltNow >= F.flipRecoveryArmAngle * 0.5f)
             {
-                bool  flippedNow = tiltNow >= F.flipRecoveryAngleThreshold;
+                // Arm angle, matching HandleRecovery. Reading the DOWNED threshold
+                // here is what made the 2026-08-08 stuck craft unreadable: it
+                // printed "need 80" while arming actually wanted a different
+                // number, so the gizmo named a gate that was not the one in force.
+                bool  flippedNow = tiltNow >= F.flipRecoveryArmAngle;
                 float speedNow   = rb.linearVelocity.magnitude;
                 bool  slowNow    = speedNow < F.flipRecoverySpeedThreshold;
                 bool  contactNow = IsContactingGround;
@@ -1278,10 +1303,15 @@ public class HoverController_Foundation : MonoBehaviour
                                           : Color.red;
                 UnityEditor.Handles.Label(
                     transform.position + Vector3.up * 2.6f,
+                    // Tilt to ONE DECIMAL, deliberately. At F0 a craft resting at
+                    // 79.6 printed "tilt 80deg (need 80)", which reads as a gate
+                    // that is satisfied while the code disagrees, and that cost a
+                    // session before the split above was found. A readout must not
+                    // round a value across the threshold it is being compared to.
                     $"FLIP {flipTimer:F2}/{F.flipRecoveryDelay:F2}s  {blocker}\n" +
-                    $"  tilt {tiltNow:F0}deg (need {F.flipRecoveryAngleThreshold:F0})\n" +
+                    $"  tilt {tiltNow:F1}deg (arm at {F.flipRecoveryArmAngle:F1}, downed at {F.flipRecoveryAngleThreshold:F1})\n" +
                     $"  speed {speedNow:F2} (need < {F.flipRecoverySpeedThreshold:F2})\n" +
-                    $"  contact {contactNow}   hoverGrounded {IsHoverGrounded}   authorized {rightingAuthorized}"
+                    $"  contact {contactNow}   hoverGrounded {IsHoverGrounded}   authorized {rightingAuthorized}   downed {IsDowned}"
                 );
             }
         }

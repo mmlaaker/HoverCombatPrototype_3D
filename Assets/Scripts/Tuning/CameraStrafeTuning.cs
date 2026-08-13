@@ -32,11 +32,19 @@ public class CameraStrafeTuning
     // 🪂 Damping
     // -------------------------------------------------------------------------
     [Header("🪂 Damping")]
-    [Tooltip("Vertical position damping in strafe mode. Strafe is otherwise bolted to the " +
-             "chassis with zero damping, which is what makes jumps read as rigid. Damping the " +
-             "VERTICAL axis only softens the jump without touching aim, because the crosshair " +
-             "is yaw and pitch and damping those would corrupt it. Keep small: 0.2 to 0.4. " +
-             "0 restores the old fully locked behaviour.")]
+    [Tooltip("Vertical position damping in strafe mode, applied only while the craft is OFF its " +
+             "hover springs. Strafe is otherwise bolted to the chassis with zero damping, which is " +
+             "what makes jumps read as rigid. Damping the VERTICAL axis only softens the jump " +
+             "without touching aim, because the crosshair is yaw and pitch and damping those would " +
+             "corrupt it.\n\n" +
+             "It fades in with hover support, so it is fully absent while grounded and fully " +
+             "present in free air. That gating is not optional decoration: applied flat, this " +
+             "value also lags the small lift the craft gets from throttling forward, which leaves " +
+             "the camera low and tips the view up about 8.7 degrees, dragging the crosshair with " +
+             "it. Gating on vertical SPEED instead was tried and is much worse, because ordinary " +
+             "slopes produce jump-sized vertical speeds and the damping then flickers on and off " +
+             "several times a second, which reads as bumpiness on every hill.\n\n" +
+             "Keep small: 0.2 to 0.4. 0 restores fully locked behaviour and costs you soft jumps.")]
     [Range(0f, 1f)]
     public float verticalDamping = 0.25f;
 }

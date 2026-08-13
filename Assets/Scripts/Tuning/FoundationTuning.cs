@@ -236,12 +236,31 @@ public class FoundationTuning
     // 🔄 Flip Recovery
     // -------------------------------------------------------------------------
     [Header("🔄 Flip Recovery")]
-    [Tooltip("How far over you have to tip to count as flipped, and the angle recovery arms at. " +
-             "90 is on its side, 180 is fully upside down.\n\n" +
-             "Lower and you get rescued from tilts you could have driven out of. Higher and you can " +
-             "end up stranded on your side. Try 70 to 100.")]
+    [Tooltip("How far over you have to tip before you lose control. 90 is on its side, 180 is fully " +
+             "upside down.\n\n" +
+             "This is the DOWNED angle, not the rescue angle. Touch the ground past it and control " +
+             "is taken away immediately, at any speed. Recovery arms separately, at Flip Recovery " +
+             "Arm Angle below.\n\n" +
+             "Lower and steep terrain starts taking control off you mid-drive. Try 70 to 100.")]
     [Range(10f, 180f)]
     public float flipRecoveryAngleThreshold = 80f;
+
+    [Tooltip("How far over you have to tip before righting will arm and rescue you.\n\n" +
+             "Must sit BELOW the resting balance point, which measures around 78 degrees on this " +
+             "chassis: past roughly 70 the hover lift from the two points still touching cancels " +
+             "the leveling torque, and the craft settles there. If arming starts ABOVE that balance " +
+             "point, a craft that comes to rest inside the gap is stuck forever -- too tipped to " +
+             "drive out, not tipped enough to be rescued. That is a real defect this value exists " +
+             "to close, caught on 2026-08-08 with the craft parked at 79-point-something against an " +
+             "arm angle of 80.\n\n" +
+             "Deliberately SEPARATE from the downed threshold above. Sharing one value was the " +
+             "obvious fix and it is unsafe: the downed check has no speed gate, so a single number " +
+             "low enough to rescue you would also strip control the instant you brushed a steep " +
+             "bank. Arming is gated on a full Flip Recovery Delay under Flip Recovery Speed " +
+             "Threshold, so it can only ever catch a craft that is genuinely stopped.\n\n" +
+             "Keep it at or below the downed angle. Try 65 to 75.")]
+    [Range(10f, 180f)]
+    public float flipRecoveryArmAngle = 70f;
 
     [Tooltip("How far upright the craft has to get before the righting torque lets go.\n\n" +
              "Must stay well BELOW Flip Recovery Angle Threshold, and this is not polish. Release " +
