@@ -3,8 +3,20 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// VehicleHUD v1.3
+/// VehicleHUD v1.4
 /// ----------------
+/// v1.4 changes:
+///   • Reticle no longer follows aim raycast depth. SyncReticle projects the aim
+///     direction to a fixed reticleProjectionDistance instead of to whatever the ray
+///     hit, which closes the long-standing "reticle jars when aiming on slopes"
+///     complaint (TODO 2.8). Measurement and full reasoning are in SyncReticle.
+///   • reticleRaycastMask and reticleFollowSpeed deleted — both existed only to serve
+///     that raycast, and leaving them serialized would imply the raycast still runs.
+///     reticleScreenOffset survives and is now the only way to nudge resting position,
+///     alongside reticleProjectionDistance itself.
+///   • Costs one Physics.Raycast per frame less, and the HUD no longer reads
+///     vehicleRoot.layer, so it is no longer a VehicleLayerAssigner ordering consumer.
+///
 /// v1.3 changes:
 ///   • OnRegenStarted subscription, unsubscription and its empty HandleRegenStarted
 ///     handler all deleted, along with the event itself on HoverController_Energy.
@@ -124,19 +136,14 @@ public class VehicleHUD : MonoBehaviour
              "set the desired visible alpha here (e.g. 0.9).")]
     [SerializeField] private Color reticleColor = new Color(1f, 1f, 1f, 0.9f);
 
-    [Tooltip("Fallback projection distance (meters) when the aim raycast hits nothing — " +
-             "e.g. aiming at open sky. Also caps the raycast's search distance.")]
+    [Tooltip("Convergence distance (meters) the crosshair is projected to. This is a FIXED " +
+             "distance on purpose — it deliberately does not follow what the aim ray hits. " +
+             "Raise it to sit the crosshair nearer the horizon, lower it to pull it down " +
+             "toward the craft. Measured at 200: the crosshair rests ~438px above screen " +
+             "centre; at 50 it rests ~381px, at 10 it rests ~200px. Below about 20 the " +
+             "crosshair starts drifting toward the craft and reads as a chase marker rather " +
+             "than a sight, so treat 20 as the practical floor.")]
     [SerializeField] private float reticleProjectionDistance = 200f;
-
-    [Tooltip("Layers the aim raycast will consider when picking reticle distance. " +
-             "The owning vehicle's layer is stripped automatically at runtime. " +
-             "Exclude VFX, water, or other non-solid layers you don't want to lock onto.")]
-    [SerializeField] private LayerMask reticleRaycastMask = ~0;
-
-    [Tooltip("How quickly the reticle's projection distance tracks changes. Higher values " +
-             "snap onto new targets faster; lower values smooth out flicker when the ray " +
-             "transitions between near and far surfaces. 15 is a good starting point.")]
-    [SerializeField] private float reticleFollowSpeed = 15f;
 
     [Tooltip("Canvas-space nudge applied to the reticle after projection. Use this to " +
              "compensate for a consistent mis-aim — e.g. bullets land slightly low-right " +
@@ -179,11 +186,6 @@ public class VehicleHUD : MonoBehaviour
     private bool _isShieldActive;
     private bool _wasRegenerating;
 
-    // Smoothed reticle projection distance. Tracks the aim raycast hit distance,
-    // lerped by reticleFollowSpeed so the reticle doesn't snap when the ray transitions
-    // between near and far surfaces.
-    private float _reticleDistance;
-
     // =========================================================================
     // Unity lifecycle
     // =========================================================================
@@ -209,12 +211,6 @@ public class VehicleHUD : MonoBehaviour
         if (_propulsion == null) Debug.LogWarning("[VehicleHUD] HoverController_Propulsion not found on vehicleRoot.", this);
         if (_shield     == null) Debug.LogWarning("[VehicleHUD] HoverController_Shield not found on vehicleRoot.", this);
 
-        // Strip the owning vehicle's layer so the aim raycast can't self-hit.
-        // VehicleLayerAssigner runs at execution order -20, so the layer is settled by now.
-        reticleRaycastMask &= ~(1 << vehicleRoot.layer);
-
-        // Initialize smoothed distance to the fallback so the first frame doesn't lerp from 0.
-        _reticleDistance = reticleProjectionDistance;
     }
 
     private void OnEnable()
@@ -492,22 +488,30 @@ public class VehicleHUD : MonoBehaviour
         float yaw = vt.eulerAngles.y;
         Vector3 aimDir = Quaternion.Euler(pitch, yaw, 0f) * Vector3.forward;
 
-        // Raycast forward along the aim ray. If it hits something, use that distance so
-        // the reticle lands on the target surface; otherwise fall back to the configured
-        // projection distance. Smoothed to prevent snap when the ray transitions between
-        // near and far surfaces (e.g. target passes out of LOS and the ray reaches sky).
-        float targetDistance = reticleProjectionDistance;
-        if (Physics.Raycast(vt.position, aimDir, out RaycastHit hit,
-                            reticleProjectionDistance, reticleRaycastMask,
-                            QueryTriggerInteraction.Ignore))
-        {
-            targetDistance = hit.distance;
-        }
-
-        _reticleDistance = Mathf.Lerp(_reticleDistance, targetDistance,
-                                      1f - Mathf.Exp(-reticleFollowSpeed * Time.deltaTime));
-
-        Vector3 aimWorldPoint = vt.position + aimDir * _reticleDistance;
+        // Projected at a FIXED distance, deliberately not at the aim ray's hit distance.
+        //
+        // This used to raycast and project to whatever the ray hit. That is the more
+        // "correct" impact marker, but it made the crosshair unusable, because the camera
+        // sits behind and above the craft: sliding the world point along the aim line
+        // sweeps it across the screen by parallax. Measured 2026-08-13, strafe rig:
+        // 2m -> 21px BELOW screen centre, 200m -> 438px ABOVE it. A 459px swing on a
+        // 1153px screen, driven entirely by what happened to be under the ray. Aiming
+        // across a crest or past a wall threw the crosshair 40% of the screen height.
+        // reticleFollowSpeed only smeared that over a few frames; it never removed it.
+        //
+        // The same measurement showed the swing is safe to discard. The rig is
+        // LockToTargetNoRoll, so the camera pitches WITH the chassis: across the full
+        // 23.7 degrees of strafe aim travel the crosshair moved ~10px. Depth outweighed
+        // aim 45:1. So depth was contributing almost nothing but noise, and pinning it
+        // costs almost none of the aim honesty it appeared to provide.
+        //
+        // The aim DIRECTION is untouched and still comes from the vehicle, sharing one
+        // ray with HoverController_Aim.ComputeAimRotation, so the crosshair and the guns
+        // can never disagree about where the shot goes. Muzzles fire parallel to this
+        // ray, so a far convergence point is also the honest one: parallel rays share a
+        // vanishing point, and the residual error at short range is the muzzle offset,
+        // not the terrain.
+        Vector3 aimWorldPoint = vt.position + aimDir * reticleProjectionDistance;
 
         Vector3 screenPos = cam.WorldToScreenPoint(aimWorldPoint);
         if (screenPos.z < 0f) return; // behind camera

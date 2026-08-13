@@ -26,8 +26,9 @@ version is that the chop was background applications, not the game.
 Two of 2.8's three complaints are closed and 2.6 is partly closed. **2.1, 2.2 and the shake half of
 2.9 are now wired and measured, but none of the three has been JUDGED** -- every one is a feel
 question and the numbers only prove the punch arrives, not that it reads right. The camera work, its
-measurements and four new measurement traps are in `CLAUDE.md`. Two phases of the camera plan remain:
-boost framing (2.6, 6.2) and the reticle (2.8). Note a reported "camera jitter" turned out to be no
+measurements and four new measurement traps are in `CLAUDE.md`. **Updated 2026-08-13: the reticle
+phase (2.8) is closed, so boost framing (2.6, 6.2) is the last phase of the camera plan.** Note a
+reported "camera jitter" turned out to be no
 antialiasing rather than anything in the camera, and the resolved entry for it is worth reading
 before investigating any similar symptom. **Qualified 2026-08-11: do not read that as "it is never
 the camera".** A second jitter report the same month WAS the camera. The two split on when they
@@ -561,6 +562,13 @@ genuine aim modifier here: the reticle is a projected world point rather than a 
 sitting ~477px above centre (~42% out), and a projected point moves radially with tan(fov/2), so the
 shipped +4 degree kick drags it **35 pixels** before the +6 overshoot is counted. The owner's rule is
 correct and better founded than the comment that originally justified it.
+
+**Reinforced by the 2.8 fix later the same day, not weakened by it.** The reticle is now projected at
+a FIXED distance, so its resting height is deterministic (~438px above centre at
+`reticleProjectionDistance` 200) rather than wandering with hit depth. That removes the excuse that
+the reticle was moving anyway: from here, any radial shift the player sees in strafe is attributable
+to the lens, and nothing else. A projected point still scales with tan(fov/2), so the argument above
+holds unchanged — it just now has a stable number under it.
 
 **So the cue must touch neither the rig nor the lens**, which is precisely what the three requested
 effects do. Vignette and speed lines are screen-space overlays: no camera movement, no zoom change,
@@ -1138,7 +1146,7 @@ Start with exactly the two that were empirically found. `recoilVelocity` 0 stays
 the enum only ever picks character. Cost per character is one GameObject, one serialized field and
 one enum value, all visible, so do not create them speculatively.
 
-### 2.8 Camera, three separate complaints — TWO CLOSED 2026-08-09, ONE OPEN
+### 2.8 Camera, three separate complaints — ALL THREE CLOSED (2026-08-09, 2026-08-13)
 From the 2026-08-08 playtest. The first two were closed by the camera overhaul; outcomes are in
 `CLAUDE.md` and not repeated here.
 
@@ -1149,13 +1157,39 @@ From the 2026-08-08 playtest. The first two were closed by the camera overhaul; 
   forward.
 - ~~**Strafe cam feels wrong on jumps.**~~ **Closed.** Vertical-only position damping, so jumps
   soften without touching aim.
-- **The reticle jars when aiming on slopes.** STILL OPEN. The HUD ray hits geometry at
-  discontinuous depths, and because the ray originates at the vehicle while the projection origin is
-  the camera behind and above it, a change in hit depth slides the world point along the aim line and
-  **parallax throws it across the screen**. `reticleFollowSpeed` 15 smooths the symptom without
-  removing the cause. Decided approach: keep the vehicle-origin ray so the reticle stays honest about
-  chassis pitch, and remove the screen position's dependence on hit depth. Confined to
-  `VehicleHUD.SyncReticle`; no camera coupling. This is the last phase of the camera plan.
+- ~~**The reticle jars when aiming on slopes.**~~ **Closed 2026-08-13**, `VehicleHUD` v1.4. The
+  diagnosis was right and the fix was the one already decided here: `SyncReticle` keeps the
+  vehicle-origin aim ray but projects it to a fixed `reticleProjectionDistance` instead of to the
+  raycast hit. No camera coupling, as scoped.
+
+  **The measurement is the part worth keeping.** Both halves were measured on the strafe rig
+  (offset 0/3.5/-6, FOV 55, 2049x1153) before anything was changed:
+
+  | | reticle at d=10 | at d=200 |
+  |---|---|---|
+  | aim level (chassis −0.1°) | 200px | 438px |
+  | aim full down (chassis +11.3°) | 196px | 434px |
+  | aim full up (chassis −12.4°) | 206px | 445px |
+
+  Depth moved the crosshair **459px** (−21px at 2m to +438px at 200m, 40% of screen height). The
+  full 23.7° of aim travel moved it **~10px**. **Depth outweighed aim 45:1**, so the depth term was
+  contributing almost pure noise.
+
+  The reason aim barely registers is the rig binding: `LockToTargetNoRoll` pitches the camera *with*
+  the chassis (camera pitch tracked 33.7° → 10.5° against the chassis's 23.7° swing), so aim is
+  already cancelled on screen by design. That is what made pinning depth cheap — it discards
+  almost none of the aim honesty it looked like it was providing. **Do not re-derive this by
+  reasoning about the reticle alone; the binding mode is the whole explanation.**
+
+  Deleted along with the raycast: `reticleRaycastMask`, `reticleFollowSpeed`, `_reticleDistance`,
+  and the HUD's `vehicleRoot.layer` read in `Awake`. `VehicleLayerAssigner`'s header no longer lists
+  the HUD as an execution-order consumer. `reticleProjectionDistance` 200 is unchanged, so the
+  crosshair rests where it already sat most of the time (~438px vs the ~415px it showed when aiming
+  at mid-distance terrain); what went away are the excursions toward screen centre.
+
+  **Still owner-judged:** whether 200 is the right resting height. It is now a straightforward knob —
+  200 rests at ~438px, 50 at ~381px, 10 at ~200px — and the owner has said they intend to retune the
+  strafe camera view anyway, which moves this number with it.
 
 ### 2.9 Impacts are under-intense, and big drops do not cost enough control — MOSTLY CLOSED 2026-08-11
 

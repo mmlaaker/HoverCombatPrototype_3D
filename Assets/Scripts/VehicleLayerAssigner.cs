@@ -14,10 +14,12 @@ using UnityEngine;
 /// Requires layers "PlayerVehicle" and "AIVehicle" to exist in the Tag Manager.
 /// DefaultExecutionOrder(-20) makes this the earliest thing on the vehicle. It is
 /// the lowest order in the project: VehicleHealth is -10 and everything else is
-/// the default 0, so the layer is settled before any Awake that reads it. The
-/// consumers that depend on that ordering are ParticleWeaponCollision (strips the
-/// firer's own layer from the emitter collision mask) and VehicleHUD (strips it
-/// from the reticle aim raycast).
+/// the default 0, so the layer is settled before any Awake that reads it. The one
+/// remaining consumer that depends on that ordering is ParticleWeaponCollision,
+/// which strips the firer's own layer from the emitter collision mask.
+/// VehicleHUD used to be the second consumer, stripping this layer from a reticle
+/// aim raycast. That raycast was deleted 2026-08-13 when the crosshair stopped
+/// following hit depth, so the HUD no longer reads the layer at all.
 /// </summary>
 [DefaultExecutionOrder(-20)]
 public class VehicleLayerAssigner : MonoBehaviour

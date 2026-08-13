@@ -226,13 +226,15 @@ Everything here was learned by getting it wrong first. Ignoring any of it costs 
 
 21. **A changed C# default does nothing to an object that already serialised the old one, and the code will read as though it did.** `travelHeadingMinSpeed` was lowered 8 -> 3 in `CameraStabilizationTuning`, documented as lowered, and reasoned about as 3 -- while `HoverCar_PlayerController.prefab` carried an explicit `travelHeadingMinSpeed: 8` written the moment the field first existed. Serialised values beat initialisers, so the live value never moved and the play session that validated the fix ran at 8. Nothing errors, the inspector shows 8, and the source shows 3. **This is the same shape as trap 13** (a tuning field that serialises fine and is simply never drawn): the failure is always that code and asset disagree silently. Adding a field is safe, since a missing entry does fall back to the initialiser; CHANGING a default is the dangerous edit, and it needs the asset checked or the value pushed. Caught only by diffing the prefab before a commit.
 
-22. **A handling A/B that free-drives the terrain measures the terrain, and it will do it convincingly.** This is trap 10 generalised past the camera, because it cost three wrong conclusions in one day. A 9-second full-throttle run covers ~690m, crosses many surfaces and usually goes airborne, so it samples real geometry rather than the thing under test: the smooth-normal fix measured as a 15% improvement that way and as a total elimination of the artifact once constrained. Three camera-clipping runs each started from wherever the previous test left the craft, which made one ordinary run look like a regression. **Pin position, rotation AND velocity before every handling or camera comparison, hold one surface, and constrain the route.** If the metric is about the craft, do not let the world vary.
+22. **A handling A/B that free-drives the terrain measures the terrain, and it will do it convincingly.** This is trap 10 generalised past the camera, because it cost three wrong conclusions in one day. A 9-second full-throttle run covers ~690m, crosses many surfaces and usually goes airborne, so it samples real geometry rather than the thing under test: the smooth-normal fix measured as a 15% improvement that way and as a total elimination of the artifact once constrained. Three camera-clipping runs each started from wherever the previous test left the craft, which made one ordinary run look like a regression. **Pin position, rotation AND velocity before every handling or camera comparison, hold one surface, and constrain the route.** If the metric is about the craft, do not let the world vary. **But never pin the axis under test.** The reticle sweep (trap 26) pinned rotation toward level while trying to measure how aim pitch moved the crosshair, so the craft reached only ±1° of a ±12° range and the sweep looked flat for the wrong reason. Pin everything the test is not about, and exactly that.
 
 23. **`ForceMode.VelocityChange` is invisible until the next physics step, so an injected impulse reads as doing nothing.** Calling `FireAirJump` by reflection and reading `rb.linearVelocity` on the same line returns the velocity from before the call, and a first pass at the air-jump direction test duly reported a delta of exactly zero at every attitude. Step physics before reading. **Then subtract a no-jump control run at the same pose**, because gravity accumulates during the read window and contaminates the delta: at the project's fall gravity a 0.08s window adds ~5 m/s downward, which is enough to make a correctly clamped jump look like it fires into the ground.
 
 24. **An inspector edit to a ScriptableObject lives in memory, dirty, until something saves it.** The owner lowered `yawAccel` 16 -> 15, drove it, and reported it as done, while the asset on disk still read 16 and one domain reload would have discarded it silently. `EditorUtility.IsDirty(asset)` is true in that state and `AssetDatabase.SaveAssetIfDirty(asset)` flushes it. **This is the third value in this project to sit in a believed-but-not-real state**, after `boostBlendSeconds` (never persisted at all) and `travelHeadingMinSpeed` (trap 21, serialised value beat the changed default). The failure is always the same shape: what the code, the inspector and the file say diverge, and nothing errors. **Read tuning values back from the FILE before trusting a measurement that depends on them.**
 
 25. **A formula that reproduces a known figure can still be wrong, and reproducing it is what makes it dangerous.** `radius = topSpeed / (yawAccel / yawDamping)` returned the documented 37m turn radius exactly, so it was trusted to size cornering after the speed change, and it prescribed `yawAccel` 19.5. Measured, 19.5 gives a 17.1m corner against the ~25m the owner had confirmed as good, because the formula assumes the craft corners at top speed (it corners at roughly half) and that yaw authority does not affect cornering speed (raising it drops speed from 59 to 31 m/s across the tested range). The correct answer was 16. **Sweep the parameter and measure the outcome; do not solve for it.** The general form: a model validated against one operating point tells you nothing about a different one.
+
+26. **A camera pose reconstructed from rig settings is a guess wearing a number's clothes; read the live `Camera.main`.** Sizing the reticle parallax began by rebuilding the strafe pose from the vcam's follow offset (0, 3.5, -6) and "the composer centres the target". That model put the crosshair 1094px above centre at a 20° aim — off the top of a 1153px screen — which should have been caught by the fact that the owner has never reported an off-screen crosshair. The live camera read 434px at the same aim. The model missed the binding mode, and **binding mode decides whether the target's rotation is cancelled on screen at all**: `LockToTargetNoRoll` pitches the rig WITH the chassis, so 23.7° of aim travel moved the crosshair ~10px while depth moved it 459px. **Before attributing a screen-space symptom to an input, measure each candidate term's actual contribution** — the fix here was scoped around preserving "pitch honesty" that the rig had already been cancelling by design. Forcing the real mode beats modelling it: a virtual `Gamepad` via `InputSystem.AddDevice<Gamepad>()` plus a per-frame `QueueStateEvent` holds a trigger down for as long as the sampler runs, which is how strafe was entered here (remove the device afterwards).
 
 ### Recipes that work
 
@@ -337,6 +339,30 @@ nobody spends a session rediscovering them.
 **Open work is not here. It is in `TODO.md`,** which owns every unfinished item: verification debt,
 blockers, known traps, pending tuning decisions and unimplemented features. Nothing is listed in
 both files. If you are looking for what to do next, that is the file.
+
+### Reticle depth-following — removed 2026-08-13, `VehicleHUD` v1.4
+
+**Standing decision: the crosshair is projected at a FIXED distance and must not be made to follow
+what the aim ray hits.** It used to raycast and project to the hit point, which is the more accurate
+impact marker and was the wrong call, because the chase camera sits behind and above the craft:
+sliding the world point along the aim line sweeps it across the screen by parallax. Measured on the
+strafe rig, the crosshair ran from 21px BELOW screen centre at 2m to 438px ABOVE it at 200m — a 459px
+swing on a 1153px screen, set by whatever geometry happened to be under the ray. `reticleFollowSpeed`
+smeared that over a few frames and was mistaken for a fix for a long time.
+
+**Why discarding depth was cheap:** the rig binds `LockToTargetNoRoll`, so the camera pitches with
+the chassis and aim is already cancelled on screen. Across the full 23.7° of strafe aim travel the
+crosshair moved ~10px, against 459px from depth — **depth outweighed aim 45:1**. The depth term was
+almost pure noise, so pinning it costs almost none of the aim honesty it appeared to provide.
+
+The aim DIRECTION still comes from the vehicle and is still the same ray
+`HoverController_Aim.ComputeAimRotation` gives the guns, so the crosshair and the shot cannot
+disagree. Muzzles fire parallel to it, so a far convergence point is the honest one: parallel rays
+share a vanishing point, and the residual short-range error is the muzzle offset rather than the
+terrain. `reticleRaycastMask` and `reticleFollowSpeed` were deleted with the raycast — leaving them
+serialized would have implied it still ran — and the HUD is no longer a `VehicleLayerAssigner`
+execution-order consumer. Resting height is now a single knob: `reticleProjectionDistance` 200 rests
+at ~438px above centre, 50 at ~381px, 10 at ~200px.
 
 ### Judged By Play — confirmed good, 2026-08-11
 
