@@ -1123,9 +1123,20 @@ public class HoverCameraController : MonoBehaviour
     /// 2026-08-11 after a playtest: strafe mode gets full crosshair authority with
     /// zero modifiers. The previous version contributed the lens and withheld only
     /// the pull-back, on the reasoning that FOV does not move the rig under the
-    /// crosshair. True as far as it goes, and overruled: a lens change while aiming
-    /// still rescales the whole frame under a fixed reticle, which is a modifier on
-    /// aim whether or not it moves the camera.
+    /// crosshair.
+    ///
+    /// MEASURED 2026-08-13, and the rule is better founded than that reasoning was.
+    /// The obvious defence of an FOV kick is that a centred crosshair aims along the
+    /// camera axis, which no lens change can move. **This reticle is not centred.**
+    /// It is a world point projected to screen (`VehicleHUD.SyncReticle`), and it
+    /// sits about 477px above centre, roughly 42% of the way out. A projected point
+    /// moves radially with tan(fov/2), so the shipped +4 degree kick would drag the
+    /// reticle **35 pixels** across the screen at that offset, before the +6 degree
+    /// overshoot is counted. That is a direct aim modifier, not merely a rescale.
+    ///
+    /// So do not restore the lens here as a way of making boost readable in strafe.
+    /// It genuinely moves the player's aim. The cue has to come from something that
+    /// touches neither the rig nor the lens; see `TODO.md` M.12.
     ///
     /// This also settles the open question in TODO 2.6 about the boost forward-gate
     /// reading forward speed only, so boosting sideways in strafe produced no lens

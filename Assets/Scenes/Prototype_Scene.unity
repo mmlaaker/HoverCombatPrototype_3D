@@ -2628,6 +2628,10 @@ PrefabInstance:
       propertyPath: framing.pitchUpDistanceGain
       value: 2
       objectReference: {fileID: 0}
+    - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: look.speedLookAheadReference
+      value: 80
+      objectReference: {fileID: 0}
     - target: {fileID: 5067444251213910084, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: debugSettings
       value: 

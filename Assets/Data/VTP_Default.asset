@@ -48,20 +48,20 @@ MonoBehaviour:
     hardLandingSuppressStrength: 0.9
     hardLandingSuppressDuration: 0.35
   propulsion:
-    maxForwardAccel: 65
-    topSpeed: 60
-    maxReverseAccel: 50
-    reverseTopSpeed: 50
-    yawAccel: 13
+    maxForwardAccel: 87
+    topSpeed: 80
+    maxReverseAccel: 67
+    reverseTopSpeed: 67
+    yawAccel: 15
     maxDriftAngle: 60
     yawDamping: 8
     airTurnMultiplier: 0.5
     enableBoost: 1
     boostAccelMultiplier: 1.5
-    boostSpeedMultiplier: 1.5
+    boostSpeedMultiplier: 1.25
     boostBlendSeconds: 0.35
     boostEnergyPerSecond: 20
-    dodgeForce: 650
+    dodgeForce: 900
     dodgeDuration: 0.15
     dodgeEnergyCost: 15
     dodgeCooldown: 0.8
@@ -79,7 +79,7 @@ MonoBehaviour:
     driftForwardDamp: 0.3
     driftYawMultiplier: 1.5
     driftTurnThreshold: 0.5
-    minDriftSpeed: 40
+    minDriftSpeed: 53
     driftBlendSeconds: 0.1
     driftHopImpulse: 10
     maxBankAngle: 18
@@ -88,8 +88,8 @@ MonoBehaviour:
     enableAirControl: 1
     airControlBlendSeconds: 0.1
     enableStrafe: 1
-    strafeTopSpeed: 40
-    strafeAccel: 35
+    strafeTopSpeed: 53
+    strafeAccel: 47
     strafePitchLimit: 25
     strafePitchSensitivity: 150
     strafeModeBlendSeconds: 0.2

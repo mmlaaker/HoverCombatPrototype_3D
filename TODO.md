@@ -218,6 +218,85 @@ validator a real denominator.
 warning and the camera framing verdict, both of which had to be corrected for firing during correct
 play. A check that fires during good tuning gets ignored, which costs more than having no check.
 
+### M.5 ~~Speed. Raise top speed, lower the boost multiplier~~ — APPLIED 2026-08-12, unjudged
+
+Shipped values, all in `VTP_Default`, plus one camera value in the scene:
+
+| Value | Was | Now |
+|---|---|---|
+| `topSpeed` | 60 | **80** |
+| `maxForwardAccel` | 65 | **87** |
+| `reverseTopSpeed` | 50 | **67** |
+| `maxReverseAccel` | 50 | **67** |
+| `strafeTopSpeed` | 40 | **53** |
+| `minDriftSpeed` | 40 | **53** |
+| `strafeAccel` | 35 | **47** |
+| `dodgeForce` | 650 | **900** |
+| `boostSpeedMultiplier` | 1.5 | **1.25** |
+| `boostAccelMultiplier` | 1.5 | **1.5, unchanged** |
+| `yawAccel` | 13 | **15** (measured at 16, trimmed to 15 by the owner after driving) |
+| `speedLookAheadReference` (scene) | 60 | **80** |
+
+Damping was deliberately NOT scaled: `forwardDamp`, `lateralDamp` and `yawDamping` are inverse time
+constants, so the coast-down and forward-to-reverse ratios the owner confirmed survive the change
+untouched. `hardLandingMinSpeed` / `hardLandingMaxSpeed` were not scaled either, since landing impact
+comes from gravity and drop height rather than top speed.
+
+**Live caps verified with the craft pinned so terrain could not contaminate the read:** drive 80,
+drive+boost 100, reverse 67, strafe 53/53, strafe+boost 66.3/66.3. None of these are visible in the
+inspector, which is why they are worth recording.
+
+**5.11 improved for free: boosted omnidirectional strafe is now 83% of drive top speed, from 100%.**
+
+#### The turn-radius model was wrong, and the corner had to be measured
+
+**Do not size `yawAccel` from `radius = topSpeed / (yawAccel / yawDamping)`.** That formula reproduced
+the old documented 37m exactly, which is why it was trusted, and it is still wrong twice over: the
+craft does not corner at top speed, and raising yaw makes it corner slower still. Measured sweep at
+`topSpeed` 80:
+
+| `yawAccel` | Radius | Corner speed | Slip angle |
+|---|---|---|---|
+| 13 | 36.7m | 59.1 m/s | 57.4 deg |
+| **16** | **25.4m** | 50.3 m/s | 61.9 deg |
+| 19.5 | 17.1m | 41.5 m/s | 68.0 deg |
+| 24 | 10.3m | 30.7 m/s | 74.7 deg |
+
+The formula said 19.5. That would have produced **17.1m, a third tighter than the corner the owner
+confirmed as good**, because it assumed cornering speed held constant while it actually falls 59 to
+41 m/s across that range.
+
+Apples-to-apples against the committed baseline, same pinned start and route:
+
+| | Radius | Corner speed | Yaw rate | Slip |
+|---|---|---|---|---|
+| Original, 60 / 65 / 13 | 26.6m | 42.5 m/s | 92 deg/s | 57.7 deg |
+| Shipped, 80 / 87 / 16 | **25.6m** | **50.6 m/s** | 113 deg/s | **60.5 deg** |
+
+Radius within 4%, slip within 3 degrees, and 19% more speed carried through the corner. That is the
+intended outcome: same corner, faster craft.
+
+**Incidental finding that recontextualises 0.10:** ordinary full-lock cornering already runs **~58
+degrees of slip** at the committed baseline. The 78 degrees that item treats as remarkable is a
+wider version of something the craft does in every hard corner, not a separate technique.
+
+**JUDGED 2026-08-13: "this feels much better."** Owner trimmed `yawAccel` 16 -> **15** after driving,
+which is the small nudge they had asked for at the old speed and is now applied on top of the
+measured restoration. Reverse at 67 and top speed at 80 both passed without comment.
+
+**One complaint came out of it and it is NOT a speed problem: boost reads as doing nothing in strafe.**
+Measured, strafe boost delivers +25% in 0.33s, matching drive almost exactly, with zero visual
+change. See M.12, which this promotes from polish to the fix for a live complaint.
+
+**A near miss worth recording: the owner's `yawAccel` 15 was sitting unsaved.** The asset on disk
+still read 16 while the editor held 15 in memory, dirty. One domain reload or a discarded prompt and
+the change would have evaporated silently, which is the third time this project has been within reach
+of that trap after `boostBlendSeconds` and `travelHeadingMinSpeed`. **After any inspector edit to a
+ScriptableObject, force `AssetDatabase.SaveAssetIfDirty` or Ctrl+S before trusting it**, and read the
+value back from the file rather than the inspector.
+
+<details><summary>Original item</summary>
+
 ### M.5 Speed. Raise top speed, lower the boost multiplier
 
 Owner, 2026-08-11: top speed feels too slow. `VTP_Default` is the "Sedan", average in everything,
@@ -243,6 +322,8 @@ Five couplings:
 5. Perceived speed is structurally low (8.7 body-lengths/sec against 15-16 for a fast road car) and
    **doubling the environment halved how fast the world goes past you.** See 6.2, and note the arena
    is now confirmed to be deliberately sparse, so props are NOT coming to fix this.
+
+</details>
 
 ### M.6 Airtime. Raise fall force, and decide what that costs the trick economy
 
@@ -365,16 +446,45 @@ trick while measuring as fully live.
 
 ### M.12 Boost presentation FX: vignette, speed lines, duration-based rumble
 
-Owner: boost camera effects are liked in general but want small tweaks, hard to verbalize. Concrete
-additions requested, **none of which exist today**: a vignette, speed lines, and a subtle camera
-rumble that **fades in over sustained boost**.
+**PROMOTED 2026-08-13: this is now the fix for a live complaint, not a polish item.** Owner, after
+Round 2: "my boost feels like it does next to nothing while strafing."
 
-All three are presentation rather than framing, so they sit outside the v2.5 boost envelope work and
-do not touch the single-write-authority solver.
+**The physics is not the problem and must not be touched.** Measured with forward-dominant throttle
+so continuous boost engages:
 
-**The rumble is the interesting one.** It is the first camera effect requested that builds with
-DURATION HELD rather than firing on an event, and the boost envelope already tracks exactly that in
-`_boostHold`. Everything else on the impulse router is event-driven.
+| | Speed | Time to 95% | FOV | Camera distance |
+|---|---|---|---|---|
+| Strafe | 53.0 -> 66.4 (**+25%**) | 0.33s | **55 -> 55** | **6.95 -> 6.95** |
+| Drive | 80.1 -> ~99 (**+24%**) | 0.34s | 65 -> 69 | 9.84 -> 10.25 |
+
+Identical relative gain, identical time to arrive. **Strafe boost delivers everything drive boost
+does and shows the player nothing at all**, because M.2 removed the lens from strafe on the owner's
+own no-modifiers rule. Boost's felt impact is mostly presentation, which is exactly why the same
+physics reads as "next to nothing" in one mode and fine in the other.
+
+**Do NOT resolve this by restoring the FOV kick to strafe.** It was measured 2026-08-13 and it is a
+genuine aim modifier here: the reticle is a projected world point rather than a centred crosshair,
+sitting ~477px above centre (~42% out), and a projected point moves radially with tan(fov/2), so the
+shipped +4 degree kick drags it **35 pixels** before the +6 overshoot is counted. The owner's rule is
+correct and better founded than the comment that originally justified it.
+
+**So the cue must touch neither the rig nor the lens**, which is precisely what the three requested
+effects do. Vignette and speed lines are screen-space overlays: no camera movement, no zoom change,
+no reticle displacement, and they read as speed more strongly than an FOV kick does. That makes them
+the only available answer rather than merely a nice one.
+
+Original request, unchanged: a vignette, speed lines, and a subtle camera rumble that **fades in over
+sustained boost**. All three are presentation rather than framing, so they sit outside the v2.5 boost
+envelope work and do not touch the single-write-authority solver.
+
+**The rumble is the interesting one, and the one to be careful with in strafe.** It is the first
+camera effect requested that builds with DURATION HELD rather than firing on an event, and the boost
+envelope already tracks exactly that in `_boostHold`. But rumble moves the camera, so in strafe it
+would move the reticle for the same reason FOV does. Either gate it to drive mode, or make it a
+screen-space shake of the rendered image rather than a camera move.
+
+**Sequencing note:** the vignette and speed lines are worth building before judging boost's strength
+again in either mode. Any multiplier judged now is being judged with half its presentation missing.
 
 ### M.14 ~~Micro-bumpiness on rounded slopes~~ — CLOSED 2026-08-12, judged good
 
@@ -1328,10 +1438,24 @@ off. `IsDowned` is the thing that would block it, and only on CONTACT past `flip
 -- a craft hovering the wall without touching it keeps full control by design, which is already
 documented as deliberate in `CLAUDE.md`.
 
-### 5.11 Boosted strafe reaches unboosted drive top speed
-Measured 2026-08-08. Strafe caps are boost-scaled, so **strafe + boost + forward gives a 60 m/s cap
-in every direction**, equal to unboosted drive-mode top speed, while keeping free aim. The only
-thing limiting it is the energy meter, which is a resource constraint rather than a design one.
+### 5.11 Boosted strafe reaches unboosted drive top speed — NARROWED 2026-08-12, not closed
+
+**Improved for free by M.5, from 100% to 83%.** Lowering `boostSpeedMultiplier` to 1.25 while raising
+`topSpeed` to 80 puts boosted omnidirectional strafe at **66.3 m/s against a drive top speed of 80**,
+verified from the live caps. It is no longer true that strafe matches drive-mode top speed, which was
+the sharpest form of the complaint.
+
+Still open, because the incentive is reduced rather than removed, and because the underlying question
+was always whether players CAMP in strafe under combat pressure, which needs a human.
+
+One mechanic worth knowing before touching this again, confirmed 2026-08-12: **continuous boost
+requires forward-dominant throttle**, so pressing boost with pure lateral stick fires a DODGE instead.
+A player cannot boost straight sideways at all. That materially limits the camping case and was not
+accounted for when this item was written.
+
+Original measurement, retained: strafe caps are boost-scaled, so **strafe + boost + forward gave a
+60 m/s cap in every direction**, equal to unboosted drive-mode top speed, while keeping free aim. The
+only thing limiting it is the energy meter, which is a resource constraint rather than a design one.
 
 The owner's stated goal is that drive mode is for fast forward and backward travel and strafe is for
 aiming at a reduced, consistent omnidirectional speed, and specifically that players should not
