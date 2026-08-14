@@ -157,7 +157,7 @@ Two candidates for the look-up specifically, to be separated rather than guessed
 look-ahead term (`speedLookAheadMax` 6 against `speedLookAheadReference` 60) and the strafe aim
 pitch. The first scales with throttle exactly as described.
 
-### M.3 The vehicle briefly leaves frame while the camera pitches up — OPEN BUG, two theories killed
+### M.3 The vehicle briefly leaves frame while the camera pitches up — OPEN BUG, cause localised to `Measure` 2026-08-14
 
 **Classified a BUG by the owner 2026-08-13, not a polish or tuning item.** It violates a stated hard
 requirement, so it does not compete with the Round 5 features for priority — it is defect work and
@@ -192,9 +192,28 @@ oriented box**. `CLAUDE.md` > Vehicle Scale already warns that the rear-bottom c
 leave frame and that the collider union is not centred on the origin. A sphere model cannot see a
 corner swinging down as the nose pitches up over a crest.
 
-**Test before building anything:** reproduce with the craft pitched, on a slope or a crest, and
-compare the sphere margin the guard computes against the true oriented-box margin. If they diverge,
-the fix is in `Measure`, not in the guard's inputs.
+**That test has now been run, 2026-08-14, and they diverge. By this item's own criterion the fix is
+in `Measure`, not in the guard's inputs.** Two independent confirmations:
+
+1. **The sphere model is provably attitude-blind.** `EvaluateState` grades `Inverted` identically to
+   `Resting` to three decimals: `guardScale` 1.000 both, `guardRemoved` 0.000 both, vertical margin
+   7.53 both, horizontal 27.32 both. Turning the craft upside down changes nothing the framing check
+   can see.
+2. **The real silhouette swings, and asymmetrically.** Sweeping the measured hull box (centre
+   `(0, 0.877, 0.732)`, half-extents `(1.907, 1.174, 3.439)`) through a full rotation against a fixed
+   camera: **pitch overflows the BOTTOM edge by up to 24.3% of screen height**, clipping continuously
+   from roughly 105 through 210 degrees, while **roll overflows by at most 7.7%**. Same camera, same
+   craft, same box. The bottom edge being the one breached matches the 2026-08-11 terrain
+   measurements exactly.
+
+Caveat on the numbers: the sweep held the camera at the resting pose with the craft parked, so the
+absolute percentages are not the in-flight condition. The pitch-versus-roll comparison at a fixed
+camera is the valid part, and it is a 3:1 difference the model cannot represent.
+
+**So the remaining work is a shape change in `Measure`, not tuning.** Note the constraint before
+starting: `Measure` is deliberately shared by `EvaluateState` and the framing guard so the inspector
+cannot promise a margin the runtime does not deliver, so any change lands on both at once and the
+readout must be re-judged with it.
 
 **Verification harness worth reusing:** the oriented-box viewport check written for this
 investigation. Eight corners of the measured collider union through `Camera.WorldToViewportPoint`,
@@ -901,17 +920,30 @@ The rare 400-550ms stalls also remain unexplained. `FrameSpikeWatch` now prints 
 verdict on stop, which will settle whether they are thermal, and that costs nothing but one normal
 playtest.
 
-### 0.7 The periodic frame hitch is unexplained
-A very regular doublet, a ~9ms frame followed 0.03-0.08s later by an ~18-20ms one, recurred at 25.2,
-27.0 and 27.5 second gaps through the 2026-08-11 session, at unrelated speeds and locations.
-Regularity that clean means a process on a timer rather than anything the craft does. Adobe
-`CoreSync` / `AdobeCollabSync` were sampled and ruled out (trap 18). `FrameSpikeWatch` also reported
-the CPU benchmark drifting +35.5% worst-case in the same session, so thermal or power state is still
-live as a contributor.
+### 0.7 The periodic frame hitch is GC — confirm it does not survive a build
+**Cause identified 2026-08-14 and recorded in `CLAUDE.md`: it is a gen-0 garbage collection on a
+period set by the allocation rate, and `AllocationBisect` shows the allocation is the EDITOR's, not
+this project's.** Floor with all 49 game scripts disabled (5.24 MB/s) was higher than baseline with
+everything enabled (4.47 MB/s). Do not spend another session hunting a script that allocates; the
+answer is that none of them measurably does.
 
-**The decisive test is a build, and it is cheap.** Editor play mode is not a performance measurement
-and the editor plus the MCP bridge are both untested suspects. `MotionTrace` runs unchanged in a
-player. If the doublet vanishes in a build, this closes as tooling and stops being worth attention.
+**All that remains is the build check, and it is cheap.** In a player the editor's ~5 MB/s
+contribution is gone, so the period should stretch out or the hitch should disappear entirely.
+`MotionTrace` and `FrameSpikeWatch` run unchanged in a build and write next to the exe.
+
+**Sharp prediction to test, so a null cannot be misread:** in the editor the collections land every
+24-26 seconds at ~14.4ms against a 4.4ms baseline. If the build shows the same period, the
+allocation is ours after all and the bisect needs redoing under load. If the period stretches by
+several times or the collections stop appearing as spikes, this closes as tooling.
+
+**Untested and worth including in that run:** sustained weapon fire and heavy projectile traffic.
+The bisect requires a parked craft and the driving runs contained neither, so those paths have never
+been measured for allocation.
+
+Note the old framing of this item described the hitch as a "doublet" and treated the 33-34 physics
+catch-up steps as a signature linking stalls. Both are superseded: the shape is a burst of ~6-7ms
+frames ending in one ~14ms frame, and the step count is an arithmetic ceiling that any frame over
+333ms reports. See `CLAUDE.md` trap 34.
 
 ### 0.8 ~~Floor collisions, unattributed~~ — CLOSED 2026-08-11, they are hard landings
 `MotionTrace` v1.1 added contact names and v1.3 added world horizontal speed, and together they
@@ -1614,6 +1646,44 @@ Cosmetic, no runtime effect, but misleading when reading the inspector:
 
 (`WD_Shotgun`'s stale `missileFireMode: 2` looks like it belongs here but does not -- it is a closed
 decision, recorded in `CLAUDE.md`.)
+
+### 3.12 Clear the accepted console baseline before the first build
+The `RVP.GroundSurfaceInstance.Start()` null refs are **already an accepted part of the console
+baseline** in `CLAUDE.md` > Before touching the editor, along with the convex-hull warning and the
+obsolete-API warnings. Not a new discovery and not a bug. What is new is a reason to clean them up:
+
+**A release player has no console, so `Player.log` is the only channel a marked playtest has.** That
+is where `[MotionTrace] MARKER n` lands and where a `BUFFER FILLED` warning would land, and trap 30
+says an instrument that fails quietly costs the whole session. Four exceptions plus a stack trace at
+every startup make that file materially harder to scan for the one line that matters.
+
+Diagnosed 2026-08-14: `GroundSurfaceMaster.surfaceTypesStatic` is null because no
+`GroundSurfaceMaster` exists in the scene, and four objects carry the component. Gameplay impact is
+genuinely nil -- `friction` is read only by RVP's own `Suspension`, `Wheel`, `TireMarkCreate` and
+`TireScreech`, none of which this project uses, since it has its own hover physics.
+
+Cleanest fix is removing the four leftover `GroundSurfaceInstance` components. Adding a
+`GroundSurfaceMaster` would also silence it but keeps dead machinery alive.
+
+### 3.13 Three camera impulse channels are unwired
+`HoverCameraImpulseRouter` warns on `Awake` that the **EMP**, **weapon recoil** and **denied jump**
+sources are unassigned, so those three events currently produce no camera shake at all. Two of five
+channels are hooked up. Surfaced 2026-08-14; the router already reports it clearly, nobody had read
+the warnings.
+
+Note this interacts with `2.1` and `2.2`, both of which record their feel as "wired but unjudged" --
+they cannot have been judged, because the shake half never fired.
+
+### 3.14 No camera preview state can reproduce a mid-flip pose
+`CameraPreviewState.Inverted` sets the craft upside down but still travelling along its own nose, so
+it cannot express the moment that mattered in the v2.9 boost-gate bug: nose swept past perpendicular
+to travel while moving at speed. Every one of the twelve states has velocity aligned with the
+chassis, which is precisely the assumption the bug lived under.
+
+That is part of why the defect survived so long -- it was invisible in the inspector and only
+appeared under a controlled playtest. A state carrying a nose/travel disagreement would make this
+class of bug judgeable without driving. Needs `FramingInputs.travelSpeed` to differ from
+`forwardSpeed`, which `BuildPreviewInputs` currently pins equal on purpose (see the comment there).
 
 ---
 

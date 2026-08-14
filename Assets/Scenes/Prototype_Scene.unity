@@ -1265,7 +1265,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MotionTrace
   vehicle: {fileID: 1910851184}
   view: {fileID: 1285873590}
-  captureSeconds: 180
+  captureSeconds: 240
   assumedMaxFps: 400
   warmupFrames: 120
   traceFixedSteps: 1
@@ -2607,6 +2607,10 @@ PrefabInstance:
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: framing.pitchUpRange
       value: 35
+      objectReference: {fileID: 0}
+    - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: framing.minFrameMargin
+      value: 2
       objectReference: {fileID: 0}
     - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: framing.pitchDownRange

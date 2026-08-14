@@ -3,8 +3,37 @@ using Unity.Cinemachine;
 using Unity.Cinemachine.TargetTracking;
 
 /// <summary>
-/// HoverCameraController v2.8
+/// HoverCameraController v2.9
 /// ------------------------------------------------
+/// v2.9: THE BOOST REVERSE GATE READS TRAVEL, NOT THE NOSE.
+///
+///   ForwardGate multiplies every boost term by Clamp01(speed / forwardGateSpeed),
+///   and that speed was velocity projected onto CHASSIS forward. It passes through
+///   zero whenever the nose swings past perpendicular to travel, which is exactly
+///   what a flip does. The craft is still moving forward at full speed and only
+///   the nose has rotated, but the gate read it as reversing and slammed every
+///   boost cue shut.
+///
+///   Measured 2026-08-14 across four boosted flips: every lurch sat on the zero
+///   crossing of velocity dot chassis-forward, at tilt 86.6 to 103.1 degrees, with
+///   boost held between 0.57 and 1.00. At forwardGateSpeed 2 and a measured slew
+///   of 535 m/s^2 the gate closes and reopens in 7ms, so up to 10 degrees of FOV
+///   and 3m of camera pull-back snap shut and back inside three frames. That is
+///   what makes it read as a hitch rather than as a transition. Predicted 7ms
+///   from the tuning, observed 7ms in the trace. Zero occurrences in a barrel
+///   roll, where the nose never leaves the travel line, and zero across 7,496
+///   grounded frames above 40 m/s, where forward speed is never negative.
+///
+///   Confirmed by the owner before the fix landed: flips without boost never
+///   lurch, flips with boost lurch every time.
+///
+///   Same lesson v2.7 already learned for the heading proxy, and the same shape
+///   of fix: the chassis is the untrustworthy signal mid-stunt, so read the
+///   stable heading instead. Reversing still gates, because velocity then opposes
+///   the heading. Strafe is deliberately unchanged: lateral travel still projects
+///   to roughly zero along the heading, and whether a sideways boost should widen
+///   the lens is an open question nobody has judged (see StrafeBoost below).
+///
 /// v2.8: TRAVEL HEADING IS LATCHED, NOT RECOMPUTED.
 ///
 ///   v2.7 skipped its bound entirely whenever horizontal speed fell under
@@ -391,6 +420,13 @@ public class HoverCameraController : MonoBehaviour
         public float elevation;         // degrees above horizontal, absolute
         public float forwardSpeed;      // m/s along chassis forward
         public float driftLerp;         // 0..1
+
+        // m/s along the camera's STABLE HEADING rather than along the chassis.
+        // Only ForwardGate reads it. It exists because the chassis answer crosses
+        // zero mid-flip while the craft is still travelling forward at full speed,
+        // which is the v2.9 defect. Keep the two separate: look-ahead genuinely
+        // wants the chassis number, since its offset is chassis-local.
+        public float travelSpeed;
 
         // Boost arrives as TWO numbers rather than as Propulsion.BoostLerp, because
         // BoostLerp only ever says "how far into boost am I right now" and two of
@@ -953,12 +989,24 @@ public class HoverCameraController : MonoBehaviour
     /// </summary>
     private FramingInputs GatherLiveInputs(bool strafing)
     {
+        Vector3 velocity = _vehicleRb != null ? _vehicleRb.linearVelocity : Vector3.zero;
+
+        float forwardSpeed = _vehicleRb != null
+                               ? Vector3.Dot(velocity, vehicleTarget.forward)
+                               : 0f;
+
+        // Falls back to the chassis answer rather than to zero, deliberately: a
+        // missing proxy should degrade to the old behaviour, not gate every boost
+        // cue off permanently.
+        float travelSpeed  = _headingProxy != null
+                               ? Vector3.Dot(velocity, _headingProxy.forward)
+                               : forwardSpeed;
+
         return new FramingInputs
         {
             elevation        = _currentElevation,
-            forwardSpeed     = _vehicleRb != null
-                                 ? Vector3.Dot(_vehicleRb.linearVelocity, vehicleTarget.forward)
-                                 : 0f,
+            forwardSpeed     = forwardSpeed,
+            travelSpeed      = travelSpeed,
             driftLerp        = propulsion != null ? propulsion.DriftLerp        : 0f,
 
             // Read off the integrated envelope, not off BoostLerp. This method is
@@ -1083,6 +1131,13 @@ public class HoverCameraController : MonoBehaviour
                 inp.airControlWeight = 1f;
                 break;
         }
+
+        // Every defined state has the craft travelling along its own nose, so the
+        // two speeds agree and the preview stays honest. Assigned after the switch
+        // rather than inside each case on purpose: a state added later cannot then
+        // forget it and silently render with its boost gated off, which is exactly
+        // how StrafeBoost sat wrong from v2.4 until someone noticed.
+        inp.travelSpeed = inp.forwardSpeed;
 
         return inp;
     }
@@ -1307,10 +1362,19 @@ public class HoverCameraController : MonoBehaviour
     /// Gates on DIRECTION rather than scaling by speed. Scaling would delay every
     /// boost cue at onset, and they work precisely because they are transients
     /// arriving on the same curve as the thrust.
+    ///
+    /// Reads travelSpeed, NOT forwardSpeed, and the distinction is the whole of
+    /// the v2.9 fix. "Am I backing up" is a question about TRAVEL, and the chassis
+    /// only answers it while the nose points along the travel line. A flip breaks
+    /// that equivalence: the nose sweeps past perpendicular, the chassis answer
+    /// crosses zero, and the gate slams shut on a craft still doing 134 m/s
+    /// forwards. Measured at 7ms per crossing, twice per rotation, which is a
+    /// visible hitch rather than a transition. The stable heading has neither
+    /// problem, for the same reason v2.7 bounded the proxy against travel.
     /// </summary>
     private float ForwardGate(in FramingInputs inp) =>
         boost.forwardGateSpeed > 0f
-            ? Mathf.Clamp01(inp.forwardSpeed / boost.forwardGateSpeed)
+            ? Mathf.Clamp01(inp.travelSpeed / boost.forwardGateSpeed)
             : 1f;
 
     /// <summary>
