@@ -232,9 +232,17 @@ Everything here was learned by getting it wrong first. Ignoring any of it costs 
 
 24. **An inspector edit to a ScriptableObject lives in memory, dirty, until something saves it.** The owner lowered `yawAccel` 16 -> 15, drove it, and reported it as done, while the asset on disk still read 16 and one domain reload would have discarded it silently. `EditorUtility.IsDirty(asset)` is true in that state and `AssetDatabase.SaveAssetIfDirty(asset)` flushes it. **This is the third value in this project to sit in a believed-but-not-real state**, after `boostBlendSeconds` (never persisted at all) and `travelHeadingMinSpeed` (trap 21, serialised value beat the changed default). The failure is always the same shape: what the code, the inspector and the file say diverge, and nothing errors. **Read tuning values back from the FILE before trusting a measurement that depends on them.**
 
+    **Fourth instance, 2026-08-13, and this one was nearly lost work rather than a bad measurement.** The owner reported taking `driftLateralDamp` to 0.3 and judged the result good; the file still read 1.5, with the live object dirty at 0.3. A domain reload — which a recompile triggers, and this session did several — would have silently discarded a tuning value the owner had just approved by feel. **When an owner reports a value they set by hand, check the file before building on it, and save it for them if it is dirty.** Grep the asset (cheap, no play mode) and compare against `profile.propulsion.<field>` plus `EditorUtility.IsDirty`; the two disagreeing is the whole signal.
+
 25. **A formula that reproduces a known figure can still be wrong, and reproducing it is what makes it dangerous.** `radius = topSpeed / (yawAccel / yawDamping)` returned the documented 37m turn radius exactly, so it was trusted to size cornering after the speed change, and it prescribed `yawAccel` 19.5. Measured, 19.5 gives a 17.1m corner against the ~25m the owner had confirmed as good, because the formula assumes the craft corners at top speed (it corners at roughly half) and that yaw authority does not affect cornering speed (raising it drops speed from 59 to 31 m/s across the tested range). The correct answer was 16. **Sweep the parameter and measure the outcome; do not solve for it.** The general form: a model validated against one operating point tells you nothing about a different one.
 
 26. **A camera pose reconstructed from rig settings is a guess wearing a number's clothes; read the live `Camera.main`.** Sizing the reticle parallax began by rebuilding the strafe pose from the vcam's follow offset (0, 3.5, -6) and "the composer centres the target". That model put the crosshair 1094px above centre at a 20° aim — off the top of a 1153px screen — which should have been caught by the fact that the owner has never reported an off-screen crosshair. The live camera read 434px at the same aim. The model missed the binding mode, and **binding mode decides whether the target's rotation is cancelled on screen at all**: `LockToTargetNoRoll` pitches the rig WITH the chassis, so 23.7° of aim travel moved the crosshair ~10px while depth moved it 459px. **Before attributing a screen-space symptom to an input, measure each candidate term's actual contribution** — the fix here was scoped around preserving "pitch honesty" that the rig had already been cancelling by design. Forcing the real mode beats modelling it: a virtual `Gamepad` via `InputSystem.AddDevice<Gamepad>()` plus a per-frame `QueueStateEvent` holds a trigger down for as long as the sampler runs, which is how strafe was entered here (remove the device afterwards).
+
+27. **A quantity that is equivalent to another in the common case will be treated as interchangeable with it, and the special case is where the bug lives.** Top speed was enforced against the forward axis in two places. That is exactly the speed while heading equals velocity, which is every moment except a drift — so it was correct, cheap, and reviewed as fine for a long time, and during a drift it silently became `total = cap / cos(angle)` and let the craft hold 128.4 m/s against a cap of 80. The same shape appeared twice more in one day: the reticle's aim-depth (trap 26), and `ApplyOverSpeedBleed`'s header claiming velocity-alignment that the code had lost, harmless *precisely because* drift was excluded, which is what made the runaway hard to see. **When a mode deliberately breaks an assumption — drift separates heading from velocity, strafe separates aim from travel — go find every place that assumption was silently relied on.** The grep is for the cheap proxy, not the concept.
+
+28. **When a defect inflates a system's headline number, every knob tuned against it reads as broken, and the instinct to re-tune the knobs is a trap.** `driftLateralDamp` 0.3 and `driftYawMultiplier` 1.5 produced corners of hundreds of metres and looked hopelessly wrong. They were fine. They had been tuned inside a runaway where no setting could produce a corner, so the tuning had drifted to whatever was least bad. After the speed fix the same knobs reached the target on the first sweep. **Before tuning against a symptom, check whether the quantity being tuned is itself sane** — here, that drift speed sat at 1.6x top speed. The owner's two separate complaints ("bleed speed", "more curvature") were one defect, and treating them as two tuning problems would have produced a mechanism to fight a bug.
+
+29. **A mode has to be measured against the baseline it is supposed to differ from, not only against its own target.** Drift was tuned to a 27m corner, hit it, and shipped — and the owner reported no slide at all within minutes. The disqualifying number was in the same regression table, one row up: ordinary full-lock cornering already slides −61.5° at 29.2m, so the new drift slid LESS than yanking the stick and tightened the corner by 2m. Every target was met and the feature had no reason to exist. The same trap sits under any modal system here: strafe against drive, boost against no-boost, drift against ordinary cornering. **Put the OFF row in the results table.** It costs one extra run and it is the only row that answers "is this button worth pressing".
 
 ### Recipes that work
 
@@ -339,6 +347,51 @@ nobody spends a session rediscovering them.
 **Open work is not here. It is in `TODO.md`,** which owns every unfinished item: verification debt,
 blockers, known traps, pending tuning decisions and unimplemented features. Nothing is listed in
 both files. If you are looking for what to do next, that is the file.
+
+### Drift speed runaway — fixed 2026-08-13, `HoverController_Propulsion` v1.9
+
+**Standing decision: while drifting, "am I at top speed?" is answered by TOTAL horizontal speed, in
+every place that asks.** Both places asked the forward axis, which is the same thing only while
+heading equals velocity. A drift separates them deliberately, and the cap silently became a
+multiplier: `total = cap / cos(driftAngle)`. Measured on flat ground, full throttle and full lock,
+a settled drift held **128.4 m/s against a topSpeed of 80** — 80 / cos(51.7°) = 129 — in a **337m**
+arc. Drift was the fastest thing in the game by 60% and went nearly straight.
+
+**Fixing one of the two sites is not enough, and each failure looks like the fix not working.**
+`ApplyOverSpeedBleed` alone took it 128.4 -> 107.1 and stopped, because `ApplyDrive` was still at
+full 87 m/s² accel: the forward axis sat at 73.2 and never reached its gate, so drive never
+switched off, and the bleed was pulling 27 m/s² against it forever. `ApplyDrive` alone would leave a
+drift coasting at its entry speed with nothing to take it back. **Both, or neither.**
+
+**This is why the drift knobs looked untunable.** `driftLateralDamp` 0.3 and `driftYawMultiplier`
+1.5 were not bad values; they were tuned against a runaway where every corner was hundreds of metres
+wide no matter what they were set to. Once speed bound correctly they became usable immediately:
+4 and 2.5 give a 27m corner, against ordinary cornering's 28m.
+
+**Three knobs, and the two-knob model is not enough to tune against.** Radius is speed over turn
+rate, and **turn rate is speed-independent** here — `yawAccel / yawDamping × driftYawMultiplier ×
+the maxDriftAngle fade` — so at fixed knobs the corner tightens in exact proportion as speed bleeds
+off. That relation is what lets the falling speed cap serve as the corner-tightening mechanic too.
+
+- `driftLateralDamp` trades corner against slide: raising it tightens the corner and narrows the
+  slide together. **It must stay below `lateralDamp`** (see below).
+- `driftYawMultiplier` tightens the corner and costs speed, without costing slide.
+- **`maxDriftAngle` is the only knob that tightens the corner and WIDENS the slide at once**,
+  because the fade throttles turn rate. 60 -> 90 at `driftLateralDamp` 1.5 took the corner 33m -> 23m
+  while the slide went 42° -> 52°. It reads as a pose limiter and is really the radius knob; this
+  was missed on the first pass and cost a whole tuning round.
+
+**`driftLateralDamp` above `lateralDamp` makes drift a grip-assist button.** Shipped briefly at 4
+against a `lateralDamp` of 1 — four times the sideways grip of ordinary driving — and the slide
+collapsed from 52° to 29.5°. The owner reported "no drift or slide here, just the hop" within
+minutes. **The check that would have caught it before shipping: ordinary full-lock cornering already
+slides −61.5° at a 29.2m radius.** Any drift setting must be compared against that baseline, not
+only against its own target, or it can hit every target number while being strictly worse than not
+pressing the button.
+
+**M.7a is a falling CAP, not extra drag.** A damping coefficient reaches equilibrium with throttle
+and holds it forever; raising it only lowers the plateau, which is a smaller drift rather than a
+drift that costs anything. Only a moving ceiling keeps taking speed at full throttle.
 
 ### Reticle depth-following — removed 2026-08-13, `VehicleHUD` v1.4
 

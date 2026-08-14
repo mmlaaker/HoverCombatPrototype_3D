@@ -1,7 +1,41 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.8
+/// HoverController_Propulsion v1.9
+///
+/// v1.9: Drift stops being the fastest thing in the game, and starts costing something.
+///       One defect and one feature, and the defect is the reason the feature looked
+///       impossible to tune.
+///
+///       DEFECT: both places that enforce top speed compared the FORWARD AXIS against the
+///       cap. While heading equals velocity that IS the speed, but a drift separates them
+///       by design, and the cap silently became a multiplier: total = cap / cos(angle).
+///       Measured on flat ground at full throttle and full lock, a settled drift held
+///       128.4 m/s against a topSpeed of 80, in a 337m arc, with drive still at full accel
+///       because the forward axis sat at 73 and never reached the gate. Both ApplyDrive and
+///       ApplyOverSpeedBleed now compare TOTAL horizontal speed while drifting, and the
+///       bleed's force is velocity-aligned there. Fixing only one of the two is not enough:
+///       the bleed alone pulled 27 m/s^2 against a drive that never switched off (107 m/s),
+///       and the drive gate alone would let a drift coast at its entry speed. Non-drift
+///       paths are byte-for-byte the same decision as before and were regression-checked.
+///
+///       FEATURE: a drift now ENDS when it bleeds out, instead of plateauing at the floor
+///       with the bank still on while throttle covers the difference. driftSustainedTopSpeed
+///       sits below minDriftSpeed by design, so the old behaviour parked the player in a
+///       state they could never have started. _driftSpent latches the exit until the button
+///       is released, without which the craft re-enters the moment throttle carries it back
+///       over minDriftSpeed and chatters against its own floor. New event: OnDriftSpent.
+///
+///       FEATURE (TODO M.7a): sustained drifts lose their speed ceiling over time, via
+///       DriftSpeedCap and the _driftHeldTime clock. Implemented as a falling CAP rather
+///       than as extra drag, because a damping coefficient reaches an equilibrium and holds
+///       it forever -- raising it only lowers the plateau, which is a smaller drift rather
+///       than a drift that costs anything. Three new tunables: driftSustainSeconds,
+///       driftBleedSeconds, driftSustainedTopSpeed.
+///
+///       Also note driftLateralDamp went 0.3 -> 4 and driftYawMultiplier 1.5 -> 2.5. The
+///       old values were not wrong for the craft they were tuned on; they were tuned
+///       against the runaway, where every corner was hundreds of metres wide regardless.
 ///
 /// v1.8: Drift becomes a held slide instead of a spin. Two additions and one reframe.
 ///       maxDriftAngle caps the gap between heading and velocity by fading yaw authority
@@ -175,6 +209,18 @@ public class HoverController_Propulsion : MonoBehaviour
     private float driftLerp;   // 0..1, managed by ApplyDriftBlend
     private bool  _isDrifting; // entry-gate state: true once speed+turn initiated drift
 
+    // Seconds of drift held, the input to the sustained-drift speed bleed. Counts UP
+    // while drifting and DOWN at the same rate while not, rather than resetting on
+    // release: a hard reset would make tapping out and back in a free way to clear the
+    // penalty, which is the whole cost of a long drift. Symmetric decay means a long
+    // drift has to be paid for with roughly the time it lasted.
+    private float _driftHeldTime;
+
+    // Latched true when a drift bleeds out under a still-held button, cleared the moment
+    // the button is released. Without it the craft re-enters drift as soon as throttle
+    // carries it back over minDriftSpeed and chatters against its own floor.
+    private bool _driftSpent;
+
     // -------------------------------------------------------------------------
     // 🎯 Strafe runtime state
     // -------------------------------------------------------------------------
@@ -236,9 +282,21 @@ public class HoverController_Propulsion : MonoBehaviour
     /// <summary>
     /// Fired once when a drift starts and the entry hop kicks. For VFX and audio:
     /// the hop is the moment of commitment and is the obvious hook for tyre smoke,
-    /// a thruster puff or a chirp. Not fired on drift exit, deliberately.
+    /// a thruster puff or a chirp. Not fired on ordinary drift exit, deliberately —
+    /// letting go of the button is the player's own doing and needs no announcing.
     /// </summary>
     public event System.Action OnDriftHop;
+
+    /// <summary>
+    /// Fired once when a drift BLEEDS OUT: the speed ramp has run to completion and the
+    /// drift ends itself while the button is still held. This is the bookend to
+    /// OnDriftHop, and unlike an ordinary exit it does want announcing, because the
+    /// craft is taking control back rather than the player handing it over.
+    ///
+    /// The chassis bank blending out already signals it, but that reads as the drift
+    /// merely weakening. Hook this for the moment it ENDED.
+    /// </summary>
+    public event System.Action OnDriftSpent;
 
     // -------------------------------------------------------------------------
     // 🧭 Debug
@@ -329,6 +387,8 @@ public class HoverController_Propulsion : MonoBehaviour
         _strafeModeBlend   = 0f;
         _strafePitchAccum  = 0f;
         _isDrifting        = false;
+        _driftHeldTime     = 0f;
+        _driftSpent        = false;
         dodgeForceTimer    = 0f;
         jumpChargeTimer    = 0f;
         airJumpAvailable   = false;
@@ -621,19 +681,50 @@ public class HoverController_Propulsion : MonoBehaviour
     {
         bool wasDrifting = _isDrifting;
 
+        // Releasing the button re-arms drift. See _driftSpent below.
+        if (!input.Drift)
+            _driftSpent = false;
+
         bool baseCondition = input.Drift
                           && Mathf.Abs(input.TurnInput) >= P.driftTurnThreshold
                           && foundation.IsHoverGrounded;
 
         if (_isDrifting)
         {
-            // Already drifting. Sustain without re-checking speed.
-            _isDrifting = baseCondition;
+            // Already drifting. Sustain without re-checking speed: scrubbing speed through
+            // a corner must not eject the player mid-arc.
+            //
+            // EXCEPT once the bleed ramp has run to completion, which is the manoeuvre's
+            // designed end rather than a situational speed dip. Without this the drift had
+            // no terminal state at all: it plateaued at driftSustainedTopSpeed and held the
+            // bank forever while throttle covered the floor, leaving the player parked in a
+            // state they could never have STARTED, since the floor 45 sits deliberately
+            // below minDriftSpeed 53. Ending it hands normal grip and steering back and
+            // makes the cost legible.
+            //
+            // Clock-based rather than speed-based on purpose: driftSustainSeconds +
+            // driftBleedSeconds is deterministic and identical every time, where waiting on
+            // an actual speed reading would fire early downhill and never fire on a climb.
+            bool spent = _driftHeldTime >= P.driftSustainSeconds + P.driftBleedSeconds;
+            if (spent)
+            {
+                _driftSpent = true;
+                OnDriftSpent?.Invoke();
+            }
+            _isDrifting = baseCondition && !spent;
         }
         else
         {
-            // Not yet drifting. Require minimum forward speed to initiate.
-            _isDrifting = baseCondition && _cachedLocalVel.z >= P.minDriftSpeed;
+            // Not yet drifting. Require minimum forward speed to initiate, and require the
+            // button to have been RELEASED since the last drift bled out — otherwise the
+            // craft re-enters the moment throttle carries it back over minDriftSpeed, which
+            // takes well under a second, and the drift chatters on and off against its own
+            // floor. _driftHeldTime is deliberately NOT reset here: it decays in real time,
+            // so drifting again too soon buys a shorter drift. That is what stops release-
+            // and-re-press being a free way to dodge the bleed.
+            _isDrifting = baseCondition
+                       && !_driftSpent
+                       && _cachedLocalVel.z >= P.minDriftSpeed;
         }
 
         // Entry hop. Fires on the rising edge only, and only from a settled chassis.
@@ -660,6 +751,38 @@ public class HoverController_Propulsion : MonoBehaviour
         float target = _isDrifting ? 1f : 0f;
         float step   = Time.fixedDeltaTime / Mathf.Max(0.01f, P.driftBlendSeconds);
         driftLerp    = Mathf.MoveTowards(driftLerp, target, step);
+
+        // Held-drift clock. Drives DriftSpeedCap below. Counts down when not drifting so
+        // the penalty cannot be cleared by releasing and re-pressing.
+        _driftHeldTime = Mathf.Max(0f, _driftHeldTime
+                                     + (_isDrifting ? Time.fixedDeltaTime : -Time.fixedDeltaTime));
+    }
+
+    /// <summary>
+    /// The speed ceiling a drift is allowed to hold, which decays the longer it is held.
+    /// This is TODO M.7a: "a sustained drift should bleed speed over time, even on full
+    /// throttle". Returns the normal cap unchanged for the first driftSustainSeconds, then
+    /// ramps to driftSustainedTopSpeed across driftBleedSeconds.
+    ///
+    /// Implemented as a moving CAP rather than as extra drag, deliberately. driftForwardDamp
+    /// is a coefficient, so throttle and drag reach an equilibrium and hold it forever;
+    /// raising it only lowers the plateau, which is a smaller drift, not a drift that costs
+    /// something. A falling cap is the only form that keeps taking speed on full throttle,
+    /// and it composes with the two places the cap is already enforced instead of adding a
+    /// third force to balance against them.
+    ///
+    /// Never RAISES the cap: if driftSustainedTopSpeed is somehow above the current ceiling
+    /// (a low boost-blended cap, say), the ceiling wins.
+    /// </summary>
+    private float DriftSpeedCap(float blendedTopSpeed)
+    {
+        float overrun = _driftHeldTime - P.driftSustainSeconds;
+        if (overrun <= 0f)
+            return blendedTopSpeed;
+
+        float k     = Mathf.Clamp01(overrun / Mathf.Max(0.01f, P.driftBleedSeconds));
+        float floor = Mathf.Min(P.driftSustainedTopSpeed, blendedTopSpeed);
+        return Mathf.Lerp(blendedTopSpeed, floor, k);
     }
 
     /// <summary>
@@ -908,10 +1031,32 @@ public class HoverController_Propulsion : MonoBehaviour
         {
             if (throttle >= 0f)
             {
-                // Suppress drive if already at or above top speed forward.
-                if (currentFwd < blendedTopSpeed)
+                // Which speed the cap binds on depends on whether heading equals velocity.
+                //
+                // Drive mode: the forward axis IS the speed, so this is unchanged.
+                //
+                // Drift: they diverge, and gating on the forward axis alone leaves drive
+                // running at FULL accel far above the cap. Measured 2026-08-13: a settled
+                // drift held 107 m/s against a topSpeed of 80 with drive still at 87,
+                // because the forward axis sat at 73.2 and never reached the gate. Fixing
+                // ApplyOverSpeedBleed alone was not enough for exactly this reason — the
+                // bleed was pulling 27 m/s^2 against a drive that never switched off.
+                // Lerped by driftLerp so entry and exit cannot pop.
+                float capReference = currentFwd;
+                float effectiveCap = blendedTopSpeed;
+                if (driftLerp > 0f)
+                {
+                    Vector3 driftHorizVel = rb.linearVelocity;
+                    driftHorizVel.y = 0f;
+                    capReference = Mathf.Lerp(currentFwd, driftHorizVel.magnitude, driftLerp);
+                    // Sustained drifts lose their ceiling over time. See DriftSpeedCap.
+                    effectiveCap = Mathf.Lerp(blendedTopSpeed, DriftSpeedCap(blendedTopSpeed), driftLerp);
+                }
+
+                // Suppress drive if already at or above top speed.
+                if (capReference < effectiveCap)
                     rawAccel = Mathf.Min(throttle * blendedFwdAccel,
-                                         (blendedTopSpeed - currentFwd) / Time.fixedDeltaTime);
+                                         (effectiveCap - capReference) / Time.fixedDeltaTime);
             }
             else
             {
@@ -1094,22 +1239,25 @@ public class HoverController_Propulsion : MonoBehaviour
     /// held), the drive-drag mutual exclusion leaves no force to decelerate.
     /// Drive is suppressed (above cap) and forward drag is suppressed (throttle held).
     ///
-    /// This applies a proportional counter-force along the actual world velocity
-    /// direction. NOT along transform.forward. Critical because during drift,
-    /// heading diverges from velocity. A heading-aligned force would push sideways
-    /// or vertically, destabilizing the chassis.
+    /// TWO paths, because the right cap depends on whether heading equals velocity.
     ///
-    /// Velocity-aligned means it always decelerates in the direction the chassis is
-    /// actually moving, regardless of heading orientation. Safe during drift, on
-    /// slopes, at any heading angle.
+    ///   Not drifting: heading IS velocity, so a forward-axis read and a heading-aligned
+    ///   force are exactly equivalent to the velocity-aligned version and cheaper. This
+    ///   is the confirmed-good path; do not disturb it.
+    ///
+    ///   Drifting: heading and velocity diverge by design, so the cap is applied to total
+    ///   horizontal speed and the force is aligned to VELOCITY. A heading-aligned force at
+    ///   a 50 degree slide would push sideways and destabilize the chassis.
+    ///
+    /// Note for anyone reading an older copy of this file: this header used to claim the
+    /// whole method was velocity-aligned, which the code had not been true of for a long
+    /// time. It was accurate when written, then the method was narrowed to the forward
+    /// axis and the header was not updated. Harmless while drift was suppressed here,
+    /// since the two are identical when heading equals velocity, but it made the drift
+    /// speed runaway much harder to find.
     /// </summary>
     private void ApplyOverSpeedBleed(float effectiveTopSpeed)
     {
-        // Suppressed during drift. Drift has its own damping and lateral velocity
-        // inflates total magnitude, causing false triggers.
-        if (driftLerp > 0f)
-            return;
-
         // Match the cap ApplyDrive actually clamps against. Drive stops pushing at the
         // strafe-blended top speed, so bleeding against the unblended one left a band
         // (strafeTopSpeed..topSpeed) where drive was suppressed for being over cap, drag
@@ -1117,6 +1265,47 @@ public class HoverController_Propulsion : MonoBehaviour
         // acted on the chassis and it coasted there indefinitely. Same expression as
         // ApplyDrive so the two can never disagree again.
         float blendedTopSpeed = BlendedTopSpeed(effectiveTopSpeed);
+
+        // ---- Drift: cap TOTAL horizontal speed, not the forward axis ----
+        //
+        // A forward-axis cap is only a speed cap while heading equals velocity. During a
+        // drift they diverge by design, and the cap silently becomes a MULTIPLIER:
+        // total = cap / cos(driftAngle). Measured 2026-08-13 on flat ground, holding full
+        // throttle and full lock: the craft settled at 128.4 m/s against a topSpeed of 80,
+        // because it sat at a 51.7 degree slide and 80 / cos(51.7) = 129. Drift was the
+        // fastest thing in the game by 60%, and the resulting 337m arc was the "not enough
+        // path curvature" complaint in TODO M.7.
+        //
+        // This used to be suppressed outright during drift, on the stated grounds that
+        // "lateral velocity inflates total magnitude, causing false triggers". That reason
+        // had already been designed out: the forward-axis read below exists precisely so
+        // lateral cannot inflate anything. Deleting the suppression alone therefore fixes
+        // nothing, because the forward axis is pinned AT the cap, never above it. The
+        // comparison itself has to change, which is what this branch does.
+        //
+        // Velocity-aligned on purpose, and this is what the method's header has always
+        // claimed it did: a heading-aligned force during a 50 degree slide pushes sideways
+        // and destabilizes the chassis. Scaled by driftLerp so entry and exit cannot pop.
+        if (driftLerp > 0f)
+        {
+            Vector3 horizVel = rb.linearVelocity;
+            horizVel.y = 0f;
+            float horizSpeed = horizVel.magnitude;
+
+            // Sustained drifts lose their ceiling over time. See DriftSpeedCap. This is the
+            // half of the bleed that actively TAKES speed; the ApplyDrive half only stops
+            // adding it, which on its own would let a drift coast at its entry speed.
+            float driftCap = Mathf.Lerp(blendedTopSpeed, DriftSpeedCap(blendedTopSpeed), driftLerp);
+
+            if (horizSpeed > driftCap)
+            {
+                float driftExcess = horizSpeed - driftCap;
+                _dbgBleed = true;
+                rb.AddForce(-horizVel.normalized * (driftExcess * P.forwardDamp * driftLerp),
+                            ForceMode.Acceleration);
+            }
+            return;
+        }
 
         // Use forward-axis speed only. Total magnitude includes lateral, which is
         // irrelevant to the forward top-speed cap.

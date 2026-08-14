@@ -66,7 +66,14 @@ public class PropulsionTuning
              "corner that barely changes what you can shoot at. Around 45 to 60 is a committed " +
              "sideways slide you aim out of, and it is a different move.\n\n" +
              "Authority fades as you approach, so this is an asymptote rather than a wall: the " +
-             "last few degrees arrive slowly and you will usually settle just under it.")]
+             "last few degrees arrive slowly and you will usually settle just under it. Expect to " +
+             "settle around 55 to 60 percent of this number.\n\n" +
+             "IT ALSO SETS YOUR CORNER RADIUS, which is not obvious from the name and is the most " +
+             "useful thing about it. The fade throttles your turn rate, so a LOW value chokes " +
+             "rotation and throws the corner wide, while a high one lets the nose keep coming " +
+             "round. It is the only knob that tightens the corner and widens the slide at the same " +
+             "time; the other two trade one against the other. Measured at Drift Lateral Damp 1.5: " +
+             "60 gives a 33m corner at a 42 degree slide, 90 gives a 23m corner at 52 degrees.")]
     [Min(1f)]
     public float maxDriftAngle = 30f;
 
@@ -227,9 +234,14 @@ public class PropulsionTuning
     // 🌀 Drift
     // -------------------------------------------------------------------------
     [Header("🌀 Drift")]
-    [Tooltip("Sideways grip while fully drifting.\n\n" +
-             "Lower than Lateral Damp so the craft slides through the turn. 0 is a completely free " +
-             "slide.")]
+    [Tooltip("Sideways grip while fully drifting. This is how much the craft RESISTS sliding.\n\n" +
+             "KEEP IT BELOW Lateral Damp. Above it, pressing drift gives you MORE grip than normal " +
+             "driving, the slide disappears and drift becomes a grip-assist button. That was tried " +
+             "at 4 against a Lateral Damp of 1 and the slide collapsed from 52 to 29 degrees.\n\n" +
+             "Raising it tightens the corner and narrows the slide together, so it trades one " +
+             "against the other. Measured at Drift Yaw Multiplier 2.5 / Max Drift Angle 90: " +
+             "1 gives a 27m corner at a 58 degree slide, 1.5 gives 23m at 52 degrees, 2 gives " +
+             "20m at 47. To tighten the corner WITHOUT losing slide, raise Max Drift Angle instead.")]
     [Range(0f, 50f)]
     public float driftLateralDamp = 0f;
 
@@ -241,9 +253,41 @@ public class PropulsionTuning
 
     [Tooltip("How much faster the nose rotates than your momentum while drifting.\n\n" +
              "This is what actually opens the slide angle: above 1 the nose gets ahead of where you " +
-             "are going. Max Drift Angle decides where it stops. Try 1.2 to 1.6.")]
+             "are going. Max Drift Angle decides where it stops.\n\n" +
+             "Raising it tightens the corner AND costs speed, because a faster-rotating nose points " +
+             "more of your thrust away from where you are actually going. Unlike Drift Lateral " +
+             "Damp, it does not cost you slide angle, so it is the safer of the two to reach for.")]
     [Range(1f, 3f)]
     public float driftYawMultiplier = 1.4f;
+
+    [Tooltip("How long you can hold a drift before it starts costing you speed.\n\n" +
+             "Short drifts are FREE, which is what keeps drift usable as a quick aiming tool " +
+             "mid-fight. Only sustained drifts pay. Set this above the length of a normal corner.")]
+    [Min(0f)]
+    public float driftSustainSeconds = 1.5f;
+
+    [Tooltip("How long, after the free window above, a held drift takes to decay from your normal " +
+             "top speed down to Drift Sustained Top Speed.\n\n" +
+             "This is the whole cost of a long drift. Shorter is a harsher penalty.\n\n" +
+             "It is ALSO the drift's total length: when this ramp finishes the drift ends itself, " +
+             "even with the button still held. So a drift lasts Drift Sustain Seconds plus this, " +
+             "and that total is the window your slide angle has to open in. Worth knowing if you " +
+             "run a very low Drift Lateral Damp, where the slide is often still widening when the " +
+             "clock runs out.")]
+    [Min(0.01f)]
+    public float driftBleedSeconds = 2.5f;
+
+    [Tooltip("Where a long drift eventually leaves you, and the point at which the drift ENDS " +
+             "itself and hands normal grip and steering back.\n\n" +
+             "Deliberately set BELOW Min Drift Speed, so holding a drift to the end drops you under " +
+             "the speed you needed to start one: you cannot simply re-enter, you have to rebuild " +
+             "first. That is what makes a long drift a decision instead of a default. Raising it " +
+             "above Min Drift Speed breaks that and lets a spent drift re-arm instantly.\n\n" +
+             "Because corner radius is speed divided by turn rate, this also sets how tight a fully " +
+             "bled drift gets: the drift TIGHTENS as it bleeds. At the shipped drift knobs, 51 m/s " +
+             "gives a 26m corner and 44 m/s gives 23m, at a steady 52 degree slide throughout.")]
+    [Min(0f)]
+    public float driftSustainedTopSpeed = 45f;
 
     [Tooltip("How far you have to turn before drift engages. Keeps gentle steering from tripping " +
              "it. Try 0.3 to 0.5.")]

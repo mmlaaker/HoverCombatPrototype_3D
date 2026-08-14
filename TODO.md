@@ -477,7 +477,80 @@ same meter.
 makes the most common jump 2.5x cheaper without making the committed one cheaper at all. Judge the
 energy economy after this rather than before it.
 
-### M.7 Drift. Add a time cost, and more path curvature control
+### M.7 ~~Drift. Add a time cost, and more path curvature control~~ — IMPLEMENTED 2026-08-13, AWAITING JUDGEMENT
+
+**Both halves turned out to be one defect, and it was not the one this item described.** Written up
+in full in `CLAUDE.md` and in `HoverController_Propulsion` v1.9; the short version is that top speed
+was enforced against the FORWARD AXIS in both `ApplyDrive` and `ApplyOverSpeedBleed`, which is only a
+speed cap while heading equals velocity. A drift separates them by design, so the cap became
+`total = cap / cos(angle)` and a settled drift held **128.4 m/s against a topSpeed of 80, in a 337m
+arc**. "Should bleed speed over long drifts" and "wants more path curvature" were both that.
+
+Shipped values, all measured on flat ground at full throttle and full lock:
+
+| | before | first attempt (rejected) | **shipped** |
+|---|---|---|---|
+| settled drift speed | 128.4 m/s | 62 -> 44.4 | **51 -> 44.2** |
+| corner radius | 337 m | 27 -> 19.2 m | **26 -> 22.8 m** |
+| slide angle | 51.7° | **29.5°** | **52°** |
+
+`driftLateralDamp` 0.3 -> **1.5**, `driftYawMultiplier` 1.5 -> **2.5**, `maxDriftAngle` 60 -> **90**,
+plus three new tunables: `driftSustainSeconds` 1.5, `driftBleedSeconds` 2.5,
+`driftSustainedTopSpeed` 45.
+
+**The rejected first attempt is worth recording, because the mistake was structural.** It used
+`driftLateralDamp` 4 to buy the tight corner. `lateralDamp` is 1, so that made drift give FOUR TIMES
+the sideways grip of ordinary driving — a grip-assist button, not a slide. The owner drove it and
+reported "no drift or slide here... no sustained angle whatsoever" within minutes. The evidence was
+already in the regression table and went unread: **ordinary full-lock cornering slides −61.5°**, so
+a 29.5° drift slides LESS than simply yanking the stick, while tightening the corner only from 29.2m
+to 27m. It had nothing left to be for. **Any drift setting must be checked against the no-drift
+baseline it is supposed to differ from, not just against its own target numbers.**
+
+The fix was `maxDriftAngle`, the one knob that had not been swept. It throttles turn rate via the
+authority fade, so raising it 60 -> 90 tightens the corner AND widens the slide at once, where the
+other two trade one against the other.
+
+**Owner decisions taken 2026-08-13 that shaped this:** drift caps at top speed and then bleeds
+(not below-cap on entry, not an overspeed reward); and the corner should be tighter than ordinary
+cornering's ~28m. Those two answers are in tension at a fixed speed — a 22m corner at 80 m/s needs
+29g, which this craft does not have — and the time bleed is what reconciles them: **the drift
+tightens as it bleeds**, entering at 62 m/s / 27m and settling at 44.4 m/s / 19.2m.
+
+The floor is deliberately below `minDriftSpeed` 53, so holding a drift to the end drops you under
+the speed needed to start one. You must rebuild before you can drift again.
+
+**Owner judged the shipped values good 2026-08-13** ("this really feels like what I was going for"),
+after taking `driftLateralDamp` down further, 1.5 -> **0.3**, for a much freer slide. At 0.3 the
+slide opens to about **−87°** rather than settling at 52°. One consequence worth knowing:
+**at 0.3 the slide is still WIDENING when the drift times out** — it ran −67.8° / −72° / −79° / −83°
+/ −87° across the four seconds and never reached equilibrium. `maxDriftAngle` 90 is what bounds it,
+and it is asymptoting hard against that ceiling with roughly 3% of yaw authority left. The 4s
+timeout is currently doing real work containing it, so **lengthening `driftBleedSeconds` or raising
+`maxDriftAngle` at this damp is the combination to be careful with.**
+
+**Drift now ends when it bleeds out** (`OnDriftSpent`, `_driftSpent` latch). Raised by the owner in
+the same session: holding drift to the floor left the bank on and the throttle covering the
+difference, so the manoeuvre had no terminal state and parked the player in a condition they could
+never have entered, since the floor 45 is below `minDriftSpeed` 53. Verified: bank blends −23° ->
+−5°, the event fires exactly once, drift does not re-engage while the button stays held, and the
+craft settles into ordinary full-lock cornering at ~53 m/s. The latch is required rather than
+decorative — without it throttle carries the craft back over `minDriftSpeed` in well under a second
+and the drift chatters against its own floor.
+
+**Still worth attention:**
+- The slide holds a steady **52°** from about 1.5s onward, with a −67.8° peak on entry. That is the
+  v1.8 angle the owner had, now in a 23m corner instead of a 337m one.
+- The corner TIGHTENS as the drift bleeds: 42m on entry, 26m through the free window, 22.8m once
+  fully bled. Radius is speed over turn rate and turn rate is speed-independent, so this falls out
+  of the speed bleed rather than being tuned separately.
+- `maxDriftAngle` 90 is a much gentler fade than 60. Equilibrium lands at 52°, well short of it, so
+  the runaway limiter still binds — but this is the least-tested of the three knobs at its new value
+  and a spin is the failure mode to watch for. The owner has explicitly ruled out spinout.
+- `driftHopImpulse` 10 was left alone, but M.7 flagged that the bleed would change how the entry
+  reads. Entry now sheds ~28 m/s in the first 1.5s.
+
+### M.7-original Drift. Add a time cost, and more path curvature control (superseded, kept for the reasoning)
 
 **Target named by the owner 2026-08-11: the Crash Team Racing power slide, without the boost
 mechanics.** That is now the reference. Confirmed working already: holding line of sight on a target
@@ -527,6 +600,43 @@ Two requests from this session that are the same feature:
 
 Both are moments where the player has input available and nothing useful to spend it on, and in both
 the thing they want to do is look at where they are about to end up.
+
+**Owner report 2026-08-13, and it belongs here rather than being its own defect.** "When I am
+stationary and do a charge jump with air authority engaged, sometimes — but not every time — I start
+flipping or rolling, my camera is swinging out to the side." Characterised but deliberately NOT
+fixed; see below for why it is a design call rather than a bug.
+
+**Reproduced, 124 degrees of camera pan.** Stationary charge jump, drift held, mixed pitch+roll
+stick. The craft tumbles, lands inverted, and the flip recovery pitches it nose-over-tail so it ends
+up genuinely facing about 175 degrees from where it started. The camera freezes its heading through
+the stunt by design (`trackAuthority` = 1 − `AirControlWeight`, so tracking is off at full air
+control) and then pans to catch up once the craft is upright, saturating at
+`headingCatchUpMaxRate` 180 deg/s for roughly 0.7s. **The pan is the camera doing its job.** What
+makes it read as a fault is that it happens while the player has no control at all, which is exactly
+this item's subject.
+
+**Two hypotheses tested and KILLED. Do not re-run them.**
+1. *The travel-heading bound is inert from a standing start.* True but irrelevant. `_haveTravelYaw`
+   is only ever set inside the `travelHeadingMinSpeed` gate (live value **8**, not the 3 the docs
+   once claimed — see trap 21), so a craft that has never moved has never armed it. But the bound is
+   also gated on `airWeight > 0`, and the divergence here accumulates AFTER landing, when air
+   control is already 0. Forcing `_haveTravelYaw` true changed the swing from 125.8 to 124.0
+   degrees, i.e. not at all.
+2. *Euler yaw flips 180 degrees under roll, so the camera chases a rotation that never happened.*
+   Plausible, wrong, and worth recording because it is a very common piece of folklore. Measured
+   directly: `eulerAngles.y` and the flattened `transform.forward` heading **agree in every
+   attitude tested**, including roll 179, roll 179 + yaw 40, pitch 100 past vertical, and pitch 40 +
+   roll 170. They differ only with the nose within a degree of vertical, where the flattened nose is
+   undefined and `maxStableTilt` has already frozen tracking. A `ChassisHeadingYaw()` replacement
+   was written, measured to change nothing, and reverted.
+
+**The actual decision, which is this item's:** whether the camera should keep tracking through a
+recovery, snap rather than pan once the craft is upright, or hand the stick to the player. Note the
+separate wart that probably triggers it: air control makes the left stick PITCH the moment the craft
+clears `HasAirControlClearance`, and a charged jump always clears it, so holding any throttle through
+a charge jump reliably starts a tumble from standing. `HoverController_Propulsion` line ~1564 already
+documents that hazard for hops and solves it with the height floor, which by design does not protect
+the charged case.
 
 **The mode conflict is tractable for exactly that reason:** right stick X is yaw, and yaw is near
 worthless in both states. Airborne yaw is confirmed working at half authority (`airTurnMultiplier`
@@ -827,6 +937,22 @@ so nothing here argues for a camera change either.
 
 Knobs if it should ever be narrowed: `lateralDamp`, and whether `maxDriftAngle`'s equilibrium should
 apply to ungated slides too.
+
+**CLOSED 2026-08-13, no action, decided alongside the M.7 drift work.** Two reasons, and the second
+one is new information rather than a restatement:
+
+1. **Round 4 did not touch it.** The v1.9 speed-cap fix is gated on `driftLerp > 0`, and this
+   manoeuvre runs at `drift` 0.00 throughout. It takes the forward-axis path, which is unchanged and
+   was regression-checked (top speed still exactly 80.00, no-drift corner 106.8 °/s and −61.5°,
+   both matching baseline). So the 78° slide behaves exactly as measured on 2026-08-11.
+2. **The "rival to drift" framing is now dead rather than merely downgraded.** It was already known
+   to cost 41 m/s and to last 0.6s. Drift has since become a genuinely different tool: it holds a
+   *stable* 29.5° at a 27m corner for as long as you want it, where this is a decaying transient you
+   cannot steer. There is no longer a comparison to make.
+
+What survives is unchanged and still narrow: above the normal cap, a transient wider than
+`maxDriftAngle` is briefly reachable, and whether a decaying 0.6s window is usable for aiming is
+still worth one test with weapons live. That is a curiosity to try, not work to schedule.
 
 ### 0.2 Nothing is committed
 Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts, 1 new script,
