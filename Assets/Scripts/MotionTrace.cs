@@ -144,13 +144,15 @@ using UnityEngine.Rendering;
 /// analysis wants one contiguous timeline from a known beginning. Running out is
 /// reported rather than hidden.
 ///
-/// MARKER KEY (F8 by default). Press it the moment a lurch is felt. Perception and
+/// MARKER KEY (M by default; was F8 until it was found never to arrive on this project's
+/// laptop — see the markerKey tooltip). Press it the moment a lurch is felt. Perception and
 /// reaction put the press somewhere around 200-400ms AFTER the event, so a marker is a
 /// pointer to a window that ends there, never a timestamp for the event itself. Without
 /// it a clean-looking session is unfalsifiable: there is no way to tell a trace with no
 /// artifacts from a trace where the artifacts happened and nothing flagged them.
 ///
-/// Usage: drop on any scene object, play, drive, press F8 on each felt lurch, stop.
+/// Usage: drop on any scene object, play, drive, press the marker key on each felt lurch,
+/// stop. CONFIRM THE FIRST PRESS LOGS TO THE CONSOLE before relying on a session.
 /// Writes `PerfLogs/motiontrace_*.csv` alongside `FrameSpikeWatch`'s output.
 /// </summary>
 public class MotionTrace : MonoBehaviour
@@ -198,8 +200,15 @@ public class MotionTrace : MonoBehaviour
 
     [Tooltip("Key pressed on each felt lurch. Read through the Input System because the project " +
              "runs activeInputHandler 1, where the legacy Input class throws rather than returning " +
-             "false. F8 because the impulse router already owns F9 through F12.")]
-    [SerializeField] private UnityEngine.InputSystem.Key markerKey = UnityEngine.InputSystem.Key.F8;
+             "false.\n\n" +
+             "Deliberately NOT an F-row key. It was F8 (the impulse router owns F9-F12), and on " +
+             "this project's laptop F8 never arrived: eight sessions in a row recorded zero " +
+             "markers while injecting the same key in code registered fine, so the presses were " +
+             "being eaten before Unity saw them — an Fn media layer and a keyboard with known " +
+             "liquid damage are both candidates. A marker key must be a plain key you can confirm.\n\n" +
+             "Whatever you set it to, watch the console for the MARKER log on your first press. " +
+             "The failure mode is silent: the trace looks perfectly healthy without them.")]
+    [SerializeField] private UnityEngine.InputSystem.Key markerKey = UnityEngine.InputSystem.Key.M;
 
     [Tooltip("Write the CSV when play mode ends. On for the same reason FrameSpikeWatch has it " +
              "on: the rows live in memory and stopping play would otherwise throw them away.")]
@@ -463,6 +472,15 @@ public class MotionTrace : MonoBehaviour
             ref Sample m = ref Next(Kind.Marker);
             m.t = Time.unscaledTime;
             FillShared(ref m);
+
+            // Logged immediately, not just tallied in the end-of-session summary. A marker
+            // that silently fails to register is worse than no marker at all: it costs a
+            // whole playtest, because the trace looks healthy and the absence is only
+            // discovered afterwards. Happened 2026-08-13 — eight consecutive sessions
+            // recorded zero markers while the key path itself was verified working by
+            // injection, so the presses were never arriving. Confirm the key lands ONCE at
+            // the start of a session and the rest of the run is trustworthy.
+            Debug.Log($"[MotionTrace] MARKER {_markerCount} at t={m.t:F2}s", this);
         }
     }
 

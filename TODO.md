@@ -630,6 +630,48 @@ this item's subject.
    undefined and `maxStableTilt` has already frozen tracking. A `ChassisHeadingYaw()` replacement
    was written, measured to change nothing, and reverted.
 
+**ROOT-CAUSED AND FIXED 2026-08-13 from the owner's marked trace. It was the travel-heading bound,
+and the frame-hitch lead below was wrong.** `motiontrace_20260813_224138.csv`, marker at t=25.63:
+
+| t | tilt | veh_yaw | proxy_yaw | yaw_div | travel_div | air |
+|---|---|---|---|---|---|---|
+| 23.57 | 0.7 | 117.12 | 117.11 | −0.01 | **−178.5** | 0.00 |
+| 23.94 | 96.9 | 117.13 | 180.73 | 63.6 | −114.8 | 1.00 |
+| 24.36 | 65.9 | **117.13** | **255.55** | **138.4** | **−40.00** | 1.00 |
+
+**Vehicle yaw is pinned at 117.13 for the entire barrel roll while the proxy swings 138 degrees**,
+stopping dead at `travel_div` = −40.00, which is `headingMaxTravelDivergence`. `dt_ms` is 3.2–4.6ms
+throughout, so it was never a hitch — the owner said so before the data did.
+
+**Mechanism:** the craft took off sliding BACKWARDS (`travel_div` −178). The bound clamped the
+ABSOLUTE offset between heading and travel, which silently assumed a craft takes off pointing roughly
+where it is going. Violate that and the clamp is unsatisfiable at entry, so it hauls the camera 138
+degrees at the rate ceiling to satisfy itself, over ~0.75s, through the player's roll.
+
+**Fix:** the bound now limits drift SINCE AIR CONTROL ENGAGED (`_airEntryTravelOffset`, latched on
+the rising edge) rather than absolute offset from travel. Entering aligned behaves exactly as before.
+
+Verified by A/B on an identical airborne roll, and the third run exists specifically to prove the
+bound was not simply disabled:
+
+| | before | after |
+|---|---|---|
+| travelling forward | 10.5° | 10.8° |
+| travelling backward | **91.2°** | **0.0°** |
+| flight path swung 120° mid-stunt | — | **81.1°** (follows, stops 40° short — bound intact) |
+
+**Marker fixed, and it is what solved this.** The F8 marker had recorded zero markers across eight
+sessions while the traces looked perfect; the key was never reaching Unity. Rebound to **M** and it
+now logs to the console on every press. See `CLAUDE.md` trap 30.
+
+**Still-open latent issue, separate and NOT the cause here.** `UpdateHeadingProxy` scales by
+`Time.deltaTime` with no clamp, so a 194ms GC frame (seen at t=61.33 in
+`framespikes_20260813_223216.csv`, at 80 m/s with 20 physics catch-up steps) permits 180 × 0.194 =
+35 degrees of heading movement in one frame, and the converge term reaches 90% of chassis yaw at
+once. A `Mathf.Min(Time.deltaTime, ~0.05f)` would make the camera hitch-proof. Not applied: it was
+never demonstrated to cause a felt artifact, and editor play mode allocates ~5 MB/s at idle so the
+hitch may not exist in a build.
+
 **The actual decision, which is this item's:** whether the camera should keep tracking through a
 recovery, snap rather than pan once the craft is upright, or hand the stick to the player. Note the
 separate wart that probably triggers it: air control makes the left stick PITCH the moment the craft

@@ -575,6 +575,12 @@ public class HoverCameraController : MonoBehaviour
     /// </summary>
     private float _lastTravelYaw;
     private bool  _haveTravelYaw;
+
+    // The heading-vs-travel offset captured when air control engaged, and the latch that
+    // captures it once per stunt. The travel bound limits how far the heading may drift
+    // FROM THIS, rather than from travel itself. See UpdateHeadingProxy.
+    private float _airEntryTravelOffset;
+    private bool  _airBoundActive;
     private float     _headingYaw;    // degrees, world yaw of the proxy
     private Rigidbody _vehicleRb;     // yaw-rate source while tilted, and speed source
     private HoverController_Foundation _vehicleFoundation;  // hover support, for strafe damping
@@ -1744,13 +1750,43 @@ public class HoverCameraController : MonoBehaviour
 
         float airWeight = propulsion != null ? propulsion.AirControlWeight : 0f;
 
+        // The bound limits DRIFT SINCE THE STUNT BEGAN, not absolute offset from travel.
+        //
+        // It used to clamp the absolute offset, which assumed the craft takes off pointing
+        // roughly where it is going. Take off sliding BACKWARDS and that assumption inverts:
+        // the offset is already ~180 degrees at entry, so the clamp had to move the heading
+        // 140 degrees to satisfy itself, and it did so at the rate ceiling, over about 0.75s,
+        // in the middle of the player's barrel roll. The owner reported exactly that, and
+        // their own trace caught it: vehicle yaw pinned at 117.13 for the whole roll while the
+        // proxy swung 117 -> 255.55, stopping dead at travel_div = -40.00, which is this
+        // limit. Frame times were 3.2-4.6ms throughout, so it was never a hitch.
+        //
+        // Confirmed by A/B on an identical airborne roll: travelling forward swung the camera
+        // 10.5 degrees, travelling backward swung it 91.2.
+        //
+        // Anchoring to the entry offset keeps the original fix intact -- a stunt that changes
+        // the craft's heading still cannot let the proxy drift more than the limit, which is
+        // what stopped the 126-degree divergence and the landing stutter -- while making entry
+        // free. Enter aligned and this behaves exactly as before, since the entry offset is
+        // then ~0.
         if (airWeight > 0f && _haveTravelYaw)
         {
+            if (!_airBoundActive)
+            {
+                _airBoundActive       = true;
+                _airEntryTravelOffset = Mathf.DeltaAngle(_lastTravelYaw, _headingYaw);
+            }
+
             float limit = stabilization.headingMaxTravelDivergence;
             float off   = Mathf.DeltaAngle(_lastTravelYaw, desired);
+            float drift = Mathf.DeltaAngle(_airEntryTravelOffset, off);
 
-            if (off > limit || off < -limit)
-                desired = _lastTravelYaw + Mathf.Clamp(off, -limit, limit);
+            if (drift > limit || drift < -limit)
+                desired = _lastTravelYaw + _airEntryTravelOffset + Mathf.Clamp(drift, -limit, limit);
+        }
+        else if (airWeight <= 0f)
+        {
+            _airBoundActive = false;
         }
 
         // RATE CEILING, applied ONCE to the whole move rather than to the branch step.

@@ -244,6 +244,14 @@ Everything here was learned by getting it wrong first. Ignoring any of it costs 
 
 29. **A mode has to be measured against the baseline it is supposed to differ from, not only against its own target.** Drift was tuned to a 27m corner, hit it, and shipped — and the owner reported no slide at all within minutes. The disqualifying number was in the same regression table, one row up: ordinary full-lock cornering already slides −61.5° at 29.2m, so the new drift slid LESS than yanking the stick and tightened the corner by 2m. Every target was met and the feature had no reason to exist. The same trap sits under any modal system here: strafe against drive, boost against no-boost, drift against ordinary cornering. **Put the OFF row in the results table.** It costs one extra run and it is the only row that answers "is this button worth pressing".
 
+30. **An instrument that fails silently costs the whole playtest, and a healthy-looking output is not proof it worked.** `MotionTrace`'s F8 marker recorded ZERO markers across eight consecutive sessions while the traces themselves were perfect — 20,892 frames, full summaries, no buffer overrun. The owner pressed it and reasonably assumed it landed. Injecting the same key in code registered a marker instantly, which isolated it to the press never reaching Unity (an Fn media layer and a keyboard with known liquid damage are both live candidates). Rebound to **M**, off the F row, and it now logs each marker to the console immediately rather than only tallying them in the end-of-session summary. **For any manual instrument, confirm the first input registers before trusting the run** — and prefer designs that announce themselves over ones that quietly tally. The general form: absence of a signal is ambiguous between "nothing happened" and "the recorder was not recording", and only the second is silently catastrophic.
+
+31. **A safety clamp becomes a driver of the very artifact it prevents, the moment its unstated precondition is violated.** `UpdateHeadingProxy`'s travel bound clamps the camera heading to within 40 degrees of the direction of travel during air control. It silently assumes a craft takes off pointing roughly where it is going. Take off sliding BACKWARDS and the offset is already ~180 degrees at entry, so the clamp is unsatisfiable and hauls the camera 138 degrees at its own rate ceiling — mid barrel roll — to satisfy itself. A limiter that can be entered already outside its limit does not limit; it drives. **Ask of any clamp what happens when state STARTS outside it**, and prefer bounding drift-since-entry over absolute offset when the entry condition is not guaranteed. Fixed by latching the entry offset and bounding relative to it, which leaves the aligned case identical.
+
+32. **An A/B that fails to distinguish is not evidence of no effect; check the "on" arm actually turns the mechanism on.** This same travel bound was investigated and CLEARED earlier the same day, because forcing `_haveTravelYaw` true changed the swing from 125.8 to 124.0 degrees. The flaw: the test also set `_lastTravelYaw = 0f`, which happened to equal the craft's heading, so the bound had nothing to correct and was inert in BOTH arms. The null result measured nothing. **State what the "on" arm should do differently and confirm it does it**, before reading a null as exoneration — here, one look at whether `travel_div` was non-zero would have caught it. The owner's marked trace found in one reading what three of my sessions missed.
+
+33. **A 194ms frame is a camera bug that lives nowhere in the camera.** (Real, but it was NOT the cause of the 2026-08-13 barrel-roll swing — see trap 31 — and it was offered as the leading theory on the strength of being the only anomaly in the trace. The owner rejected it from feel, correctly, before the data did.) Anything integrating with `Time.deltaTime` and no clamp gets its per-frame budget multiplied by the hitch. `UpdateHeadingProxy`'s rate ceiling is `headingCatchUpMaxRate * Time.deltaTime`, so a GC hitch at 180 deg/s permits a **35 degree heading move in a single frame**, and its exponential converge reaches 90% of the way to chassis yaw in that same frame — while physics runs 20 catch-up steps underneath. Both terms are designed to prevent snaps at 3.7ms and both stop protecting at 194ms. **When a visual artifact is intermittent and resists reproduction, check the frame-time trace before the logic** — `FrameSpikeWatch` answers this in one session. Note the reverse trap too: editor play mode allocates ~5 MB/s at idle, so a hitch seen here is not automatically a hitch in a build.
+
 ### Recipes that work
 
 - **Scripted input without writing a script.** `AIHoverInput` already implements `IHoverInputProvider`. Add it at runtime, set `enabled = false` so its own `Update` does not fight you, write its auto-property backing fields (`<ThrottleInput>k__BackingField` etc.) by reflection, and repoint Propulsion's cached private `input` field at it. **Restore `input` to `PlayerHoverInput` and destroy the component when done.**
@@ -347,6 +355,27 @@ nobody spends a session rediscovering them.
 **Open work is not here. It is in `TODO.md`,** which owns every unfinished item: verification debt,
 blockers, known traps, pending tuning decisions and unimplemented features. Nothing is listed in
 both files. If you are looking for what to do next, that is the file.
+
+### Camera swings sideways on a barrel roll — fixed 2026-08-13, `HoverCameraController`
+
+**Standing decision: the travel-heading bound limits drift SINCE air control engaged, never absolute
+offset from the direction of travel.** `_airEntryTravelOffset` latches the heading-vs-travel offset
+on the rising edge of air control, and `headingMaxTravelDivergence` is applied relative to it.
+
+The absolute form assumed a craft takes off pointing roughly where it is going. Taking off while
+sliding BACKWARDS makes the offset ~180 degrees at entry, so the clamp could not be satisfied without
+moving the camera 138 degrees, which it did at the rate ceiling over ~0.75s in the middle of a barrel
+roll. Owner's marked trace: vehicle yaw pinned at 117.13 for the whole roll while the proxy swung
+117 -> 255.55, halting exactly at `travel_div` −40.00. Frame times 3.2–4.6ms throughout.
+
+**Do not "simplify" this back to clamping the absolute offset**, and do not conclude the bound is
+unnecessary. It still does its original job — a flight path swung 120 degrees mid-stunt moves the
+proxy 81 degrees and stops 40 short — which is what prevents the 126-degree divergence and landing
+stutter it was built for. A/B on an identical roll: forward entry 10.5 -> 10.8 degrees (unchanged),
+backward entry 91.2 -> 0.0.
+
+**This bug survived three investigation passes.** See traps 31 and 32 for why: a flawed A/B cleared
+the real mechanism early, and a frame hitch in the same trace was a far more attractive theory.
 
 ### Drift speed runaway — fixed 2026-08-13, `HoverController_Propulsion` v1.9
 
