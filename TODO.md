@@ -1100,6 +1100,13 @@ health, `IsAlive`, and re-enables the object. It does NOT:
 **Done looks like:** a decision on who owns respawn (match manager vs the vehicle itself), spawn
 point selection, and a `Respawn` that resets the full vehicle state including AI FSM state and HUD.
 
+**`PlaytestReset` (added 2026-08-14) does NOT advance this item, despite looking adjacent.** It is a
+held-button playtest escape hatch that restores pose and velocity and nothing else, on purpose: it
+touches no health, energy, ammo or AI state, so none of the five gaps above are narrowed by it. It
+does settle one design question by demonstration, though -- **the position-and-velocity half of a
+real `Respawn` needs `HoverCameraController.NotifyVehicleWarped` or the camera flies across the
+level**, and the same is true for every future spawn point, checkpoint or teleport.
+
 ### 1.2 Post-respawn invulnerability does not exist
 `VehicleHealth.SetInvulnerable(float)` has no callers. The machinery is entirely live --
 `_isInvulnerable`, `_invulnerableTimer`, the `Update` tick, the `TakeDamage` early-out, and an

@@ -1936,6 +1936,48 @@ public class HoverCameraController : MonoBehaviour
     public float NeutralElevation  => DriveNeutralElevation;
 
     /// <summary>
+    /// Call immediately AFTER teleporting the vehicle. Holds the camera at the
+    /// same relative pose across the jump instead of letting it fly the length
+    /// of the level to catch up.
+    ///
+    /// Two things go stale on a warp and only one of them is ours. The proxy
+    /// position is hard-assigned from the vehicle every update, so it follows a
+    /// teleport for free. What does NOT follow is the damping state inside
+    /// CinemachineFollow, which still holds the pre-jump world position and
+    /// would spend the next second interpolating across the map. That is what
+    /// OnTargetObjectWarped exists to clear, and it wants the DELTA, not the
+    /// destination.
+    ///
+    /// Yaw is snapped here rather than slewed. The rate limit at the end of
+    /// UpdateHeadingProxy exists so a flip cannot whip the orbit around, and it
+    /// is right for a flip and wrong for a teleport: at maxStep the camera
+    /// would grind to the new heading over the better part of a second while
+    /// the craft sits perfectly still, which reads as a bug rather than a reset.
+    ///
+    /// The travel latches are dropped rather than kept. Both describe a
+    /// trajectory that no longer exists, and clearing them leaves exactly the
+    /// state a fresh session starts in.
+    ///
+    /// Debug utility. Nothing in the shipped loop teleports the craft; if
+    /// something ever does, it has to call this too.
+    /// </summary>
+    /// <param name="positionDelta">New vehicle position minus the old one.</param>
+    public void NotifyVehicleWarped(Vector3 positionDelta)
+    {
+        if (_headingProxy == null || vehicleTarget == null) return;
+
+        _headingProxy.position = vehicleTarget.position;
+        _headingYaw            = vehicleTarget.eulerAngles.y;
+        _headingProxy.rotation = Quaternion.Euler(0f, _headingYaw, 0f);
+
+        _haveTravelYaw  = false;
+        _airBoundActive = false;
+
+        if (vcamDrive  != null) vcamDrive.OnTargetObjectWarped(_headingProxy, positionDelta);
+        if (vcamStrafe != null) vcamStrafe.OnTargetObjectWarped(vehicleTarget, positionDelta);
+    }
+
+    /// <summary>
     /// Solves a definitive state WITHOUT committing it, and reports whether the
     /// craft actually fits in frame. Pure: safe to call from an inspector
     /// repaint, and it disturbs neither the live camera nor the preview.
