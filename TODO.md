@@ -157,7 +157,11 @@ Two candidates for the look-up specifically, to be separated rather than guessed
 look-ahead term (`speedLookAheadMax` 6 against `speedLookAheadReference` 60) and the strafe aim
 pitch. The first scales with throttle exactly as described.
 
-### M.3 The vehicle briefly leaves frame while the camera pitches up — STILL OPEN, two theories killed
+### M.3 The vehicle briefly leaves frame while the camera pitches up — OPEN BUG, two theories killed
+
+**Classified a BUG by the owner 2026-08-13, not a polish or tuning item.** It violates a stated hard
+requirement, so it does not compete with the Round 5 features for priority — it is defect work and
+should be treated the way M.1/M.2/M.4 were.
 
 Part of the craft clips offscreen mid-transition as the camera pitches up to look down on it. Both
 endpoints are fine; the motion between them is not. Requirement: **vehicle fully onscreen at all
@@ -693,7 +697,17 @@ trick while measuring as fully live.
 
 ### M.12 Boost presentation FX: vignette, speed lines, duration-based rumble
 
-**PROMOTED 2026-08-13: this is now the fix for a live complaint, not a polish item.** Owner, after
+**DEFERRED BY THE OWNER 2026-08-13, to be picked up with the general FX quality pass.** Their
+reasoning: the whole FX layer is currently super basic, and this should be built alongside raising
+that bar generally — still placeholder quality, just a higher grade of placeholder. Building one
+polished effect against a bed of rough ones is the wrong order.
+
+**This does NOT withdraw the diagnosis below, and the sequencing note still stands:** boost strength
+in BOTH modes is being judged with half its presentation missing, so any multiplier judged before
+this lands is judged blind. Do not retune `boostAccelMultiplier` or `boostSpeedMultiplier` on feel
+until it does.
+
+**Was PROMOTED 2026-08-13 as the fix for a live complaint, not a polish item.** Owner, after
 Round 2: "my boost feels like it does next to nothing while strafing."
 
 **The physics is not the problem and must not be touched.** Measured with forward-dominant throttle
@@ -756,12 +770,21 @@ and airborne resets rather than the artifact. Constraining to grounded samples, 
 a fixed 28 m/s is what made the signal visible. **Handling and camera A/Bs here need pinned starts
 and constrained routes**, the same lesson M.3 produced.
 
-### M.13 Small, isolated, no dependencies
+### M.13 Small, isolated, no dependencies — TWO OF THREE CLOSED 2026-08-13
 
-- **`yawAccel` 13 -> 12.** Steering judged tight and not twitchy; the owner wants it a single unit
-  slower to turn. No other coupling.
-- **Strafe camera view retune** after the camera update changed it. Owner's own task.
-- **Tap jump slightly less floaty.** Falls out of M.6 rather than needing its own change.
+- ~~**`yawAccel` 13 -> 12.**~~ **Closed, satisfied by Round 2.** The request was for a single unit
+  less steering. Round 2 raised `yawAccel` to 16 to hold the turn circle at the new top speed, and
+  the owner then trimmed it to **15** by hand and judged the result good. The proportional trim was
+  applied at the new speed rather than the old number being taken literally, which is why the live
+  value is 15 rather than 12.
+- ~~**Tap jump slightly less floaty.**~~ **Closed, satisfied by M.6.** It was always expected to fall
+  out of the fall-gravity change rather than need its own fix. `extraFallGravity` 13 -> 30 cut fall
+  time about 13% and the owner validated by driving.
+- **Strafe camera view retune** after the camera update changed it. **The only part still open, and
+  it is the owner's own task, not work to schedule.** Note it now has a dependency worth knowing:
+  the reticle's resting height is set by `reticleProjectionDistance` (200 rests ~438px above centre,
+  50 ~381px, 10 ~200px), and moving the strafe camera moves the crosshair with it. Retune the view
+  first, then set that number to match.
 
 ---
 
