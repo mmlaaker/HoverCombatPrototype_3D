@@ -934,7 +934,28 @@ contribution is gone, so the period should stretch out or the hitch should disap
 **Sharp prediction to test, so a null cannot be misread:** in the editor the collections land every
 24-26 seconds at ~14.4ms against a 4.4ms baseline. If the build shows the same period, the
 allocation is ours after all and the bisect needs redoing under load. If the period stretches by
-several times or the collections stop appearing as spikes, this closes as tooling.
+several times, this closes as tooling.
+
+**Read the period out of `MotionTrace`'s `dt_ms` column, NOT out of `FrameSpikeWatch`. Its silence
+in a build proves nothing, and taking it as evidence would close this item wrongly.** Spotted
+2026-08-14 before the run rather than after. A spike must clear `ms > minSpikeMs` (12) **and**
+`ms > baseline * spikeMultiplier` (2.5), whichever binds:
+
+|  | baseline | 2.5x | binding gate | a 14.4ms collection |
+|---|---|---|---|---|
+| editor | ~4.4ms | 11.0ms | **12ms** (the floor) | recorded |
+| build, 165Hz vsync | ~6.06ms | **15.15ms** | 15.15ms (the multiplier) | **missed** |
+
+The build's baseline is the vsync interval, so the relative gate overtakes the absolute floor and
+the blind band widens from 12ms to 15.15ms. **The exact spikes this item is hunting land inside
+that band**, so they would vanish from the spike log for a threshold reason and read as
+confirmation that they had stopped. Same shape as trap 15 and the `cam_ang_rate` removal: an
+instrument reporting zero for a structural reason, which is worse than no reading because it
+invites the wrong conclusion. `MotionTrace` records every frame unconditionally and is immune.
+
+Do NOT retune `spikeMultiplier` to compensate. Changing an instrument's sensitivity partway
+through the investigation it was built for makes the before and after incomparable, and the
+relative gate is correct for its actual job of catching hitches at any baseline.
 
 **Untested and worth including in that run:** sustained weapon fire and heavy projectile traffic.
 The bisect requires a parked craft and the driving runs contained neither, so those paths have never
@@ -1653,24 +1674,6 @@ Cosmetic, no runtime effect, but misleading when reading the inspector:
 
 (`WD_Shotgun`'s stale `missileFireMode: 2` looks like it belongs here but does not -- it is a closed
 decision, recorded in `CLAUDE.md`.)
-
-### 3.12 Clear the accepted console baseline before the first build
-The `RVP.GroundSurfaceInstance.Start()` null refs are **already an accepted part of the console
-baseline** in `CLAUDE.md` > Before touching the editor, along with the convex-hull warning and the
-obsolete-API warnings. Not a new discovery and not a bug. What is new is a reason to clean them up:
-
-**A release player has no console, so `Player.log` is the only channel a marked playtest has.** That
-is where `[MotionTrace] MARKER n` lands and where a `BUFFER FILLED` warning would land, and trap 30
-says an instrument that fails quietly costs the whole session. Four exceptions plus a stack trace at
-every startup make that file materially harder to scan for the one line that matters.
-
-Diagnosed 2026-08-14: `GroundSurfaceMaster.surfaceTypesStatic` is null because no
-`GroundSurfaceMaster` exists in the scene, and four objects carry the component. Gameplay impact is
-genuinely nil -- `friction` is read only by RVP's own `Suspension`, `Wheel`, `TireMarkCreate` and
-`TireScreech`, none of which this project uses, since it has its own hover physics.
-
-Cleanest fix is removing the four leftover `GroundSurfaceInstance` components. Adding a
-`GroundSurfaceMaster` would also silence it but keeps dead machinery alive.
 
 ### 3.13 Three camera impulse channels are unwired
 `HoverCameraImpulseRouter` warns on `Awake` that the **EMP**, **weapon recoil** and **denied jump**

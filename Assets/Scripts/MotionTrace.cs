@@ -174,17 +174,29 @@ public class MotionTrace : MonoBehaviour
     // 📐 Capture
     // -------------------------------------------------------------------------
     [Header("📐 Capture")]
-    [Tooltip("How many seconds of trace to reserve room for. The buffer is sized from this and " +
-             "capture stops when it fills, which is reported rather than silently wrapped.\n" +
-             "90s at a few hundred fps is a few megabytes, allocated once before capture starts " +
-             "so the allocation itself never lands inside the measurement.")]
+    [Tooltip("Seconds of trace to reserve room for. Set it to the length of run you actually " +
+             "intend to make, plus a little: capture STOPS when the buffer fills, and the rest " +
+             "of the session is simply not recorded (it is reported, not silently wrapped).\n\n" +
+             "Sizing: a row costs 132 bytes and the trace writes one per frame PLUS one per " +
+             "physics tick, so at 100Hz fixed it is (fps + 100) rows per second.\n" +
+             "  600s vsynced at 165Hz  ->  ~159k rows, ~23MB, covers the full 10 minutes\n" +
+             "  240s at editor speeds  ->  ~96k rows,  ~13MB, covers about 4 minutes\n" +
+             "The buffer is allocated once before capture starts, so its cost never lands " +
+             "inside the measurement. Memory is the cheap resource here and a truncated " +
+             "session is the expensive one, so round UP.")]
     [Min(5f)]
-    [SerializeField] private float captureSeconds = 90f;
+    [SerializeField] private float captureSeconds = 600f;
 
-    [Tooltip("Upper bound on frame rate, used only to size the buffer. Overshooting wastes a " +
-             "little memory; undershooting ends the capture early.")]
+    [Tooltip("Upper bound on frame rate. Sizing only -- nothing reads it at runtime, so " +
+             "overshooting costs 132 bytes per second per surplus fps and nothing else, while " +
+             "undershooting silently ends the capture early. Round UP.\n\n" +
+             "The ceiling is the DISPLAY, not the game: QualitySettings has vSyncCount 1 on the " +
+             "only quality level and nothing calls Application.targetFrameRate, so a build " +
+             "cannot exceed the refresh rate of the monitor it opens on. 180 covers a 165Hz " +
+             "panel with margin. The editor is not vsynced the same way and runs far higher, " +
+             "which is why this used to sit at 400.")]
     [Min(60)]
-    [SerializeField] private int assumedMaxFps = 400;
+    [SerializeField] private int assumedMaxFps = 180;
 
     [Tooltip("Frames to ignore at startup, matching FrameSpikeWatch. Scene load and first-sight " +
              "shader compilation produce genuine hitches that say nothing about how the game runs " +
@@ -794,7 +806,27 @@ public class MotionTrace : MonoBehaviour
                .Append(s.gc0).Append('\n');
         }
 
-        System.IO.File.WriteAllText(path, _sb.ToString());
+        // Streamed in slices rather than File.WriteAllText(_sb.ToString()), and the
+        // reason is length, not taste. ToString() materializes the ENTIRE csv as one
+        // contiguous string: at 10 minutes and 265 rows/s that is ~165k rows, roughly
+        // 31M chars, so a 62MB single object on the large-object heap on top of the
+        // ~62MB the builder is already holding in chunks. It very probably succeeds.
+        // "Very probably" is the wrong standard here -- this runs at the END of the
+        // session, so the one thing it can cost is the entire session's data, which
+        // is trap 30 exactly. Slicing removes the contiguous allocation for eight
+        // lines and no measurement impact, since play has already stopped.
+        const int chunkChars = 1 << 16;
+        using (var writer = new System.IO.StreamWriter(path, false, System.Text.Encoding.UTF8, chunkChars))
+        {
+            char[] chunk = new char[chunkChars];
+            for (int i = 0; i < _sb.Length; i += chunkChars)
+            {
+                int n = Mathf.Min(chunkChars, _sb.Length - i);
+                _sb.CopyTo(i, chunk, 0, n);
+                writer.Write(chunk, 0, n);
+            }
+        }
+
         Debug.Log($"[MotionTrace] Wrote {_count} rows to {path}", this);
     }
 }

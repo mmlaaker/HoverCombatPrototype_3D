@@ -191,7 +191,7 @@ Everything here was learned by getting it wrong first. Ignoring any of it costs 
 ### Before touching the editor
 
 - **Check `editor_status` before entering play mode or spawning anything.** The owner may be driving. Test rigs and teleports during a live session are extremely disruptive and this has happened.
-- **Console baseline. Anything beyond this list is new:** one convex-hull warning on the `car` mesh, three obsolete-API warnings in third-party `Assets/RVP/`, `RVP.GroundSurfaceInstance.Start()` null refs on play-mode entry, Unity Connect token-exchange errors, and `UIElements.ATGTextJobSystem` index errors from Unity's own text renderer. **Zero compile errors** is the baseline.
+- **Console baseline. Anything beyond this list is new:** one convex-hull warning on the `car` mesh, three obsolete-API warnings in third-party `Assets/RVP/`, Unity Connect token-exchange errors, and `UIElements.ATGTextJobSystem` index errors from Unity's own text renderer. **Zero compile errors** is the baseline. The `RVP.GroundSurfaceInstance.Start()` null refs were on this list until 2026-08-14 and are now gone, removed rather than accepted (see Resolved Work) -- **if they come back, something re-added the component.**
 - **`recompile` reports a timeout after 120s but has always actually succeeded.** Confirm with `recompile_status` before believing the failure.
 
 ### Measurement traps that have each produced a confidently wrong answer
@@ -361,6 +361,26 @@ nobody spends a session rediscovering them.
 **Open work is not here. It is in `TODO.md`,** which owns every unfinished item: verification debt,
 blockers, known traps, pending tuning decisions and unimplemented features. Nothing is listed in
 both files. If you are looking for what to do next, that is the file.
+
+### The RVP ground-surface null refs are gone, not accepted — 2026-08-14
+
+Four objects in the demo city (`/city/dirt`, `/city/ice`, `/city/mud`, `/city/walls`) carried
+`RVP.GroundSurfaceInstance`, whose entire body is one `Start()` that reads
+`GroundSurfaceMaster.surfaceTypesStatic[surfaceType]`. That static is null because **no
+`GroundSurfaceMaster` exists in the scene**, so all four threw on play-mode entry and `friction` was
+never assigned. Nothing read it either: `friction` is consumed only by RVP's `Suspension`, `Wheel`,
+`TireMarkCreate` and `TireScreech`, all wheeled-car components this project does not use. A field
+written by nothing, for nobody.
+
+Components removed. Adding a `GroundSurfaceMaster` would also have silenced it while keeping dead
+machinery alive.
+
+**The trigger for cleaning up a genuinely harmless warning was the build, and that generalises: a
+release player has no console, so `Player.log` is the only channel a marked playtest has.** It is
+where `[MotionTrace] MARKER n`, `[PlaytestReset] RESET n` and a `BUFFER FILLED` warning land. Four
+exceptions plus stack traces at every startup is not a gameplay problem, it is a legibility problem
+in the one file the session depends on. Accepted-baseline noise is cheap in the editor and
+expensive in a build.
 
 ### Camera lurches during a boosted flip — fixed 2026-08-14, `HoverCameraController` v2.9
 
@@ -720,6 +740,15 @@ Ammo (restores secondary ammo), Energy Cell (rapid recharge), Health Repair.
 - Data-driven values: `Assets/Data/` (ScriptableObjects)
 - Input: Unity Input System actions
 - Camera: Cinemachine
+- Editor-only code: `Assets/Scripts/Editor/`. **`Assets/RVP/Scripts/Editors/` is a trap: Unity's
+  magic folder name is `Editor`, singular, so `Editors` is an ORDINARY folder and everything in it
+  compiles into the runtime assembly.** All twelve RVP files there survive only because each is
+  wrapped in `#if UNITY_EDITOR` from line 1 to the last line, which is why the project builds at
+  all. Verified 2026-08-14, along with every `UnityEditor` reference in the ten gameplay scripts
+  that hold one. **A new file dropped in that folder without the guard breaks the player build and
+  the editor will not say a word**, because the editor compiles `UnityEditor` fine. There is no
+  asmdef anywhere in the project to catch it either. Put new editor code in `Assets/Scripts/Editor/`
+  and this never comes up.
 
 ## Prototype Checklist
 - [x] Project, repo, IDE integration
