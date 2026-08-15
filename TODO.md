@@ -242,7 +242,7 @@ validator a real denominator.
 warning and the camera framing verdict, both of which had to be corrected for firing during correct
 play. A check that fires during good tuning gets ignored, which costs more than having no check.
 
-### M.5 ~~Speed. Raise top speed, lower the boost multiplier~~ — APPLIED 2026-08-12, unjudged
+### M.5 ~~Speed. Raise top speed, lower the boost multiplier~~ — CLOSED 2026-08-14, JUDGED GOOD
 
 Shipped values, all in `VTP_Default`, plus one camera value in the scene:
 
@@ -349,7 +349,7 @@ Five couplings:
 
 </details>
 
-### M.6 ~~Airtime. Raise fall force~~ — APPLIED 2026-08-13, `extraFallGravity` 13 -> 30
+### M.6 ~~Airtime. Raise fall force~~ — CLOSED 2026-08-14, JUDGED GOOD. `extraFallGravity` 13 -> 30
 
 **Owner decision, made against the measurements below and validated by driving:** 30, having confirmed
 in play that one flip and two barrel rolls still land. They accepted a tighter trick margin for a
@@ -444,7 +444,45 @@ never happening today. That may be desirable. It should be a decision, not a sur
 
 </details>
 
-### M.8 ~~Air jump fires along world up~~ — DONE 2026-08-13, unjudged
+### M.8 Air jump direction is right, magnitude is not — REOPENED 2026-08-14
+
+**Owner's verdict 2026-08-14: the craft-up direction is correct and stays. It "feels kinda weak if
+not aimed directly downwards."** So the M.8 fix below is accepted; what is open is how much it
+should give. Two separate causes, and they want different fixes:
+
+**1. Cosine loss, which is intended.** Firing along craft up means vertical gain scales with how
+upright you are: 20 m/s at level, ~14 at 45 degrees, 0 at 90. That is the direct consequence of the
+directional-juke decision and cannot be removed without giving up the wall-shove.
+
+**2. The impulse does not cancel the fall, which is probably the real complaint. UNTESTED
+HYPOTHESIS.** `AddForce(VelocityChange)` *adds* 20 m/s; it does not zero what you already had. Fall
+at 30 m/s, air jump, and you are still falling at 10 -- the input feels like it did nothing. At the
+apex of an arc the same 20 m/s is the full 20 and feels strong. So the ability's strength depends
+on *when* it is pressed, which is exactly the shape of "sometimes weak".
+
+**This got worse the same week, and nobody connected the two: M.6 raised `extraFallGravity` from 13
+to 30.** More than doubling fall acceleration means the craft is moving down much faster at any
+given moment of a trick, so a fixed additive impulse buys proportionally less. M.6 was judged good
+on its own terms and should stay; the air jump simply has not been re-tuned against it.
+
+**Options, cheapest first:**
+
+- **Cancel the opposing velocity before the impulse**, the standard platformer double-jump: zero the
+  component of current velocity along `-jumpDir`, then add `airJumpImpulse`. Makes the ability
+  deliver the same thing every time it is pressed. Risk: it becomes a reliable save from any fall,
+  which may be too forgiving; a partial cancel (0.5-0.7) is the middle ground and probably the
+  right first try.
+- **Raise `airJumpImpulse`** (currently **20**, class default 7). Simple, but it does not fix the
+  inconsistency: an apex air jump becomes enormous while a falling one still underdelivers.
+- Both, once the first is judged.
+
+Do NOT do these at the same time. The whole point of the velocity cancel is that it changes *when*
+the ability feels strong, and raising the magnitude at the same time makes that unreadable.
+
+**Note this touches M.9's economy** (air jump costs 15) and 2.10. A more reliable air jump at the
+same price is a real buff to the energy economy, so judge 2.10 after this, not before.
+
+### ~~The original M.8 fix, kept for its reasoning and its measurements~~ — DONE 2026-08-13
 
 `FireAirJump` now fires along `transform.up`, **clamped so it can never push downward**. The grounded
 jump deliberately keeps world up: levelling already aligns the craft to the surface, so the two agree
@@ -477,7 +515,7 @@ until the next physics step, so reading velocity immediately after an injected c
 first pass at this test reported the air jump doing nothing at every attitude. Step physics before
 reading, and subtract a no-jump control at the same pose or gravity contaminates the delta.
 
-### M.9 ~~Jump energy costs should differ per jump type~~ — DONE 2026-08-13, unjudged
+### M.9 ~~Jump energy costs should differ per jump type~~ — CLOSED 2026-08-14, JUDGED GOOD
 
 Cost now ramps on the **same `chargeT` that sets the impulse**, so what you pay and what you get can
 never disagree. New tunable `jumpGroundedChargedEnergyCost`; the existing `jumpGroundedEnergyCost`
@@ -500,7 +538,7 @@ same meter.
 makes the most common jump 2.5x cheaper without making the committed one cheaper at all. Judge the
 energy economy after this rather than before it.
 
-### M.7 ~~Drift. Add a time cost, and more path curvature control~~ — IMPLEMENTED 2026-08-13, AWAITING JUDGEMENT
+### M.7 ~~Drift. Add a time cost, and more path curvature control~~ — CLOSED 2026-08-14, JUDGED GOOD
 
 **Both halves turned out to be one defect, and it was not the one this item described.** Written up
 in full in `CLAUDE.md` and in `HoverController_Propulsion` v1.9; the short version is that top speed
@@ -920,51 +958,44 @@ The rare 400-550ms stalls also remain unexplained. `FrameSpikeWatch` now prints 
 verdict on stop, which will settle whether they are thermal, and that costs nothing but one normal
 playtest.
 
-### 0.7 The periodic frame hitch is GC — confirm it does not survive a build
-**Cause identified 2026-08-14 and recorded in `CLAUDE.md`: it is a gen-0 garbage collection on a
-period set by the allocation rate, and `AllocationBisect` shows the allocation is the EDITOR's, not
-this project's.** Floor with all 49 game scripts disabled (5.24 MB/s) was higher than baseline with
-everything enabled (4.47 MB/s). Do not spend another session hunting a script that allocates; the
-answer is that none of them measurably does.
+**First verdict is in from the 3-minute build run 2026-08-14, it said `THROTTLING LIKELY`, and it
+is WRONG.** Do not act on it. See 0.11 -- the verdict itself is the defect.
 
-**All that remains is the build check, and it is cheap.** In a player the editor's ~5 MB/s
-contribution is gone, so the period should stretch out or the hitch should disappear entirely.
-`MotionTrace` and `FrameSpikeWatch` run unchanged in a build and write next to the exe.
+The printed evidence was "first 0.425ms, last 0.583ms, +37.1%". Checked against all 91 heartbeat
+samples in the same run:
 
-**Sharp prediction to test, so a null cannot be misread:** in the editor the collections land every
-24-26 seconds at ~14.4ms against a 4.4ms baseline. If the build shows the same period, the
-allocation is ours after all and the bisect needs redoing under load. If the period stretches by
-several times, this closes as tooling.
+```
+  0- 30s  mean 0.562      90-120s  mean 0.559
+ 30- 60s  mean 0.503     120-150s  mean 0.502
+ 60- 90s  mean 0.520     150-180s  mean 0.553
+```
 
-**Read the period out of `MotionTrace`'s `dt_ms` column, NOT out of `FrameSpikeWatch`. Its silence
-in a build proves nothing, and taking it as evidence would close this item wrongly.** Spotted
-2026-08-14 before the run rather than after. A spike must clear `ms > minSpikeMs` (12) **and**
-`ms > baseline * spikeMultiplier` (2.5), whichever binds:
+**No trend. First half 0.527ms, second half 0.536ms, a difference of +1.7%.** The benchmark's own
+sample-to-sample noise is sd 0.093ms, **17.4% of the mean**, with a range of 0.366 to 0.655 (the
+largest sample is 179% of the smallest, and both extremes occur throughout, not at the ends). The
+"+37.1%" is one noisy first sample compared against one noisy last sample.
 
-|  | baseline | 2.5x | binding gate | a 14.4ms collection |
-|---|---|---|---|---|
-| editor | ~4.4ms | 11.0ms | **12ms** (the floor) | recorded |
-| build, 165Hz vsync | ~6.06ms | **15.15ms** | 15.15ms (the multiplier) | **missed** |
+**So the CPU did not measurably slow down, and the question this item was waiting on is still
+open.** A run that produces a real trend will show it in the binned means, not in two endpoints.
 
-The build's baseline is the vsync interval, so the relative gate overtakes the absolute floor and
-the blind band widens from 12ms to 15.15ms. **The exact spikes this item is hunting land inside
-that band**, so they would vanish from the spike log for a threshold reason and read as
-confirmation that they had stopped. Same shape as trap 15 and the `cam_ang_rate` removal: an
-instrument reporting zero for a structural reason, which is worse than no reading because it
-invites the wrong conclusion. `MotionTrace` records every frame unconditionally and is immune.
+### 0.7 Two things the first build did not test
+**The GC question itself is CLOSED** -- the periodic hitch was the editor's allocation and it does
+not survive a build. Numbers in `CLAUDE.md`. What that 3-minute run did *not* cover:
 
-Do NOT retune `spikeMultiplier` to compensate. Changing an instrument's sensitivity partway
-through the investigation it was built for makes the before and after incomparable, and the
-relative gate is correct for its actual job of catching hitches at any baseline.
+**Allocation under sustained weapon fire and heavy projectile traffic.** Still never measured. The
+`AllocationBisect` sweep requires a parked craft and every run since has been driving, so these
+paths have no allocation figure at all. The build now makes this cheap to settle: idle allocation
+there is 0.01-0.08 MB/s, so **anything the weapons allocate will stand out against a floor of
+essentially zero**, which was never true in the editor's 4.47 MB/s. Fire continuously through the
+10-minute run and read `alloc_mb_s` in the spike CSV.
 
-**Untested and worth including in that run:** sustained weapon fire and heavy projectile traffic.
-The bisect requires a parked craft and the driving runs contained neither, so those paths have never
-been measured for allocation.
-
-Note the old framing of this item described the hitch as a "doublet" and treated the 33-34 physics
-catch-up steps as a signature linking stalls. Both are superseded: the shape is a burst of ~6-7ms
-frames ending in one ~14ms frame, and the step count is an arithmetic ceiling that any frame over
-333ms reports. See `CLAUDE.md` trap 34.
+**The marker key has never been confirmed in a build.** The first build run recorded **0 markers**,
+because nobody pressed `M` -- not evidence of failure, but not evidence of success either, and this
+project has already lost eight sessions to a marker key that silently never arrived (see the
+`markerKey` tooltip). **Press `M` once in the first thirty seconds of the 10-minute run and confirm
+`[MotionTrace] MARKER 1` in `Player.log` before continuing.** If it is missing, stop and fix it
+rather than spending the remaining nine minutes producing an unfalsifiable trace. Gamepad input is
+already proven in a build: `PlaytestReset` fired correctly at t=75.61s.
 
 ### 0.8 ~~Floor collisions, unattributed~~ — CLOSED 2026-08-11, they are hard landings
 `MotionTrace` v1.1 added contact names and v1.3 added world horizontal speed, and together they
@@ -1072,10 +1103,15 @@ What survives is unchanged and still narrow: above the normal cap, a transient w
 `maxDriftAngle` is briefly reachable, and whether a decaying 0.6s window is usable for aiming is
 still worth one test with weapons live. That is a curiosity to try, not work to schedule.
 
-### 0.2 Nothing is committed
+### 0.2 ~~Nothing is committed~~ — CLOSED 2026-08-14, the habit stuck
 Everything from the audit session is uncommitted on `master`: 4 docs, 11 scripts, 1 new script,
 7 data assets, 3 prefabs, 2 ProjectSettings files, 1 scene. **Commit before the tuning pass**, so
 tuning changes are separable from structural ones in history.
+
+**Closed 2026-08-14.** Work is now committed in small labelled steps as it lands (three on
+2026-08-14 alone: the v2.9 camera fix and its docs, the debug reset, build prep). The concern this
+item existed to prevent -- structural work and tuning work tangled in one commit -- did not
+happen. Historical detail below, kept only because it dates the transition.
 
 **Grown since, and still uncommitted as of 2026-08-09.** The camera overhaul added
 `HoverCameraController` v1.2 -> v2.4, five `Tuning/Camera*Tuning.cs` classes,
@@ -1092,6 +1128,30 @@ why several bugs survived multiple sessions. Not urgent, but the projectile help
 the cheapest possible place to start.
 
 ---
+
+### 0.11 `FrameSpikeWatch`'s throttling verdict compares two samples of a noisy signal
+Found 2026-08-14, the first time the verdict ever fired. It printed **`THROTTLING LIKELY ... +37.1%`**
+for a session with **no trend whatsoever**, and it was believed and written into 0.6 before anyone
+checked it.
+
+The verdict compares the **first** benchmark sample against the **last** one. That is only valid if
+a single sample is a good estimate of the machine's speed, and it is not: across 91 heartbeats the
+benchmark has **sd 0.093ms on a mean of 0.532ms, 17.4%**, ranging 0.366 to 0.655. Two samples drawn
+from that spread can differ by 79% with nothing happening at all. Binned into 30-second windows the
+same run is flat, and first half against second half is **+1.7%**.
+
+This is the project's own trap 15 wearing different clothes, and worse than that: `FrameSpikeWatch`
+exists *because* a fixed threshold against a noisy quantity cries wolf, and its baseline is a
+smoothed running average for exactly this reason. **The benchmark got a naive endpoint comparison
+bolted onto the same instrument that was carefully built to avoid one.**
+
+**Done looks like:** the verdict compares the mean of the first N beats against the mean of the last
+N (N around 10, roughly 20 seconds), and stays silent unless the difference clears the measured
+noise -- something like 2 sd of the sample spread, not an arbitrary percentage. Printing the binned
+series instead of a verdict would also be honest, and is what actually answered the question here.
+
+**Until it is fixed, ignore the verdict line and bin `bench_ms` from the CSV by hand.** A wrong
+confident answer is worse than no answer, which is the whole premise of this file.
 
 ## Tier 1 — Blocks the prototype checklist
 

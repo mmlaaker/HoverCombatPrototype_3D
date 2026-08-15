@@ -209,9 +209,26 @@ public class PropulsionTuning
              "Adds to whatever rise you have left rather than replacing it, so jumping again near " +
              "the top of a jump stacks into something higher than either alone.\n\n" +
              "That stacked jump produces the fastest ordinary landing in the game, and it is the " +
-             "one Hard Landing Min Speed has to clear.")]
+             "one Hard Landing Min Speed has to clear.\n\n" +
+             "Read this together with Air Jump Fall Cancel. Raising this alone makes a jump at the " +
+             "apex bigger without making a jump mid-fall feel any less dead.")]
     [Min(0f)]
     public float airJumpImpulse = 7f;
+
+    [Tooltip("How much of the fall the air jump erases before it pushes. 0 is the old behaviour, " +
+             "1 makes the jump deliver exactly Air Jump Impulse no matter how fast you were " +
+             "dropping.\n\n" +
+             "WHAT THIS FIXES: the impulse ADDS speed, so falling at 30 and jumping for 20 leaves " +
+             "you still falling at 10 and the button feels dead. The same press at the top of an " +
+             "arc gives the full 20. Without this, how strong the ability feels depends on WHEN " +
+             "you press it, not on what it is worth.\n\n" +
+             "Only velocity fighting the jump is cancelled, so this never removes rise you " +
+             "already had and never breaks the apex stack described above.\n\n" +
+             "TRADE: toward 1 the air jump becomes a reliable save from any fall, which may be too " +
+             "forgiving for a trick game; toward 0 it stays situational and rewards timing. " +
+             "Start around 0.6 and move it if recoveries feel free.")]
+    [Range(0f, 1f)]
+    public float airJumpFallCancel = 0.6f;
 
     // -------------------------------------------------------------------------
     // 🧲 Drag

@@ -2,13 +2,14 @@
 
 ## Documentation Map
 
-Four documents, no overlap. A fact lives in exactly one of them; if you find the same thing in two,
+Five documents, no overlap. A fact lives in exactly one of them; if you find the same thing in two,
 that is a defect worth fixing rather than a redundancy worth keeping.
 
 | Document | Owns | Does not contain |
 |---|---|---|
 | **`CLAUDE.md`** (this file) | What exists and why. Architecture, module status, wiring, principles, measurement recipes, resolved defects with their causes, standing decisions, disproved theories | Open work, design intent |
 | **`TODO.md`** | Everything unfinished: verification debt, blockers, known traps, pending tuning decisions, unimplemented features | Anything already done or decided |
+| **`ROADMAP.md`** | The owner's milestone definitions and the ORDER work happens in: which unfinished items gate PRE-ALPHA 1/2, ALPHA and BETA | Any fact of its own. It is pointers into `TODO.md` by number, so it cannot go stale separately |
 | **`GameDesignDocument.md`** | Design intent. What the game should be, the pillars, the full weapon roster, arena philosophy, vehicle identity, narrative framing | Implementation status, task lists |
 | **`PhysicsAudit.md`** | Physics derivations and method. **Frozen** at `4a34f21` | Anything current. Its values are superseded |
 
@@ -141,10 +142,10 @@ apex and the landing speed under the fields that produce them.
 | `VehicleLayerAssigner.cs` | v1.0 | `[DefaultExecutionOrder(-20)]`, the earliest thing on the vehicle. Detects `PlayerHoverInput` vs `AIHoverInput` and recursively assigns the whole hierarchy to `PlayerVehicle` / `AIVehicle`, which is what lets one shared prefab split into two collision identities at runtime. Everything that strips "my own layer" from a mask (`ParticleWeaponCollision`, `VehicleHUD`'s reticle ray) depends on running after this |
 | `HoverVehicleVFX.cs` | v1.0 | Three-tier cosmetic particle driver (idle / accel / boost) for hover points and rear exhaust, blended `lerp(lerp(idle, accel, smoothedThrottle), boost, BoostLerp)`. Side bursts on `Propulsion.OnDodge`; one-shot ground dust on `Foundation.OnHardLanding`, heavy prefab above `heavySeverityThreshold`. The dust prefab slots are currently empty (see `TODO.md`), so the code path runs and produces nothing |
 | `EnemyHealthBar.cs` | v1.0 | World-space health bar. Event-driven off `VehicleHealth`, billboards to `Camera.main` in LateUpdate, optional hide-while-full. Re-syncs in `OnEnable` so it is respawn-safe |
-| `FrameSpikeWatch.cs` | v1.1 | Frame-time spike catcher, built 2026-08-08 for an intermittent hitch that could not be reproduced on demand. **Design rule: detection is nearly free, capture is expensive, because capture only runs on frames that were already ruined.** Per frame it costs one subtract and two compares; anything that walks the scene happens on a slow timer or inside the spike branch. Detection is RELATIVE (2.5x a running baseline AND over an absolute floor), because editor play mode runs ~3.2ms on this project and a build runs somewhere else, so a fixed threshold would cry wolf in one and stay silent in the other. **The baseline learns only from non-spike frames**, or a bad patch would raise the bar until the tool went quiet exactly when things were worst. Records `fixed_steps`, which is how a hitch becomes a stutter: a long frame forces catch-up physics steps on the next one, and 33-34 steps means the frame pinned `Time.maximumDeltaTime` (0.333s / 0.01 = 33). v1.1 added HEARTBEAT rows on a timer (v1.0 recorded only spikes, so a session with a two-minute CLEAN stretch produced almost no rows for the part worth understanding), a CPU BENCHMARK (fixed arithmetic timed once a second: "the game got heavier" and "the machine got weaker" are indistinguishable from inside a frame timer, and only constant work separates them; prints a verdict, not a column), and a measured allocation rate. **Console logging defaults OFF as a measurement decision:** in the first real session memory sat flat for 60 seconds then climbed 3MB/s from the exact moment logging began, so the instrument could not be ruled out as the source of what it was reporting. Auto-dumps CSV to `PerfLogs/` on stop (the first session's data was lost by stopping play before anyone pressed the button) |
+| `FrameSpikeWatch.cs` | v1.1 | Frame-time spike catcher, built 2026-08-08 for an intermittent hitch that could not be reproduced on demand. **Design rule: detection is nearly free, capture is expensive, because capture only runs on frames that were already ruined.** Per frame it costs one subtract and two compares; anything that walks the scene happens on a slow timer or inside the spike branch. Detection is RELATIVE (2.5x a running baseline AND over an absolute floor), because editor play mode runs ~3.2ms on this project and a build runs somewhere else, so a fixed threshold would cry wolf in one and stay silent in the other. **The baseline learns only from non-spike frames**, or a bad patch would raise the bar until the tool went quiet exactly when things were worst. Records `fixed_steps`, which is how a hitch becomes a stutter: a long frame forces catch-up physics steps on the next one, and 33-34 steps means the frame pinned `Time.maximumDeltaTime` (0.333s / 0.01 = 33). v1.1 added HEARTBEAT rows on a timer (v1.0 recorded only spikes, so a session with a two-minute CLEAN stretch produced almost no rows for the part worth understanding), a CPU BENCHMARK (fixed arithmetic timed once a second: "the game got heavier" and "the machine got weaker" are indistinguishable from inside a frame timer, and only constant work separates them; prints a verdict, not a column -- **and that verdict is not trustworthy, see `TODO.md` 0.11:** it compares the first sample against the last one, and the benchmark's own noise is 17.4% of its mean, so it called a perfectly flat session a 37% slowdown. The underlying per-beat `bench_ms` column is fine; bin it by hand), and a measured allocation rate. **Console logging defaults OFF as a measurement decision:** in the first real session memory sat flat for 60 seconds then climbed 3MB/s from the exact moment logging began, so the instrument could not be ruled out as the source of what it was reporting. Auto-dumps CSV to `PerfLogs/` on stop (the first session's data was lost by stopping play before anyone pressed the button) |
 | `AllocationBisect.cs` | v1.0 | Finds what allocates by switching things off and watching what stops. Built 2026-08-08 after **three** plausible theories about a 5.5 MB/s idle allocation were each disproved by measurement. It has no theories: it disables one MonoBehaviour at a time, measures, restores, and ranks by what changed. **The FLOOR measurement is the important one and runs before the per-component sweep:** every candidate disabled at once. If allocation barely drops with all game code off, no per-component blame will find it and the source is the engine, the editor or a subsystem. That is the answer nobody reaches by guessing, because a guess always names a script. Reads the profiler's `GC Allocated In Frame` counter rather than total-memory deltas, which cannot see allocation in the same window as a collection, i.e. exactly the window that matters when something allocates fast enough to trigger one. Craft must be PARKED: the sweep disables movement scripts, so a moving vehicle makes every phase measure a different situation |
 | `MotionTrace.cs` | v1.3 | **v1.3 added `horiz_speed` and moved the camera/attitude columns into `FillShared`.** World horizontal speed had to be recorded because `phys_vert` is the LOCAL vertical component and during a flip the local frame is rotating, so it stops meaning "vertical" exactly when a fall is being judged. Two analyses used `sqrt(speed^2 - physVert^2)` as a stand-in and both were invalid, one of them returning a confident null result (10.2% against 9.9%) that looked like evidence. The gate that broke the v2.7 camera bound is expressed in precisely this quantity. **Reconstructing a world-frame quantity from body-frame components is not a shortcut, it is a different measurement.** The move into `FillShared` fixes MARKER and tick rows carrying `tilt`, `travel_div`, `proxy_yaw`, `veh_yaw` and `yaw_diverge` as zero: every marker in one session read `tilt=0.0 travelDiv=0.0` while airborne mid-flip, which is worse than missing data because it looks answered. **v1.2 added `tilt_deg` and `travel_div` and REMOVED `cam_ang_rate`.** The first two exist because the owner identified flip-versus-roll by feel and no column could confirm it, and because `travel_div` is the exact quantity the v2.7 camera bound limits, so it is what says the bound is engaging rather than merely compiled. The removal matters more than the additions: `cam_ang_rate` used `Quaternion.Angle` and read exactly 0 for the rotations a 300fps frame contains (trap 15), reporting that the camera did not rotate on half of all frames, which looked like a major finding and was entirely an artifact. **A column that reads zero for a broken reason is worse than no column**, because it invites the same wrong conclusion twice. Per-frame and per-tick motion trace, built 2026-08-11 for a reported jitter that `FrameSpikeWatch` could not see. **The two tools do not overlap.** That one measures how long a frame took, fires only past `minSpikeMs` 12 against a ~3ms baseline, and otherwise writes one row every 2 seconds, so the whole 3-12ms band where pacing jitter lives is invisible to it by construction and a per-tick wobble is unresolvable. This one asks whether what you SAW matched what the physics did. **Core metric is the residual**: the drawn transform's frame delta projected onto the direction of travel, minus the rigidbody's real speed. Zero means the drawing agreed with the physics; the SIGN says whether the craft was drawn past or short of where it had got to, which is the reported forward/backward lurch. **Three separable channels in ONE pass** (recipe 10, since the map cannot be held constant across two runs): vehicle residual, camera aim and position, and the vehicle-minus-camera vector projected on camera forward and right, which is what the eye actually judges and which can chop while both parts move smoothly. Also logs heading-proxy yaw against vehicle yaw, which is what identified the air-control whip. **Sampled at `RenderPipelineManager.beginContextRendering`, not `LateUpdate`**, so the camera is read after the Cinemachine brain has committed it; in `LateUpdate` the camera delta is one frame stale and every relative figure derived from it is fabricated. That also avoids `DefaultExecutionOrder`. **Zero allocation in the hot path is load-bearing, not tidiness**: `FrameSpikeWatch` records that its own logging became a plausible source of the allocation it was reporting, and a per-frame string logger would manufacture the GC pressure it exists to detect, so samples go into a struct array allocated once in `Awake` and formatting happens only at dump. Buffer is bounded and stops when full rather than ringing, because the analysis wants one contiguous timeline from a known start. Collision contacts recorded via a `CollisionProbe` added at runtime and destroyed with the trace, since Unity delivers `OnCollisionEnter` only to the Rigidbody's own GameObject and `VehicleCollisionRelay` is deliberately left alone. **`M` drops a marker** on a felt event; reaction time puts the press 200-400ms AFTER the cause, so a marker points at a window ending there. It was F8 until eight sessions in a row recorded zero markers on this laptop while an injected keypress registered fine, so the presses were being eaten before Unity saw them: **a marker key must be a plain key, and the first press of any session must be confirmed in the console, because the failure is silent and the trace looks healthy without them.** Writes `PerfLogs/motiontrace_*.csv`. **Lives on the `/PerfDebug` scene object** alongside `FrameSpikeWatch`, `AllocationBisect` and `PlaytestReset`, so every instrument is in one place and one object can be disabled to remove all of them. Deliberately NOT wired to `HoverDebugSettings`: that switch exists to turn off drawing that costs frames, and these tools draw nothing, cost almost nothing while idle, and are worthless if they happen to be off during the session you needed them for |
-| `PlaytestReset.cs` | v1.0 | Playtest escape hatch, built 2026-08-14 as a build prerequisite: returns the craft to its authored scene pose with velocities zeroed, for a soft-lock or a fall outside the test environment. **Hold** Select on the pad or `R` on the keyboard for 0.6s; both read off the device directly rather than through `HoverControls.inputactions`, so a debug utility never requires editing the shipped input asset, and Select is the one face-adjacent button that asset leaves unbound. **This is not TODO 1.1 and does not advance it.** It deliberately restores nothing but pose and velocity: no health, energy, shield, ammo or slot. A reset that silently topped those up would make every run after it unreadable and would drift into being a half-built respawn nobody trusts. It also cannot reuse `VehicleHealth.Respawn()`, which per 1.1 does not reset position or velocity, i.e. the entire job. **The camera must be told**, via `HoverCameraController.NotifyVehicleWarped`: Cinemachine damps from its own remembered world position, so an untold teleport sends the camera flying the length of the level, which looks more broken than whatever you pressed reset to escape. Interpolation is toggled off across the move or the Rigidbody smoothly DRAWS the teleport as one streaked frame. **Logs `Time.unscaledTime`, which is MotionTrace's `t` column**, on purpose: a teleport is a colossal one-frame position delta, so it lands in the CSV as a huge fake speed spike in exactly the columns these sessions hunt in, and the stamp is what lets those rows be discounted instead of investigated. Hold-to-trigger and `enableHotkeys` both exist so a stray press cannot invalidate a measured run. Deliberately NOT gated on `HoverDebugSettings`, which turns off drawing that costs frames; this draws nothing and is most needed during a master-off feel run |
+| `PlaytestReset.cs` | v1.0 | **Confirmed working in a build 2026-08-14** (`RESET 1 at t=75.61s, moved 275.9m`), which also proves gamepad input reaches a player correctly. Playtest escape hatch, built 2026-08-14 as a build prerequisite: returns the craft to its authored scene pose with velocities zeroed, for a soft-lock or a fall outside the test environment. **Hold** Select on the pad or `R` on the keyboard for 0.6s; both read off the device directly rather than through `HoverControls.inputactions`, so a debug utility never requires editing the shipped input asset, and Select is the one face-adjacent button that asset leaves unbound. **This is not TODO 1.1 and does not advance it.** It deliberately restores nothing but pose and velocity: no health, energy, shield, ammo or slot. A reset that silently topped those up would make every run after it unreadable and would drift into being a half-built respawn nobody trusts. It also cannot reuse `VehicleHealth.Respawn()`, which per 1.1 does not reset position or velocity, i.e. the entire job. **The camera must be told**, via `HoverCameraController.NotifyVehicleWarped`: Cinemachine damps from its own remembered world position, so an untold teleport sends the camera flying the length of the level, which looks more broken than whatever you pressed reset to escape. Interpolation is toggled off across the move or the Rigidbody smoothly DRAWS the teleport as one streaked frame. **Logs `Time.unscaledTime`, which is MotionTrace's `t` column**, on purpose: a teleport is a colossal one-frame position delta, so it lands in the CSV as a huge fake speed spike in exactly the columns these sessions hunt in, and the stamp is what lets those rows be discounted instead of investigated. Hold-to-trigger and `enableHotkeys` both exist so a stray press cannot invalidate a measured run. Deliberately NOT gated on `HoverDebugSettings`, which turns off drawing that costs frames; this draws nothing and is most needed during a master-off feel run |
 | `HoverMath.cs` | v1.0 | One function: `NormalizeAngle`, 0..360 -> -180..180. Unity reports -10 degrees as 350 and every attitude read needs the signed form |
 | `Editor/HoverVehicleVFXEditor.cs` | v1.0 | Inspector preview buttons that push a single VFX tier onto the continuous emitters in edit mode |
 | `Editor/TuningBaseline.cs` | v1.0 | Prefab-style override marking for ScriptableObject tuning assets: fields moved since a baseline draw **bold** with their old value in the label (`Top Speed  (was 60)`), right-click reverts one, and a session bar reverts all. Unity gives this free on prefab *instances* and deliberately not here, because override bolding diffs an instance against its prefab parent and an asset has no parent. **The baseline is a session snapshot, not the class defaults, and that choice was measured rather than assumed:** `VTP_Default` differs from its own field initialisers in **40 of 93 fields**, so defaults would bold nearly half the inspector permanently and train you to ignore the signal within a day. Snapshot lives in `SessionState`, so it survives domain reloads and dies when Unity closes, which is exactly a tuning session's lifetime and means a baseline can never be committed or go stale across days. Showing the OLD VALUE is the part prefabs do *not* do and is the more useful half mid-pass. **Bold is done by mutating `EditorStyles.label.fontStyle` inside a try/finally, NOT by `EditorGUIUtility.SetBoldDefaultFont`**, which is the method Unity uses internally and is not public (verified by reflection). The public path is coarser (may not bold a foldout header) but does not depend on a private method whose silent loss would look identical to "nothing has changed". **Adds no undo and never needed to:** `ApplyModifiedProperties` has always registered undo and dirtied the target, which is why `ApplyModifiedPropertiesWithoutUndo` exists separately. Wired into `VehicleTuningProfileEditor` only; `WeaponDefinitionEditor` is a mechanical per-call-site swap whenever weapons come back into focus |
@@ -193,6 +194,33 @@ Everything here was learned by getting it wrong first. Ignoring any of it costs 
 - **Check `editor_status` before entering play mode or spawning anything.** The owner may be driving. Test rigs and teleports during a live session are extremely disruptive and this has happened.
 - **Console baseline. Anything beyond this list is new:** one convex-hull warning on the `car` mesh, three obsolete-API warnings in third-party `Assets/RVP/`, Unity Connect token-exchange errors, and `UIElements.ATGTextJobSystem` index errors from Unity's own text renderer. **Zero compile errors** is the baseline. The `RVP.GroundSurfaceInstance.Start()` null refs were on this list until 2026-08-14 and are now gone, removed rather than accepted (see Resolved Work) -- **if they come back, something re-added the component.**
 - **`recompile` reports a timeout after 120s but has always actually succeeded.** Confirm with `recompile_status` before believing the failure.
+
+### Making a build
+
+First successful build 2026-08-14: `StandaloneWindows64`, Mono2x, **0 errors and 4 warnings**, all
+pre-existing and benign (two assigned-but-unused fields, one obsolete `FindObjectOfType`, one
+"no RuntimePipelineManager" notice). Output to `Build/`, which `.gitignore` already covers.
+
+- **`Player.log` is the ONLY channel a build has. There is no console.** It lives at
+  `%USERPROFILE%\AppData\LocalLow\Meade Laaker\Hover Combat Prototype\Player.log` and receives every
+  `Debug.Log`, including `[MotionTrace] MARKER n`, `[PlaytestReset] RESET n`, all the SESSION
+  summaries, and a `BUFFER FILLED` warning if one happens.
+- **Quit with Alt+F4 or by closing the window. Killing the process discards the entire session.**
+  `MotionTrace` and `FrameSpikeWatch` both write their CSV from `OnDisable`, which only runs on a
+  clean shutdown. Nothing partial is on disk before then: the rows live in memory by design, because
+  a per-frame file writer would manufacture the allocation these tools exist to detect.
+- CSVs land in `Build/PerfLogs/`, beside the exe (`Application.dataPath` is `<exe>_Data`, and the
+  instruments write one level up).
+- **Do not use a development build for allocation work.** The profiler allocates, which contaminates
+  the exact quantity under test, and it buys nothing: the profiler memory counters are confirmed
+  working in a release player. See the resolved GC entry.
+- Measured row rate in a build is **264 rows/s** (165 frames + ~100 physics ticks), so `MotionTrace`
+  at `captureSeconds` 600 / `assumedMaxFps` 180 reserves 174k rows against ~158k needed for ten
+  minutes. Confirmed against a real run: 48,016 rows in 182 seconds.
+- vsync is on (`vSyncCount` 1, the only quality level) and nothing sets `Application.targetFrameRate`,
+  so **the display refresh is the frame rate ceiling** and the baseline frame time is the vsync
+  interval, not a measure of headroom. At 165Hz that is 6.06ms, which is why relative spike
+  thresholds behave differently here than in the editor.
 
 ### Measurement traps that have each produced a confidently wrong answer
 
@@ -361,6 +389,62 @@ nobody spends a session rediscovering them.
 **Open work is not here. It is in `TODO.md`,** which owns every unfinished item: verification debt,
 blockers, known traps, pending tuning decisions and unimplemented features. Nothing is listed in
 both files. If you are looking for what to do next, that is the file.
+
+### The movement pass is accepted — 2026-08-14
+
+Owner's verdict after the first build playtest: **"overall very content with this controller."** Four
+Tier M tuning items judged good and closed together, having been applied over 2026-08-12 to 08-13
+and unjudged until now:
+
+- **M.5** top speed raised, boost multiplier lowered
+- **M.6** fall force raised, `extraFallGravity` 13 -> 30
+- **M.7** drift time cost and path curvature control
+- **M.9** per-jump-type energy costs (tap 10, full charge 25, air jump 15)
+
+Reasoning and the measured tables stay in `TODO.md` under the struck-through headings rather than
+being copied here; they are the record of how the numbers were chosen and are worth keeping next to
+the items that still reference them.
+
+**One exception, and it is instructive: M.8 reopened in the same breath.** The air jump's direction
+is right and stays; its magnitude was never re-tuned after M.6 more than doubled fall acceleration,
+so a fixed additive impulse now buys proportionally less. **A tuning change judged good in
+isolation silently invalidated a neighbouring one**, and nothing flagged it because both were
+"done". Neighbouring systems need re-judging when a shared quantity moves.
+
+### The periodic frame hitch was the editor, and a build proves it — closed 2026-08-14
+
+`AllocationBisect` had already shown the allocation was not this project's (floor with all 49 game
+scripts disabled, 5.24 MB/s, was HIGHER than baseline with everything on, 4.47 MB/s). The first
+build settles it outright. Three minutes of ordinary driving, 29,852 frames:
+
+| | editor | build (vsync, 165Hz) |
+|---|---|---|
+| allocation | 4.47 MB/s | **0.01-0.08 MB/s** |
+| gen-0 collections | every 24-26s | **2 in 182s** (t=4.5s and t=109.3s) |
+| cost of a collection | ~14.4ms spike | none visible; neither landed on a slow frame |
+| frame time | 4.4ms baseline, GC spikes | **6.07ms mean, 0.39ms sd** |
+| managed heap | climbing | 28.6 -> 29.6 MB, flat |
+
+Roughly a hundredfold drop in allocation. **99.98% of frames came in under 8ms; five frames out of
+29,852 were over.** Owner's independent verdict on the same run was "buttery smooth."
+
+**The general lesson is the expensive one: a measurement taken in the editor can be dominated by
+the editor.** Three plausible theories about game code were each disproved before anyone thought to
+measure the floor, and the floor was the answer. When something looks periodic and cheap to blame
+on a script, measure with the scripts OFF before hunting one.
+
+**Two instrument facts confirmed by this build, both previously uncertain:**
+
+- `UnityEngine.Profiling.Profiler.GetMonoUsedSizeLong()` **does return real data in a non-development
+  player.** `FrameSpikeWatch`'s `alloc_mb_s` and `mem_mb` columns are trustworthy in a release build,
+  so there is no reason to reach for a development build and contaminate an allocation measurement
+  with the profiler's own allocation.
+- The blind band is real but was empty here. In a build the relative gate (`baseline * 2.5` =
+  15.15ms) overtakes the absolute floor (`minSpikeMs` 12), so `FrameSpikeWatch` cannot see 12-15.15ms
+  frames. Checked directly against the motion trace: **zero frames landed in that band.** The
+  structural point stands for future runs at other baselines -- read GC periodicity from
+  `MotionTrace`'s `gc0` column, which is `System.GC.CollectionCount(0)` and records every frame
+  unconditionally, never from the spike log's silence.
 
 ### The RVP ground-surface null refs are gone, not accepted — 2026-08-14
 
@@ -752,11 +836,15 @@ Ammo (restores secondary ammo), Energy Cell (rapid recharge), Health Repair.
 
 ## Prototype Checklist
 - [x] Project, repo, IDE integration
-- [x] Hovercraft movement & physics
+- [x] Hovercraft movement & physics — judged good 2026-08-14
 - [x] Camera and input control
 - [x] Energy + ability system
 - [ ] Basic combat loop (primary fire + pickups)
 - [~] AI opponent — drives, roams, flees and shoots; cannot yet threaten the player
+
+**This list is a flat inventory. `ROADMAP.md` is what orders it**, and says which of these belong to
+which milestone. Superseded 2026-08-14 by the owner's four-stage roadmap; kept because the six
+entries here are a finer-grained record than the milestone definitions are.
 
 **What remains on the last two items, and why, is in `TODO.md`** (Tier 1). Not repeated here.
 

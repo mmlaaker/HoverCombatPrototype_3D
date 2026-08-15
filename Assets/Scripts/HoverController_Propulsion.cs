@@ -962,6 +962,27 @@ public class HoverController_Propulsion : MonoBehaviour
             jumpDir = jumpDir.sqrMagnitude > 1e-4f ? jumpDir.normalized : Vector3.up;
         }
 
+        // Cancel some of the velocity FIGHTING the jump before adding to it. The
+        // impulse adds m/s rather than setting them, so falling at 30 and jumping
+        // for 20 leaves the craft still falling at 10 and the button reads as dead,
+        // while the identical press at the apex delivers the full 20. How strong
+        // this ability feels was therefore a function of WHEN it was pressed.
+        //
+        // The complaint arrived immediately after M.6 more than doubled
+        // extraFallGravity (13 -> 30). Nothing was wrong with the air jump before
+        // that; it simply was never re-tuned against a craft that now falls twice
+        // as fast, which is the general hazard of judging one tuning change in
+        // isolation from its neighbours.
+        //
+        // Only the OPPOSING component is touched, projected on jumpDir rather than
+        // on world up so it stays correct for the tilted and wall-shove cases the
+        // clamp above exists to serve. Rise you already had is never removed, so
+        // the apex stack that airJumpImpulse's tooltip describes still works.
+        float opposing = Vector3.Dot(rb.linearVelocity, jumpDir);
+
+        if (opposing < 0f && P.airJumpFallCancel > 0f)
+            rb.AddForce(jumpDir * (-opposing * P.airJumpFallCancel), ForceMode.VelocityChange);
+
         // VelocityChange: adds m/s directly, ignoring mass.
         rb.AddForce(jumpDir * P.airJumpImpulse, ForceMode.VelocityChange);
 
