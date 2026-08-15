@@ -25,13 +25,26 @@ the first build runs at 6.07ms with a 0.39ms spread.
 
 Remaining, and the owner's own framing is "a few minor things":
 
+The owner's own estimate 2026-08-14 is **movement at ~88%, wanting ~95% before calling this done.**
+What stands in the way:
+
 | | |
 |---|---|
-| **M.8** | air jump magnitude, reopened. Partial fall cancel wired 2026-08-14, awaiting a playtest verdict on the fraction |
-| **M.1** | flip recovery has an unrecoverable band on the ARM side |
+| **M.11** | **TOP PRIORITY.** Camera authority when the player has none. One feature, two triggers |
 | **M.3** | the craft leaves frame while the camera pitches up. Cause localised to `Measure` |
-| **M.4** | the dodge validator models an unopposed impulse and cries wolf |
+| **M.10** / **2.10** | trick energy economy. **The only open item that changes how movement PLAYS rather than how it behaves**, and the likeliest source of the missing 7% |
+| **M.13** | strafe camera view retune. Owner's own task; retune the view first, then match `reticleProjectionDistance` |
+| **5.6** | `flipRecoverySpeedThreshold` 2 is an unconfirmed guess |
 | **0.7** | confirm the marker key works in a build, and measure allocation under sustained fire |
+
+Closed on 2026-08-14 after verification: **M.1** and **M.2** were both fixed on 2026-08-12 in
+`af7d531` and never marked; **M.4** validated, its premise disproved and a duplicate stale warning
+fixed; **M.5**, **M.6**, **M.7**, **M.8**, **M.9** judged good; **0.6**'s two remaining feel
+questions answered; **0.10** was already closed 2026-08-13 behind a heading that did not say so.
+
+Deferred out of this milestone by the owner: **M.12** (boost presentation FX) and **5.11** (strafe
+camping) both move to PRE-ALPHA 2. The second is principled -- it asks whether players camp under
+combat pressure, and there is no combat until `1.3`.
 
 Note the AI already exceeds this milestone's bar: it drives, roams, flees and shoots, where
 PRE-ALPHA 1 asks for no enemies at all.
@@ -52,6 +65,8 @@ The step is **weapon physics** and **a target worth hitting**. The AI punching b
 | **2.7** | automatic fire rates are far too low |
 | **3.13** | three camera impulse channels unwired, so `2.1`/`2.2` cannot be judged |
 | **2.4**, **2.5** | hard landings have no dust, missile detonations have no explosion. This milestone's "placeholder VFX" |
+| **M.12** | boost presentation FX: vignette, speed lines, duration-based rumble. Deferred here 2026-08-14 |
+| **5.11** | whether players camp in strafe. Unanswerable until `1.3` gives combat something to pressure with |
 | **3.1**, **3.6**, **3.7** | weapon-side traps worth clearing while the code is open |
 | **5.2**, **5.3**, **5.4** | the knock-around pass, only partly applied |
 

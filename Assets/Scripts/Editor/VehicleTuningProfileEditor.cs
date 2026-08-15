@@ -881,15 +881,34 @@ public class VehicleTuningProfileEditor : Editor
             Warn(ref any, $"strafeTopSpeed ({strafeCap:F1}) exceeds topSpeed ({topSpeed:F1}). The strafe cap "
                         + "is scaled against topSpeed, so strafing would outrun driving.", MessageType.Warning);
 
-        // 9. Straight from the dodgeForce tooltip's own guidance.
+        // 9. Threshold RE-ALIGNED 2026-08-14 with the DerivedDodge bands, which were
+        //    recalibrated against a playtest on 2026-08-11. This warning was missed
+        //    in that pass and kept firing the discredited claim, so the readout said
+        //    "strong juke" and the warning box underneath it said "teleport" about
+        //    the same number.
+        //
+        //    What the playtest actually established: the FORMULA is right (open-loop
+        //    predicted a 52.00 m/s peak, the craft measured 52.81), and it was only
+        //    the perceptual claim bolted to it that was wrong. The shipped tuning
+        //    sits near 136% of the strafe cap, the owner judges it the intended quick
+        //    sidestep, and wants room to push it FURTHER. So 100% was never the line
+        //    and "30 to 60%" was never the target range.
+        //
+        //    Fires at 300% now, matching the DerivedDodge band that says the same
+        //    word. FOURTH instance in this project of a check crying wolf during
+        //    correct play, and the lesson keeps being the same one: a check that
+        //    fires while the tuning is good gets ignored, which costs more than
+        //    having no check. When a band is recalibrated, grep for every other
+        //    place that reads the same quantity.
         float dodge = DodgeDeltaV;
 
-        if (strafeCap > 0f && dodge >= strafeCap)
-            Warn(ref any, $"A dodge is worth {dodge / strafeCap * 100f:F0}% of the strafe cap. At or above "
-                        + "100% it stops reading as a sidestep and starts reading as a teleport, which is "
-                        + "hard to follow at speed and hard to shoot at. Lower Dodge Force, or raise Strafe "
-                        + "Top Speed so the burst is a smaller share of it. 30 to 60% is the sharp-sidestep "
-                        + "range.", MessageType.Warning);
+        if (strafeCap > 0f && dodge >= strafeCap * 3f)
+            Warn(ref any, $"A dodge is worth {dodge / strafeCap * 100f:F0}% of the strafe cap. Past about "
+                        + "300% it stops reading as a juke and starts reading as a teleport, which is hard "
+                        + "to follow at speed and hard to shoot at. Lower Dodge Force, or raise Strafe Top "
+                        + "Speed so the burst is a smaller share of it. Anything over 100% is an additive "
+                        + "burst that bleeds back down rather than a speed change, and that is intended.",
+                        MessageType.Warning);
     }
 
     // -------------------------------------------------------------------------

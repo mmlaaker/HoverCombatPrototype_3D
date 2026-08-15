@@ -114,7 +114,23 @@ Fifteen things were judged GOOD in this session and are recorded in `CLAUDE.md` 
 not here. Read that list before changing anything in this tier: several items below are bounded by
 something already confirmed to feel right, and the confirmations are the acceptance criteria.
 
-### M.1 Flip recovery has an unrecoverable band on the ARM side
+### M.1 ~~Flip recovery has an unrecoverable band on the ARM side~~ — CLOSED, fixed 2026-08-12 in `af7d531`
+
+**Fixed exactly as this item specified, and the entry simply never got closed.** Verified against the
+code 2026-08-14.
+
+The cause was one number doing two jobs. `flipRecoveryAngleThreshold` 80 governed both "you are
+downed" and "righting may arm", so the band below it was too tilted to drive and not tilted enough
+to authorize righting. The fix splits them: a new **`flipRecoveryArmAngle` 70** now arms righting,
+while `flipRecoveryAngleThreshold` 80 still governs the downed lockout. The release guard and the
+half-angle check were repointed at the arm angle too, and the gizmo now prints both numbers
+separately rather than the single misleading `tilt 80deg (need 80)`.
+
+**One honest caveat:** the arming gap did not vanish, it moved down 10 degrees. The specific
+reported failure at 80 degrees is definitively fixed, but nothing has proved the craft can still
+drive at every tilt below 70, which is what would make the band empty rather than smaller. No
+occurrence has been seen since. Reopen with a gizmo reading if one ever is.
+
 
 The craft can come to rest at a tilt just under `flipRecoveryAngleThreshold` (80), too flipped to
 drive and not flipped enough to authorize righting. Caught on screenshot 2026-08-08, gizmo reading:
@@ -141,7 +157,18 @@ because it is frequent.
 **This is the justification `HoverController_Foundation` requires for modification.** Caveat to check
 first: the gizmo rounds, so 80 may be 79.6. That does not change the mechanism.
 
-### M.2 Boost camera effects stack onto strafe mode. They must not
+### M.2 ~~Boost camera effects stack onto strafe mode~~ — CLOSED, fixed 2026-08-12 in `af7d531`
+
+**Fixed and then over-delivered; the entry never got closed.** Verified against the code 2026-08-14.
+
+`SolveStrafeFraming` now contributes **nothing** from boost, lens included, so strafe has the full
+crosshair authority with zero modifiers that the owner asked for. The rule then got a better
+justification than it was given: measured 2026-08-13, the reticle is **not** centred -- it is a world
+point projected to screen and sits ~477px above centre -- and a projected point moves radially with
+the lens, so the old +4 degree kick was dragging the crosshair **35 pixels** across the screen. The
+original defence ("FOV cannot move a centred crosshair") was true of a crosshair this game does not
+have.
+
 
 Owner rule, stated 2026-08-11: **strafe mode gets full crosshair authority with zero modifiers.**
 Resting in strafe with throttle forward currently makes the camera look up.
@@ -224,7 +251,31 @@ the player sees rather than the frame the solver intended.
 from wherever the previous test left it, so no two were comparable and one apparent regression was
 pure starting-state noise. **Pin position, rotation and velocity before any camera framing test.**
 
-### M.4 The dodge validator models an unopposed impulse and cries wolf
+### M.4 ~~The dodge validator models an unopposed impulse and cries wolf~~ — CLOSED 2026-08-14
+
+**Validated 2026-08-14, and this item's own premise was wrong.** It claimed the formula described
+"a quantity the player never experiences" because damping opposes the burst during and after it.
+Measurement on 2026-08-11 says otherwise: **open-loop predicted a 52.00 m/s peak and the craft
+measured 52.81**, within 1.6%. The formula is accurate and needed no denominator. No play-mode run
+was required to settle this; the run had already happened.
+
+What was actually wrong was only the perceptual label, and the `DerivedDodge` bands were
+recalibrated the same day. At the shipped values (`dodgeForce` **900**, `dodgeDuration` 0.15,
+`strafeTopSpeed` **53**) the readout is 72.0 m/s, **136% of cap**, which now reads "a strong juke".
+Note those values have moved since this item was written, which quoted 650 and 40.
+
+**The recalibration missed a second copy, found and fixed 2026-08-14.** A standalone validator
+warning in `ValidateProfile` read the same `DodgeDeltaV` and still fired at `>= 100%` with the
+discredited text, so the derived readout said "strong juke" while the warning box under it said
+"teleport" about the identical number. Re-aligned to fire at 300%, matching the band that uses the
+same word.
+
+**Fourth instance of a check crying wolf during correct play** after the Movement gizmo's drive/drag
+warning, the camera framing verdict, and `FrameSpikeWatch`'s throttling verdict (0.11). The new part
+of the lesson is the duplicate: **when a band is recalibrated, grep for every other place that reads
+the same quantity.** One was fixed and one was not, and the pair disagreed in the same inspector for
+three days.
+
 
 `VehicleTuningProfileEditor.DerivedDodge` computes delta-v as `force x (duration + fixedDeltaTime) / 2`
 and divides by `strafeTopSpeed` 40. At `dodgeForce` 650 over `dodgeDuration` 0.15 that exceeds 100%
@@ -321,7 +372,7 @@ value back from the file rather than the inspector.
 
 <details><summary>Original item</summary>
 
-### M.5 Speed. Raise top speed, lower the boost multiplier
+### M.5-original ~~Speed. Raise top speed, lower the boost multiplier~~ (superseded, kept for the reasoning)
 
 Owner, 2026-08-11: top speed feels too slow. `VTP_Default` is the "Sedan", average in everything,
 and it is still too slow. **Reported both before and after the environment rescale**, so it stands on
@@ -403,7 +454,7 @@ speed lines rather than more gravity.
 
 <details><summary>Original item</summary>
 
-### M.6 Airtime. Raise fall force, and decide what that costs the trick economy
+### M.6-original ~~Airtime. Raise fall force, and decide what that costs the trick economy~~ (superseded, kept for the reasoning)
 
 Owner: long airtime reads "a tad floaty". Wants more falling force. Also wants the tap jump slightly
 less floaty.
@@ -444,7 +495,12 @@ never happening today. That may be desirable. It should be a decision, not a sur
 
 </details>
 
-### M.8 Air jump direction is right, magnitude is not — REOPENED 2026-08-14
+### M.8 ~~Air jump direction is right, magnitude is not~~ — CLOSED 2026-08-14, JUDGED GOOD
+
+**Fixed by the fall cancel, NOT by raising the impulse.** `airJumpFallCancel` 0.6 shipped,
+`airJumpImpulse` left at 20. Owner's verdict on the first playtest: "air jump feels good now."
+Worth keeping the reasoning below, because the obvious change was the wrong one: the ability did
+not need more force, it needed to stop depending on when it was pressed.
 
 **Owner's verdict 2026-08-14: the craft-up direction is correct and stays. It "feels kinda weak if
 not aimed directly downwards."** So the M.8 fix below is accepted; what is open is how much it
@@ -611,7 +667,7 @@ and the drift chatters against its own floor.
 - `driftHopImpulse` 10 was left alone, but M.7 flagged that the bleed would change how the entry
   reads. Entry now sheds ~28 m/s in the first 1.5s.
 
-### M.7-original Drift. Add a time cost, and more path curvature control (superseded, kept for the reasoning)
+### M.7-original ~~Drift. Add a time cost, and more path curvature control~~ (superseded, kept for the reasoning)
 
 **Target named by the owner 2026-08-11: the Crash Team Racing power slide, without the boost
 mechanics.** That is now the reference. Confirmed working already: holding line of sight on a target
@@ -650,7 +706,7 @@ protecting in implementation.
 Mechanism is already specced in 2.10 and not repeated here. Note the coupling to M.6: if trick
 energy is paid by ROTATION COUNT rather than airtime, the fall-gravity conflict mostly dissolves.
 
-### M.11 Camera authority when the player has none. One feature, two triggers
+### M.11 Camera authority when the player has none. One feature, two triggers — TOP PRIORITY 2026-08-14
 
 Two requests from this session that are the same feature:
 
@@ -752,7 +808,7 @@ air-control weight. So air control does not suppress yaw, it **rotates the axis 
 Rolled 90 degrees, yaw input pitches you in world terms. That is why steering feels absent during a
 trick while measuring as fully live.
 
-### M.12 Boost presentation FX: vignette, speed lines, duration-based rumble
+### M.12 Boost presentation FX: vignette, speed lines, duration-based rumble — DEFERRED to PRE-ALPHA 2
 
 **DEFERRED BY THE OWNER 2026-08-13, to be picked up with the general FX quality pass.** Their
 reasoning: the whole FX layer is currently super basic, and this should be built alongside raising
@@ -949,8 +1005,8 @@ Still genuinely open:
 
 | Claim | Status |
 |---|---|
-| Bumpy terrain may have improved for free, since leveling now fades as you crest | **Untested.** Could equally read as less planted. Owner had deprioritised bumps because arenas are planned smooth |
-| The drift angle ceiling reads as settling rather than hitting a wall | **Untested at the shipped `maxDriftAngle`.** Feel question. See 2.3 |
+| ~~Bumpy terrain may have improved for free~~ | **CLOSED 2026-08-14, judged good.** Owner: bumpy terrain "got much better", and credits the smoothed-normals change (`7190523`) rather than the levelling fade alone. The "could read as less planted" worry did not materialise |
+| ~~The drift angle ceiling reads as settling rather than hitting a wall~~ | **CLOSED 2026-08-14.** Owner: the drift angle is in a fine state. Judged at the shipped `maxDriftAngle` after the M.7 work |
 | Boosted strafe at 60 omni does not cause strafe camping | **Untested and untestable by script.** Needs a human under combat pressure. See 5.11 |
 | Weapon physics beyond knockback | **Partly closed.** Missile, EMP and HardLock detonation and knockback are now verified (0.1). The Shotgun, Machine Gun and Chain Gun particle paths are not, and 1.3 means damage is zero on most of them anyway |
 
@@ -1017,7 +1073,7 @@ before it was attributable, and the next person to see that number should not re
 
 <details><summary>Superseded original entry</summary>
 
-### 0.8 Nineteen floor collisions in one session, unattributed
+### 0.8-original ~~Nineteen floor collisions in one session, unattributed~~ (superseded by the entry above, kept for the reasoning)
 `MotionTrace` v1.1 recorded 19 contacts in the 2026-08-11 session and **all 19 were floor-normal
 (normal.y > 0.7), zero wall-ish**, hardest 89894 Ns against `mountain5`. The earlier session showed
 26 velocity discontinuities past 1000 m/s^2, confirmed against `rb.linearVelocity` rather than
@@ -1046,7 +1102,7 @@ not a defect, and it was ruled out as the cause of the air-control whip (the two
 that the whip no longer masks it, since the owner's own hypothesis blamed boost and that instinct may
 be tracking this rather than nothing.
 
-### 0.10 Hard steering plus brake at speed produces a 78 degree slide. Decide if that is wanted
+### 0.10 ~~Hard steering plus brake at speed produces a 78 degree slide~~ — CLOSED 2026-08-13, NO ACTION
 Found while chasing a landing marker that turned out not to be a camera fault at all. Measured
 2026-08-11 at t=88.47: the craft lands at **84 m/s**, the player holds **full steering lock for 0.6s**
 while pulling **full reverse** (which doubles as the brake), and the craft ends up travelling **78
@@ -1577,7 +1633,17 @@ landings from jumps for the first time, without touching `hardLandingMinSpeed` a
 
 </details>
 
-### 2.10 Energy is permanently tight, and tricks should probably pay it back
+### 2.10 Energy is permanently tight, and tricks should probably pay it back — SAME WORK AS M.10
+
+**Filed in Tier 2 but it is a movement item, and that split has already caused confusion.** `M.10`
+holds the owner's risk/reward framing and the priority; this entry holds the mechanism and the
+budget arithmetic. One job, two homes, because it was raised as a feedback complaint before it
+became a movement feature. Read both.
+
+**Arithmetic below is stale as of M.9.** It says every jump costs 25; the shipped costs are now tap
+**10**, full charge **25**, air jump **15**, so the most common jump is 2.5x cheaper than this
+paragraph assumes and the economy is already less tight than described. The boost figures are
+unaffected.
 Owner: "I feel like I'm always in need of more energy, mostly for boosting and jumping", plus the
 suggestion to reward landed aerial tricks with energy.
 
@@ -1897,7 +1963,11 @@ off. `IsDowned` is the thing that would block it, and only on CONTACT past `flip
 -- a craft hovering the wall without touching it keeps full control by design, which is already
 documented as deliberate in `CLAUDE.md`.
 
-### 5.11 Boosted strafe reaches unboosted drive top speed — NARROWED 2026-08-12, not closed
+### 5.11 Boosted strafe reaches unboosted drive top speed — NARROWED 2026-08-12, DEFERRED to PRE-ALPHA 2
+
+Deferred by the owner 2026-08-14, and the deferral is principled rather than a punt: the open
+question is whether players CAMP in strafe under combat pressure, and there is no combat to apply
+pressure until weapons deal damage (1.3). It cannot be answered before then.
 
 **Improved for free by M.5, from 100% to 83%.** Lowering `boostSpeedMultiplier` to 1.25 while raising
 `topSpeed` to 80 puts boosted omnidirectional strafe at **66.3 m/s against a drive top speed of 80**,
