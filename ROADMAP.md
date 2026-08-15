@@ -32,10 +32,13 @@ What stands in the way:
 |---|---|
 | **M.11** | **TOP PRIORITY.** Camera authority when the player has none. One feature, two triggers |
 | **M.3** | the craft leaves frame while the camera pitches up. Cause localised to `Measure` |
-| **M.10** / **2.10** | trick energy economy. **The only open item that changes how movement PLAYS rather than how it behaves**, and the likeliest source of the missing 7% |
 | **M.13** | strafe camera view retune. Owner's own task; retune the view first, then match `reticleProjectionDistance` |
 | **5.6** | `flipRecoverySpeedThreshold` 2 is an unconfirmed guess |
 | **0.7** | confirm the marker key works in a build, and measure allocation under sustained fire |
+
+Closed on 2026-08-15: **M.10** / **2.10**, the trick energy economy, built and judged good in one
+session. That was the last open item that changes how movement PLAYS rather than how it behaves, so
+what remains on this milestone is one bug (M.3), one feature (M.11), and three checks.
 
 Closed on 2026-08-14 after verification: **M.1** and **M.2** were both fixed on 2026-08-12 in
 `af7d531` and never marked; **M.4** validated, its premise disproved and a duplicate stale warning

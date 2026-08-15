@@ -102,16 +102,19 @@ MonoBehaviour:
   energy:
     maxEnergy: 100
     startingEnergy: 100
-    regenRate: 10
+    regenRate: 20
+    regenRequiresGround: 1
     regenDelay: 1
     trickBarrelRollEnergy: 10
     trickBarrelRollRepeatEnergy: 15
     trickFlipEnergy: 25
     trickFlipRepeatEnergy: 30
     trickCorkscrewMultiplier: 0.5
-    trickMaxLandingRollAngle: 45
-    trickMaxLandingFlipAngle: 45
-    trickMinRotations: 0.25
+    trickPayoutRounding: 5
+    trickCleanAxisTolerance: 0.8
+    trickRevolutionThreshold: 0.85
+    trickMaxLandingRollAngle: 50
+    trickMaxLandingFlipAngle: 70
     trickSettleSeconds: 0.25
   health:
     maxHealth: 100

@@ -171,6 +171,34 @@ public class VehicleHUD : MonoBehaviour
     [SerializeField] private Color lockColorLocked = Color.green;
 
     // =========================================================================
+    // 🌀 Trick tracker
+    // =========================================================================
+    [Header("🌀 Trick Tracker")]
+    [Tooltip("Counts revolutions while a trick is in escrow, then reports the outcome. " +
+             "Leave unassigned to disable the tracker entirely.")]
+    [SerializeField] private TextMeshProUGUI trickText;
+
+    [Tooltip("Colour while the trick is still in the air and can still be lost.")]
+    [SerializeField] private Color trickColorPending = Color.white;
+
+    [Tooltip("Colour when the trick is landed and paid. Match it to the energy bar, " +
+             "because the payout IS energy and the two should read as the same currency.")]
+    [SerializeField] private Color trickColorLanded = new Color(0.2f, 0.7f, 1f);
+
+    [Tooltip("Colour when the trick is lost, either by landing badly or by going down.")]
+    [SerializeField] private Color trickColorLost = new Color(0.9f, 0.15f, 0.1f);
+
+    [Tooltip("How long the outcome holds at full opacity before it starts to fade.")]
+    [SerializeField] private float trickOutcomeHold = 0.8f;
+
+    [Tooltip("How long the outcome takes to fade away after the hold.")]
+    [SerializeField] private float trickOutcomeFade = 0.5f;
+
+    [Tooltip("Append the energy earned to a landed trick. Turn off for a cleaner read " +
+             "once the payouts are tuned and you no longer need to see the number.")]
+    [SerializeField] private bool trickShowPayout = true;
+
+    // =========================================================================
     // Runtime references
     // =========================================================================
 
@@ -179,6 +207,14 @@ public class VehicleHUD : MonoBehaviour
     private HoverController_Weapons    _weapons;
     private HoverController_Propulsion _propulsion;
     private HoverController_Shield     _shield;
+    private HoverController_Tricks     _tricks;
+
+    // Outcome playback. While this is running the tracker stops following the live
+    // counts, because the flight it was describing is over and the last thing the
+    // player saw should be what happened to it.
+    private bool  _trickShowingOutcome;
+    private float _trickOutcomeTimer;
+    private Color _trickOutcomeColor;
 
     // Only EMP freeze is tracked locally — it has no per-frame readable equivalent
     // on the energy component that covers the full freeze window reliably.
@@ -204,6 +240,7 @@ public class VehicleHUD : MonoBehaviour
         _weapons    = vehicleRoot.GetComponentInChildren<HoverController_Weapons>();
         _propulsion = vehicleRoot.GetComponentInChildren<HoverController_Propulsion>();
         _shield     = vehicleRoot.GetComponentInChildren<HoverController_Shield>();
+        _tricks     = vehicleRoot.GetComponentInChildren<HoverController_Tricks>();
 
         if (_health     == null) Debug.LogWarning("[VehicleHUD] VehicleHealth not found on vehicleRoot.", this);
         if (_energy     == null) Debug.LogWarning("[VehicleHUD] HoverController_Energy not found on vehicleRoot.", this);
@@ -240,6 +277,11 @@ public class VehicleHUD : MonoBehaviour
             _shield.OnShieldActivated   += HandleShieldActivated;
             _shield.OnShieldDeactivated += HandleShieldDeactivated;
         }
+
+        // Deliberately not warned about when missing, unlike the modules above: the
+        // tracker is optional, and an AI craft has no Tricks component at all.
+        if (_tricks != null)
+            _tricks.OnTrickResolved += HandleTrickResolved;
     }
 
     private void Start()
@@ -275,6 +317,9 @@ public class VehicleHUD : MonoBehaviour
             _shield.OnShieldActivated   -= HandleShieldActivated;
             _shield.OnShieldDeactivated -= HandleShieldDeactivated;
         }
+
+        if (_tricks != null)
+            _tricks.OnTrickResolved -= HandleTrickResolved;
     }
 
     /// <summary>
@@ -297,6 +342,7 @@ public class VehicleHUD : MonoBehaviour
         _wasRegenerating = isRegen;
 
         SyncReticle();
+        SyncTrickTracker();
 
         // HandleLockStateChanged only fires on transitions, so the fill bar
         // would snap 0 → 1 instead of animating. Poll while Scanning to tween it.
@@ -326,6 +372,110 @@ public class VehicleHUD : MonoBehaviour
         SetText(healthText, "0");
         if (healthFill != null)
             healthFill.color = healthColorEmpty;
+    }
+
+    // =========================================================================
+    // Trick tracker
+    // =========================================================================
+
+    /// <summary>
+    /// Follows the live revolution counts while a trick is in the air, and stands
+    /// aside while an outcome is playing out.
+    ///
+    /// Polled rather than event-driven, unlike the rest of this class, because the
+    /// counter changes continuously with rotation rather than on discrete
+    /// transitions. Only the OUTCOME is an event, and that one genuinely is a
+    /// moment. Same reasoning as the missile lock fill, which is polled while
+    /// Scanning for exactly the same reason.
+    /// </summary>
+    private void SyncTrickTracker()
+    {
+        if (trickText == null)
+            return;
+
+        if (_trickShowingOutcome)
+        {
+            _trickOutcomeTimer -= Time.deltaTime;
+
+            if (_trickOutcomeTimer <= 0f)
+            {
+                _trickShowingOutcome = false;
+                trickText.text = string.Empty;
+                return;
+            }
+
+            // The timer runs hold-then-fade as one countdown, so the fade is simply
+            // the last trickOutcomeFade seconds of it.
+            Color fading = _trickOutcomeColor;
+            fading.a = trickOutcomeFade > 0f
+                ? Mathf.Clamp01(_trickOutcomeTimer / trickOutcomeFade)
+                : 1f;
+            trickText.color = fading;
+            return;
+        }
+
+        if (_tricks == null || !_tricks.IsTracking)
+        {
+            if (trickText.text.Length > 0)
+                trickText.text = string.Empty;
+            return;
+        }
+
+        string label = BuildTrickLabel(_tricks.BarrelRollCount, _tricks.FlipCount);
+
+        // Empty until a full revolution is on the board. A trick reads as a trick
+        // once it has come all the way round, and showing a fraction of one would
+        // put a number on screen for every wobble.
+        if (label.Length == 0)
+        {
+            if (trickText.text.Length > 0)
+                trickText.text = string.Empty;
+            return;
+        }
+
+        trickText.text  = label;
+        trickText.color = trickColorPending;
+    }
+
+    /// <summary>"Barrel Roll x2 + Flip x1", or empty when nothing has come round yet.</summary>
+    private static string BuildTrickLabel(int rolls, int flips)
+    {
+        if (rolls > 0 && flips > 0) return $"Barrel Roll x{rolls} + Flip x{flips}";
+        if (rolls > 0)              return $"Barrel Roll x{rolls}";
+        if (flips > 0)              return $"Flip x{flips}";
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// Freezes the label at whatever the flight earned and recolours it by outcome.
+    /// Reads the counts live because Tricks raises this before it clears them.
+    /// </summary>
+    private void HandleTrickResolved(bool banked, float energy)
+    {
+        if (trickText == null || _tricks == null)
+            return;
+
+        string label = BuildTrickLabel(_tricks.BarrelRollCount, _tricks.FlipCount);
+
+        // Nothing ever appeared, so nothing should flash. A flight that never
+        // completed a revolution is not a failed trick, it is just a jump.
+        if (label.Length == 0)
+        {
+            _trickShowingOutcome = false;
+            trickText.text = string.Empty;
+            return;
+        }
+
+        if (banked && trickShowPayout && energy > 0f)
+            label += $"   +{Mathf.RoundToInt(energy)}";
+
+        _trickOutcomeColor   = banked ? trickColorLanded : trickColorLost;
+        _trickOutcomeColor.a = 1f;
+
+        trickText.text       = label;
+        trickText.color      = _trickOutcomeColor;
+        _trickShowingOutcome = true;
+        _trickOutcomeTimer   = trickOutcomeHold + trickOutcomeFade;
     }
 
     // =========================================================================

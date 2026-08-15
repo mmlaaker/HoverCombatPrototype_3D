@@ -1,7 +1,18 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Tricks v1.1
+/// HoverController_Tricks v1.5
+///
+/// v1.5: trickPayoutRounding. A corkscrew-discounted payout is rounded to the
+/// nearest increment, and only a discounted one, since a clean trick already lands
+/// on a round number and rounding it could only move an authored value. Nearest
+/// rather than upward because rounding up erases any discount smaller than one
+/// increment, which is most of them: two rolls at a mild penalty are 21.88, and the
+/// next increment of five is 25, the undiscounted price exactly.
+///
+/// v1.4: trickCleanAxisTolerance. The corkscrew discount used to ramp from the
+/// instant a rotation was less than perfect, so a flip six degrees off the stick's
+/// axis quietly lost a tenth of its payout. See the corkscrew note below.
 ///
 /// Pays energy for rotations landed in the air. The other half of the energy
 /// economy: the pool refills by waiting for regen OR by landing tricks, and the
@@ -27,41 +38,60 @@ using UnityEngine;
 ///   PITCH and ROLL only. Yaw is excluded: a flat spin is neither trick, and
 ///   paying for it would make sitting on the stick an income.
 ///
-///   Rotation rate is the MAGNITUDE of the pitch/roll pair, not their sum. This
-///   is the whole reason a corkscrew needs no special case, and getting it wrong
-///   is not a rounding error: summing components pays a diagonal rotation about
-///   1.41x for the same actual rotation, purely because two components of one
-///   vector were added as though they were separate rotations. Compare
-///   measurement trap 19, which is the same mistake in the linear axes.
+///   Body frame is correct HERE, and that is worth stating because measurement
+///   trap 19 warns against exactly this substitution. A flip and a roll are
+///   defined by the craft's own axes; asking which world axis it turned about
+///   would give a different answer for the same trick depending on which way the
+///   player happened to be facing.
 ///
-///   Body frame is correct HERE, and that is worth stating because trap 19 warns
-///   against exactly this substitution. A flip and a roll are defined by the
-///   craft's own axes; asking which world axis it turned about would give a
-///   different answer for the same trick depending on which way the player
-///   happened to be facing.
+/// COMPLETED REVOLUTIONS, NOT TOTAL TRAVEL (v1.3)
+///
+///   A revolution is banked the moment the axis comes all the way round, and
+///   nothing afterwards can take it back. Progress toward the next one is SIGNED,
+///   so turning back unwinds it.
+///
+///   v1.2 accumulated the ABSOLUTE rate, which measured how far the craft turned
+///   in total and never where it ended up. Measured: half a barrel roll out and
+///   straight back again scored 0.989 rotations and paid 9.9 energy, with the
+///   craft finishing three degrees from where it started. Wobbling the stick was
+///   an income. Direction has to be part of the sum.
+///
+///   Banking on the CROSSING rather than on net displacement is what makes this
+///   safe for real play. Net displacement would have been the obvious fix and it
+///   is wrong: over-rotating a flip and pitching back to straighten up for the
+///   landing would have eaten the flip you just earned, which charges the player
+///   for the technique that makes a landing clean. Once round is once round.
+///
+///   It also makes the payout and the HUD the same number by construction. v1.2
+///   could pay 9.9 while the tracker displayed nothing, because one was continuous
+///   and the other floored to whole turns.
 ///
 /// WHAT IT PAYS
 ///
-///   Two independent ledgers, rolls and flips, each priced by naming the event
-///   rather than by a curve: the first one pays one price and every one after it
-///   pays another. Flips are priced higher because a flip costs roughly twice the
-///   airtime of a roll, so pricing them equally would make rolls strictly the
-///   better income and turn flips into decoration.
+///   Two independent ledgers, rolls and flips, each priced by naming the event:
+///   the first one pays one price and every one after it pays another. Flips are
+///   priced higher because a flip costs roughly twice the airtime of a roll, so
+///   pricing them equally would make rolls strictly the better income and turn
+///   flips into decoration.
 ///
-///   Both ledgers are continuous. A partial first rotation pays pro rata, so a
-///   trick that lands at 1.8 rolls is not silently worth the same as one that
-///   lands at 1.0, and nothing has to be rounded or snapped.
+///   The corkscrew multiplier scales the PAYOUT, not the accrual. It is applied as
+///   a flight-level average of how diagonal the rotation was, weighted by how much
+///   rotation happened at each moment, so a flight flown clean pays full and one
+///   flown entirely on the diagonal pays the multiplier. Scaling the accrual
+///   instead (as v1.2 did) meant a diagonal turn fed each axis at half rate and
+///   completed neither, so corkscrews would have needed four revolutions to bank
+///   anything and were effectively worthless.
 ///
-///   Every tick's rotation is split between the two ledgers by how much of it is
-///   nose-over-tail, so a corkscrew feeds both. On top of that split it is scaled
-///   by trickCorkscrewMultiplier, on a SLOPE rather than a cliff: a nearly clean
-///   roll is barely touched and the full effect lands only on a rotation split
-///   evenly between the axes. A threshold would have produced a visible edge where
-///   a slightly untidy roll suddenly paid a different price.
+///   That discount only starts outside trickCleanAxisTolerance. v1.3 ramped it from
+///   the instant a rotation was less than perfect, which shorted a flip that read as
+///   clean: a stick six degrees off axis lost a tenth of the payout for a trick the
+///   player would call textbook. Nobody can hold a thumbstick to a degree, so the
+///   band is what makes the discount describe a genuine corkscrew rather than
+///   ordinary human aim.
 ///
-/// LANDING IT (v1.1)
+/// LANDING IT
 ///
-///   Two gates, and the first one is the reason this version exists.
+///   Two gates.
 ///
 ///   ARRIVAL. The craft's attitude is sampled the moment it reaches the ground,
 ///   decomposed into bank and nose-over-tail against the SURFACE NORMAL rather
@@ -91,10 +121,7 @@ using UnityEngine;
 ///     nothing; it reads as airborne while physically lying on the floor.
 ///
 ///   So arrival is whichever lands first, and the surface normal comes from the
-///   contact when there was one and from the hover rays otherwise. Watching only
-///   support, as v1.0 did, meant a side landing never resolved AT ALL: it stayed
-///   pending until flip recovery righted the craft and then paid out for a clean
-///   landing it never made.
+///   contact when there was one and from the hover rays otherwise.
 ///
 ///   Wall scrapes are filtered out by contact normal, so clipping a wall mid-trick
 ///   does not count as arriving. Hard landings are explicitly fine: impact speed is
@@ -105,10 +132,6 @@ using UnityEngine;
 ///   and clears the arrival sample once the craft is properly clear of the ground,
 ///   so a bounce into another rotation is the same trick continuing and the
 ///   landing that gets judged is the one it finishes on.
-///
-/// DELIBERATELY ABSENT: an OnTrickBanked event. Nothing consumes one yet, and
-/// three events were deleted from this project for being raised with no
-/// subscriber. Add it when a HUD or VFX consumer actually exists.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class HoverController_Tricks : MonoBehaviour
@@ -167,6 +190,33 @@ public class HoverController_Tricks : MonoBehaviour
     private const float ArrivalResetSeconds = 0.2f;
 
     // -------------------------------------------------------------------------
+    // 📢 Public state and events
+    // -------------------------------------------------------------------------
+
+    /// <summary>Completed barrel rolls banked on the current flight.</summary>
+    public int BarrelRollCount => _rollCount;
+
+    /// <summary>Completed flips banked on the current flight.</summary>
+    public int FlipCount => _flipCount;
+
+    /// <summary>True while a flight is being scored, whether or not it has earned anything yet.</summary>
+    public bool IsTracking => _armed;
+
+    /// <summary>Energy the current flight would pay if it landed cleanly right now.</summary>
+    public float EscrowEnergy => PendingPayout();
+
+    /// <summary>
+    /// Raised once when a flight resolves. First argument is whether it was landed,
+    /// second is the energy that actually reached the pool, which is lower than the
+    /// payout when the pool was already full.
+    ///
+    /// Added in v1.2 rather than v1.0 on purpose: this project has deleted three
+    /// events that were raised with no subscriber. VehicleHUD's trick tracker is
+    /// the subscriber that justifies it.
+    /// </summary>
+    public event System.Action<bool, float> OnTrickResolved;
+
+    // -------------------------------------------------------------------------
     // Runtime
     // -------------------------------------------------------------------------
     private HoverController_Foundation foundation;
@@ -177,14 +227,24 @@ public class HoverController_Tricks : MonoBehaviour
     /// <summary>Air control has engaged during the current flight, so rotation counts.</summary>
     private bool _armed;
 
-    /// <summary>Barrel roll rotations accumulated this flight.</summary>
-    private float _rollRotations;
+    /// <summary>Completed revolutions banked this flight. Never decremented.</summary>
+    private int _rollCount;
+    private int _flipCount;
 
-    /// <summary>Flip rotations accumulated this flight.</summary>
-    private float _flipRotations;
+    /// <summary>
+    /// SIGNED progress toward the next revolution on each axis, in turns. Turning
+    /// back unwinds it, which is what stops a wobble from paying.
+    /// </summary>
+    private float _rollProgress;
+    private float _flipProgress;
 
-    /// <summary>Everything turned this flight, for the minimum-trick test and the readout.</summary>
-    private float TotalRotations => _rollRotations + _flipRotations;
+    /// <summary>
+    /// Rotation-weighted sum of how diagonal the turning was, and the total rotation
+    /// it is weighted against. Their ratio is the flight's average diagonal-ness,
+    /// which is what the corkscrew multiplier scales the payout by.
+    /// </summary>
+    private float _mixSum;
+    private float _mixWeight;
 
     /// <summary>Hysteresis state for the airborne/landed test. See AirborneSupport.</summary>
     private bool _grounded = true;
@@ -213,7 +273,8 @@ public class HoverController_Tricks : MonoBehaviour
     // outcome that has already happened. Never read by gameplay.
     private float  _dbgLastPayout;
     private float  _dbgLastGranted;
-    private float  _dbgLastRotations;
+    private int    _dbgLastRolls;
+    private int    _dbgLastFlips;
     private bool   _dbgLastWasBanked;
     private string _dbgLastReason = "";
     private float  _dbgLastResolveTime = float.NegativeInfinity;
@@ -361,28 +422,74 @@ public class HoverController_Tricks : MonoBehaviour
         // Body frame is the correct frame here; see the class summary.
         Vector3 localAngVel = transform.InverseTransformDirection(rb.angularVelocity);
 
-        float pitchRate = Mathf.Abs(localAngVel.x);
-        float rollRate  = Mathf.Abs(localAngVel.z);
+        // SIGNED, so turning back unwinds progress instead of adding to it.
+        float pitchRate = localAngVel.x;
+        float rollRate  = localAngVel.z;
 
-        // MAGNITUDE, not the sum. Summing would pay a diagonal rotation about 1.41x
-        // for the same actual rotation.
-        float rate = Mathf.Sqrt(pitchRate * pitchRate + rollRate * rollRate);
+        float absPitch = Mathf.Abs(pitchRate);
+        float absRoll  = Mathf.Abs(rollRate);
+
+        // Magnitude, not the sum, so a diagonal rotation is measured honestly.
+        float rate = Mathf.Sqrt(absPitch * absPitch + absRoll * absRoll);
         if (rate <= 0f)
             return;
 
-        // rate > 0 guarantees pitchRate + rollRate > 0, so this cannot divide by zero.
-        // 0 is a clean barrel roll, 1 is a clean flip, 0.5 is an even corkscrew.
-        float pitchShare = pitchRate / (pitchRate + rollRate);
+        // Diagonal-ness: 0 on a clean axis, 1 on an evenly split corkscrew. Averaged
+        // over the flight and applied to the PAYOUT rather than to the accrual, so a
+        // corkscrew still completes revolutions at the normal rate.
+        float pitchShare = absPitch / (absPitch + absRoll);
 
-        // Peaks at 1 when the rotation is split evenly and falls to 0 at either
-        // clean axis, so the corkscrew multiplier arrives as a slope.
-        float mix = 1f - Mathf.Abs(2f * pitchShare - 1f);
+        // Purity is how much of the turning is on its dominant axis: 1 is perfectly
+        // clean, 0.5 is an even corkscrew. Working from the dominant axis rather than
+        // from pitchShare directly is what makes this symmetric between rolls and flips.
+        float purity = Mathf.Max(pitchShare, 1f - pitchShare);
+        float tol    = E.trickCleanAxisTolerance;
 
-        float rotations = rate * dt / (2f * Mathf.PI)
-                        * Mathf.Lerp(1f, E.trickCorkscrewMultiplier, mix);
+        // A tolerance BAND rather than a point. Without it the discount begins the
+        // instant a rotation is not perfect, so a flip a few degrees off the stick's
+        // axis was quietly shorted despite reading as clean. Inside the band it is
+        // free; outside, the discount ramps smoothly to full at an even corkscrew.
+        float mix = (tol <= 0.5f || purity >= tol)
+            ? 0f
+            : (tol - purity) / (tol - 0.5f);
 
-        _flipRotations += rotations * pitchShare;
-        _rollRotations += rotations * (1f - pitchShare);
+        float travelled = rate * dt / (2f * Mathf.PI);
+
+        _mixSum    += mix * travelled;
+        _mixWeight += travelled;
+
+        _rollProgress += rollRate  * dt / (2f * Mathf.PI);
+        _flipProgress += pitchRate * dt / (2f * Mathf.PI);
+
+        float threshold = E.trickRevolutionThreshold;
+        BankRevolutions(ref _rollProgress, ref _rollCount, threshold);
+        BankRevolutions(ref _flipProgress, ref _flipCount, threshold);
+    }
+
+    /// <summary>
+    /// Converts signed progress into banked revolutions once it reaches the
+    /// threshold, keeping the remainder.
+    ///
+    /// Direction-agnostic on purpose: a turn to the left and a turn to the right
+    /// are both a completed revolution, and banking on the CROSSING is what makes a
+    /// counter-rotation to set up the landing free rather than costly.
+    ///
+    /// It subtracts the THRESHOLD rather than a whole turn, which is the part worth
+    /// understanding. Subtracting a whole turn would make the credit a one-time head
+    /// start, so the measurement's ~3% shortfall would accumulate and the fourth
+    /// revolution of a long spin would fail to clock even though the first three
+    /// did. Charging the threshold per revolution keeps the forgiveness constant, so
+    /// a spin of any length banks at the same rate. It also makes alternating
+    /// direction cost exactly what continuing costs, which removes the only way to
+    /// game a sub-1 threshold.
+    /// </summary>
+    private static void BankRevolutions(ref float progress, ref int count, float threshold)
+    {
+        if (threshold <= 0f)
+            return;
+
+        while (progress >= threshold)  { progress -= threshold; count++; }
+        while (progress <= -threshold) { progress += threshold; count++; }
     }
 
     /// <summary>
@@ -402,11 +509,11 @@ public class HoverController_Tricks : MonoBehaviour
         if (!_armed)
             return;
 
-        if (TotalRotations < E.trickMinRotations)
+        if (_rollCount == 0 && _flipCount == 0)
         {
-            // Landed, but nothing that reads as a trick. Cleared rather than banked,
-            // so a long straight jump cannot quietly accumulate wobble into a payout.
-            Resolve(false, "under minimum");
+            // Airborne, but nothing ever came all the way round. Cleared rather than
+            // banked: that was a jump, not a trick.
+            Resolve(false, "no revolution");
             return;
         }
 
@@ -433,7 +540,7 @@ public class HoverController_Tricks : MonoBehaviour
         _arrivalRoll = TiltAbout(transform.up, normal, transform.forward);
         _arrivalFlip = TiltAbout(transform.up, normal, transform.right);
 
-        bool tooBanked = Mathf.Abs(_arrivalRoll) > E.trickMaxLandingRollAngle;
+        bool tooBanked  = Mathf.Abs(_arrivalRoll) > E.trickMaxLandingRollAngle;
         bool tooPitched = Mathf.Abs(_arrivalFlip) > E.trickMaxLandingFlipAngle;
 
         if (tooBanked || tooPitched)
@@ -464,39 +571,64 @@ public class HoverController_Tricks : MonoBehaviour
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// One ledger's worth: the first rotation at its own price, everything after
-    /// it at the repeat price, with a partial first rotation paying pro rata.
+    /// One ledger's worth: the first revolution at its own price, every one after
+    /// it at the repeat price.
     /// </summary>
-    private static float Ledger(float rotations, float first, float repeat)
+    private static float Ledger(int count, float first, float repeat)
     {
-        if (rotations <= 0f)
+        if (count <= 0)
             return 0f;
 
-        if (rotations <= 1f)
-            return first * rotations;
-
-        return first + repeat * (rotations - 1f);
+        return first + repeat * (count - 1);
     }
 
     /// <summary>
-    /// Energy for a given pair of rotation counts. Public and static so an
+    /// Energy for a given pair of revolution counts. Public and static so an
     /// inspector readout and the runtime cannot disagree about what a trick is
     /// worth: one formula, both callers.
+    ///
+    /// corkscrewScale is the flight's average diagonal-ness already converted to a
+    /// multiplier, so this stays a pure function of numbers a caller can supply.
     /// </summary>
-    public static float PayoutFor(float rollRotations, float flipRotations, EnergyTuning tuning)
+    public static float PayoutFor(int rollCount, int flipCount, float corkscrewScale, EnergyTuning tuning)
     {
-        return Ledger(rollRotations, tuning.trickBarrelRollEnergy, tuning.trickBarrelRollRepeatEnergy)
-             + Ledger(flipRotations, tuning.trickFlipEnergy,       tuning.trickFlipRepeatEnergy);
+        float raw = Ledger(rollCount, tuning.trickBarrelRollEnergy, tuning.trickBarrelRollRepeatEnergy)
+                  + Ledger(flipCount, tuning.trickFlipEnergy,       tuning.trickFlipRepeatEnergy);
+
+        float payout = raw * corkscrewScale;
+
+        // Tidy the fractions the discount produces, and ONLY those. A clean trick is
+        // already a round number because the four prices are, so rounding it could
+        // only move a value that was set deliberately. The epsilon is for float
+        // noise in the scale, not a tolerance.
+        float step = tuning.trickPayoutRounding;
+        if (step > 0f && payout > 0f && corkscrewScale < 0.999f)
+        {
+            // Half-up rather than Mathf.Round, which is banker's rounding and would
+            // send 12.5 and 17.5 in opposite directions for no reason a player could
+            // follow.
+            payout = Mathf.Floor(payout / step + 0.5f) * step;
+
+            // A trick that earned something must never round away to nothing.
+            if (payout < step)
+                payout = step;
+        }
+
+        return payout;
     }
+
+    /// <summary>
+    /// How much the corkscrew multiplier is discounting this flight: 1 for rotation
+    /// flown clean, the tuned multiplier for rotation flown entirely on the
+    /// diagonal, weighted by how much turning happened at each moment.
+    /// </summary>
+    private float CorkscrewScale =>
+        _mixWeight > 0f
+            ? Mathf.Lerp(1f, E.trickCorkscrewMultiplier, _mixSum / _mixWeight)
+            : 1f;
 
     /// <summary>Payout the current flight would earn if it landed cleanly right now.</summary>
-    private float PendingPayout()
-    {
-        if (TotalRotations < E.trickMinRotations)
-            return 0f;
-
-        return PayoutFor(_rollRotations, _flipRotations, E);
-    }
+    private float PendingPayout() => PayoutFor(_rollCount, _flipCount, CorkscrewScale, E);
 
     /// <summary>
     /// Ends the current flight, paying out or forfeiting, and resets everything so
@@ -514,16 +646,27 @@ public class HoverController_Tricks : MonoBehaviour
 
         _dbgLastPayout      = payout;
         _dbgLastGranted     = granted;
-        _dbgLastRotations   = TotalRotations;
+        _dbgLastRolls       = _rollCount;
+        _dbgLastFlips       = _flipCount;
         _dbgLastWasBanked   = banked;
         _dbgLastReason      = reason;
         _dbgLastResolveTime = Time.unscaledTime;
 
-        _armed         = false;
-        _rollRotations = 0f;
-        _flipRotations = 0f;
-        _settling      = false;
-        _settleTimer   = 0f;
+        // Raised BEFORE the reset, deliberately: the payout has already been granted
+        // by this point, so the flight's state is complete and consistent, and a
+        // subscriber can read BarrelRollCount and FlipCount to describe what just
+        // happened. Raising it after would hand every listener zeroes.
+        OnTrickResolved?.Invoke(banked, granted);
+
+        _armed        = false;
+        _rollCount    = 0;
+        _flipCount    = 0;
+        _rollProgress = 0f;
+        _flipProgress = 0f;
+        _mixSum       = 0f;
+        _mixWeight    = 0f;
+        _settling     = false;
+        _settleTimer  = 0f;
     }
 
     // -------------------------------------------------------------------------
@@ -532,8 +675,9 @@ public class HoverController_Tricks : MonoBehaviour
 #if UNITY_EDITOR
     /// <summary>
     /// Sits above the Energy label so the payout can be read against the pool it is
-    /// paying into. Without this the whole feature is unjudgeable without a CSV,
-    /// which is how it would end up tuned by guess.
+    /// paying into. Shows progress toward the next revolution as well as the banked
+    /// count, because the banked count alone cannot tell you whether a trick was
+    /// nearly round or barely started.
     /// </summary>
     private void OnDrawGizmos()
     {
@@ -549,13 +693,12 @@ public class HoverController_Tricks : MonoBehaviour
         string label;
         Color  color;
 
-        // Roll and flip are shown separately because they are priced separately:
-        // a single combined number cannot tell you why a trick paid what it did.
-        string split = $"roll {_rollRotations:F2}  flip {_flipRotations:F2}";
+        string banked = $"roll x{_rollCount}  flip x{_flipCount}";
+        string toward = $"(+{_rollProgress:F2} / {_flipProgress:F2})";
 
         if (_settling)
         {
-            label = $"TRICK LANDING {split} -> {PendingPayout():F0}  hold {_settleTimer:F2}s\n"
+            label = $"TRICK LANDING {banked} -> {PendingPayout():F0}  hold {_settleTimer:F2}s\n"
                   + $"  arrived bank {_arrivalRoll:F0}deg  nose {_arrivalFlip:F0}deg";
             color = Color.yellow;
         }
@@ -563,8 +706,8 @@ public class HoverController_Tricks : MonoBehaviour
         {
             float pending = PendingPayout();
             label = pending > 0f
-                ? $"TRICK {split} -> {pending:F0}"
-                : $"TRICK {split} (under minimum)";
+                ? $"TRICK {banked} -> {pending:F0}  {toward}"
+                : $"TRICK {toward} (nothing round yet)";
             color = Color.cyan;
         }
         else if (Time.unscaledTime - _dbgLastResolveTime < 2f)
@@ -575,12 +718,12 @@ public class HoverController_Tricks : MonoBehaviour
                 // pool, where a bare "+4" reads as the payout being wrong.
                 label = _dbgLastGranted < _dbgLastPayout - 0.01f
                     ? $"TRICK BANKED +{_dbgLastGranted:F0} of {_dbgLastPayout:F0}  (pool full)"
-                    : $"TRICK BANKED +{_dbgLastGranted:F0}  ({_dbgLastRotations:F2} rot)";
+                    : $"TRICK BANKED +{_dbgLastGranted:F0}  (roll x{_dbgLastRolls} flip x{_dbgLastFlips})";
                 color = Color.green;
             }
             else
             {
-                label = $"TRICK LOST: {_dbgLastReason}  ({_dbgLastRotations:F2} rot)";
+                label = $"TRICK LOST: {_dbgLastReason}  (roll x{_dbgLastRolls} flip x{_dbgLastFlips})";
                 color = Color.red;
             }
         }

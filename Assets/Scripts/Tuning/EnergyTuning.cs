@@ -35,6 +35,15 @@ public class EnergyTuning
     [Min(0f)]
     public float regenRate = 20f;
 
+    [Tooltip("Refill only while the springs are carrying the craft, so airtime never refills the " +
+             "meter.\n\n" +
+             "This is what makes tricks the only way to earn energy while airborne, instead of " +
+             "hang time quietly paying you for doing nothing. It also makes a long fall and a flip " +
+             "recovery genuinely expensive, since neither is 'on the ground'.\n\n" +
+             "Turn it off to get the old behaviour back, which is the cheapest way to feel what it " +
+             "is doing.")]
+    public bool regenRequiresGround = true;
+
     [Tooltip("How long after spending before refilling starts.\n\n" +
              "This is the punish window, and it is what makes a spend a commitment rather than a " +
              "rhythm. Raise it to make emptying the tank genuinely costly. Set 0 to remove the " +
@@ -78,14 +87,48 @@ public class EnergyTuning
     [Min(0f)]
     public float trickFlipRepeatEnergy = 30f;
 
-    [Tooltip("What a corkscrew pays, as a fraction of the same rotation done cleanly.\n\n" +
+    [Tooltip("What a corkscrew pays, as a fraction of the same revolutions flown cleanly.\n\n" +
              "Below one this makes mixing the axes a sloppier, cheaper trick and pushes players to " +
-             "commit to a clean roll or a clean flip. At one a corkscrew simply pays the blend of " +
-             "the two with no penalty. Above one it becomes a bonus for the harder-looking trick.\n\n" +
-             "Applied on a slope, not a cliff: a nearly clean roll is barely touched, and the full " +
-             "effect lands only on a rotation split evenly between the two axes.")]
+             "commit to a clean roll or a clean flip. At one a corkscrew pays the same as clean " +
+             "rotation. Above one it becomes a bonus for the harder-looking trick.\n\n" +
+             "Applied to the PAYOUT and on a slope rather than a cliff: revolutions still complete " +
+             "at the normal rate, and the discount is the flight's average diagonal-ness, so a " +
+             "nearly clean roll is barely touched and only an evenly split corkscrew pays the full " +
+             "multiplier.")]
     [Min(0f)]
     public float trickCorkscrewMultiplier = 0.5f;
+
+    [Tooltip("Rounds a corkscrew-discounted payout to the nearest multiple of this. 0 turns it off.\n\n" +
+             "Only discounted payouts are rounded. A clean trick already lands on a round number, " +
+             "because the four prices above are, so rounding it would only risk moving a value you " +
+             "deliberately set.\n\n" +
+             "Nearest rather than upward on purpose: rounding up would erase the corkscrew discount " +
+             "outright whenever it came to less than one increment, which is most of the time.")]
+    [Min(0f)]
+    public float trickPayoutRounding = 5f;
+
+    [Tooltip("How close to a single axis a rotation has to be before it counts as CLEAN and escapes " +
+             "the corkscrew discount entirely. It is the share of the turning that has to be on one " +
+             "axis, so 0.9 means a tenth of it may be off-axis and still score full.\n\n" +
+             "Without this the discount starts the instant a rotation is not perfect, which shorts a " +
+             "flip that looked clean. Raise it toward 1 to demand precision, lower it to forgive a " +
+             "sloppier stick. At 1 the discount begins immediately, which is the old behaviour.\n\n" +
+             "Roughly, the slop it allows on the stick: 0.95 is 3 degrees, 0.9 is 6, 0.8 is 14, " +
+             "0.75 is 18. Beyond the tolerance the discount ramps in smoothly, reaching full only at " +
+             "an evenly split corkscrew.")]
+    [Range(0.5f, 1f)]
+    public float trickCleanAxisTolerance = 0.9f;
+
+    [Tooltip("How much of a turn counts as a completed revolution.\n\n" +
+             "Below 1 so a rotation that LOOKS finished pays even when it falls just short. Part of " +
+             "that slack covers the measurement itself, which reads about 3% under a true 360 " +
+             "because it integrates a rate rather than comparing poses; the rest is forgiveness for " +
+             "execution.\n\n" +
+             "Applied per revolution rather than once, so the shortfall cannot accumulate over a " +
+             "long spin. Lower it to be more generous about half-finished tricks, raise it toward 1 " +
+             "to demand the rotation genuinely comes all the way round.")]
+    [Range(0.5f, 1f)]
+    public float trickRevolutionThreshold = 0.9f;
 
     [Tooltip("How far the craft may be BANKED at the moment it reaches the ground and still count as " +
              "a landing, measured against the surface underneath rather than against straight up. " +
@@ -103,13 +146,6 @@ public class EnergyTuning
              "if one of the two keeps stealing tricks you felt you landed.")]
     [Range(0f, 180f)]
     public float trickMaxLandingFlipAngle = 45f;
-
-    [Tooltip("The smallest trick that banks anything, in total rotations.\n\n" +
-             "Exists so ordinary attitude wobble on a long jump cannot pay. Raise it if free " +
-             "energy is arriving from flights that did not read as tricks; lower it toward zero to " +
-             "reward partial rotations.")]
-    [Min(0f)]
-    public float trickMinRotations = 0.25f;
 
     [Tooltip("How long the craft must stay on its belly and out of recovery after touching down " +
              "before the trick pays.\n\n" +

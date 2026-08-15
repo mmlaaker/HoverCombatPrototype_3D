@@ -693,7 +693,26 @@ Watch: the drift entry hop is live at `driftHopImpulse` 10, which is 1.70m of cl
 band. That is the value the owner approved on 2026-08-08, not a regression, but it leaves little
 margin and (a) will change how the entry reads.
 
-### M.10 Trick energy economy, with the owner's risk/reward framing
+### M.10 ~~Trick energy economy, with the owner's risk/reward framing~~ — CLOSED 2026-08-15, JUDGED GOOD
+
+Built, measured and judged in one session. Owner: **"this setup is feeling good as far as the
+mechanics go."** Outcome, standing decisions and every measurement live in `CLAUDE.md` (the trick
+economy entry plus the `HoverController_Tricks`, `HoverController_Energy` and `VehicleHUD` module
+rows) and are deliberately not duplicated here.
+
+Shipped: two ledgers priced by event (roll 10 then 15, flip 25 then 30), completed revolutions
+rather than accumulated travel, a corkscrew discount on the payout outside a tolerance band, landing
+gates measured against the surface normal, and **regen gated on being grounded** so airtime pays only
+what you earn in it. The risk/reward framing this item existed to protect is intact: rotation costs
+airtime you wanted for the landing, and blowing the landing forfeits the lot.
+
+The coupling to M.6 resolved as predicted. Paying by rotation count rather than airtime means fall
+gravity no longer trades against the trick economy at all.
+
+**Two things it did NOT settle**, both filed separately: the EMP interaction (3.15) and whether the
+payouts are right once there is combat to spend energy under, which cannot be judged until 1.3.
+
+<details><summary>Original item</summary>
 
 Owner's plan, stated 2026-08-11 and consistent with what they described in earlier sessions:
 **replenish boost energy by waiting for regen OR by landing tricks, with more flips and rolls paying
@@ -705,6 +724,8 @@ protecting in implementation.
 
 Mechanism is already specced in 2.10 and not repeated here. Note the coupling to M.6: if trick
 energy is paid by ROTATION COUNT rather than airtime, the fall-gravity conflict mostly dissolves.
+
+</details>
 
 ### M.11 Camera authority when the player has none. One feature, two triggers — TOP PRIORITY 2026-08-14
 
@@ -1209,6 +1230,18 @@ series instead of a verdict would also be honest, and is what actually answered 
 **Until it is fixed, ignore the verdict line and bin `bench_ms` from the CSV by hand.** A wrong
 confident answer is worse than no answer, which is the whole premise of this file.
 
+**SECOND FALSE FIRING, 2026-08-15, during a genuine performance investigation.** It printed
+`THROTTLING LIKELY ... -16.8%` for a session whose binned benchmark is flat to within 8%:
+
+```
+0s-20s 0.303ms   20s-40s 0.290   40s-60s 0.280
+60s-80s 0.281    80s-100s 0.298  100s-120s 0.297
+```
+
+The session had a real problem (root stalls up roughly threefold) and this verdict pointed at the
+CPU, which was one of the few things measurably fine. **It has now cost time on both occasions it
+has ever fired**, which promotes this from tidy-up to worth doing before the next perf session.
+
 ## Tier 1 — Blocks the prototype checklist
 
 The checklist item "Basic combat loop (primary fire + pickups)" is blocked by 1.1 through 1.4
@@ -1633,7 +1666,19 @@ landings from jumps for the first time, without touching `hardLandingMinSpeed` a
 
 </details>
 
-### 2.10 Energy is permanently tight, and tricks should probably pay it back — SAME WORK AS M.10
+### 2.10 ~~Energy is permanently tight, and tricks should probably pay it back~~ — CLOSED 2026-08-15 WITH M.10
+
+Same work, closed together. The loop this item wanted is built: tricks and the meter now feed each
+other, and regen being grounded-only is what makes landing tricks the only way to earn during
+airtime. Outcome is in `CLAUDE.md`; the reasoning below is kept because it is where the budget
+arithmetic was worked out.
+
+**Note the budget below is now doubly stale.** It assumed every jump costs 25 (M.9 made that tap 10 /
+charge 25 / air 15) and `regenRate` 20, which the owner has since halved to 10. So the economy is
+considerably tighter than this paragraph describes AND has a new income source. Judge it as a whole,
+not against these numbers.
+
+<details><summary>Original item</summary>
 
 **Filed in Tier 2 but it is a movement item, and that split has already caused confusion.** `M.10`
 holds the owner's risk/reward framing and the priority; this entry holds the mechanism and the
@@ -1662,6 +1707,8 @@ upright, lose it on a flip.
 
 Note the owner explicitly rejected a **speed** payout for drift (2.3). An energy payout is a
 different question and was left open.
+
+</details>
 
 ---
 
@@ -1800,6 +1847,42 @@ Cosmetic, no runtime effect, but misleading when reading the inspector:
 
 (`WD_Shotgun`'s stale `missileFireMode: 2` looks like it belongs here but does not -- it is a closed
 decision, recorded in `CLAUDE.md`.)
+
+### 3.15 An EMP freeze silently eats a landed trick, and the readout blames the wrong thing
+
+`Energy.Grant` refuses to pay while EMP-frozen, matching `TryConsume` so a freeze cannot be worked
+around by banking a trick during it. That is defensible and probably right, since EMP denies tempo.
+It was never DECIDED, though, and two things follow from it.
+
+**The player is told nothing.** They land the trick, the tracker turns the banked colour, and no
+energy arrives. Nothing on screen connects that to the freeze.
+
+**The readout misattributes it.** `VehicleHUD` reports a shortfall between earned and granted as
+`(pool full)`, because a saturated pool was the only cause it knew about when it was written. A
+frozen pool produces the identical shortfall and gets the identical, wrong, label. See `CLAUDE.md`
+trap 39, which is the general form.
+
+**Not reachable in play today**, because the AI cannot fire an EMP (1.6), so this can wait for
+weapons to be real. **Done looks like:** a decision on whether a freeze should forfeit the trick,
+cancel it, or merely defer the payout, and a readout that names the actual cause.
+
+### 3.16 The trick system lives in scene overrides, not on the prefabs
+
+`HoverController_Tricks` on the player craft, and `/Canvas/TrickTracker_TMP` plus its `trickText`
+wiring, are all **instance overrides in `Prototype_Scene`** rather than changes to
+`HoverCar_Prototype.prefab` and the Canvas prefab. It works, and it works in a build, because the
+build ships the scene.
+
+**Why it was left this way rather than applied:** `apply_prefab_overrides` is all-or-nothing per
+instance, and neither instance has been audited for what else is sitting unapplied. Pushing blind
+would silently commit unrelated pending changes into the prefabs.
+
+**When it bites:** the moment a second scene exists, or a second player craft is instanced, or the
+prefab is used as the base for the five-vehicle roster (5.7). **Done looks like:** audit the override
+list on both instances, then apply deliberately.
+
+Note the AI craft has no `HoverController_Tricks` at all, which is correct rather than an oversight:
+`AIHoverInput` hardcodes drift to false so it can never arm air control and would bank nothing.
 
 ### 3.13 Three camera impulse channels are unwired
 `HoverCameraImpulseRouter` warns on `Awake` that the **EMP**, **weapon recoil** and **denied jump**

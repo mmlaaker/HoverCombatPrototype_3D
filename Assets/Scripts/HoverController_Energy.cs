@@ -2,7 +2,22 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Energy v1.1
+/// HoverController_Energy v1.2
+///
+/// v1.2: regen is gated on being grounded (regenRequiresGround). Airtime used to
+/// refill the meter for free, which put passive regen in direct competition with
+/// the trick economy it was supposed to be the fallback for: the longer the hang
+/// time, the more energy arrived for doing nothing, and a long fall paid better
+/// the worse you flew it. Now airtime pays only what you earn in it.
+///
+/// Reads Foundation.HoverSupport rather than IsHoverGrounded, because that one
+/// answers "can the rays see ground" and stays true for 2.5m of free fall, which
+/// is exactly the window this is meant to stop paying for. Partial support still
+/// regens proportionally in the sense that any spring contact counts, so hanging a
+/// corner over a ledge does not cut you off.
+///
+/// This module still owns no physics and applies no forces. It reads one published
+/// value from a sibling, the same way Propulsion reads Foundation.
 ///
 /// v1.1: Grant(). The pool could only ever be debited, so there was no way to pay
 /// energy back into it from the world. Landed tricks are the first payer
@@ -113,12 +128,23 @@ public class HoverController_Energy : MonoBehaviour
     /// <summary>True while the EMP freeze timer was > 0 last frame. Used to detect expiry.</summary>
     private bool wasEmpFrozen;
 
+    /// <summary>
+    /// Sibling, resolved in Awake. Read-only, and only for the grounded regen gate.
+    /// May be null; see Awake for why that fails open.
+    /// </summary>
+    private HoverController_Foundation foundation;
+
     // -------------------------------------------------------------------------
     // Unity lifecycle
     // -------------------------------------------------------------------------
 
     private void Awake()
     {
+        // Optional on purpose: a craft with no Foundation simply regenerates
+        // everywhere, rather than never. Failing open keeps a missing reference
+        // from silently starving the pool, which would look like a tuning problem.
+        foundation = GetComponent<HoverController_Foundation>();
+
         if (profile == null)
         {
             Debug.LogError(
@@ -244,13 +270,21 @@ public class HoverController_Energy : MonoBehaviour
     ///   1. The regen lockout has expired (timeSinceLastConsume >= regenDelay).
     ///   2. The system is not EMP-frozen.
     ///   3. The pool is not already full.
+    ///   4. The springs are carrying the craft, when regenRequiresGround is set.
     ///
+    /// The lockout TIMER still runs while airborne, deliberately. It measures time
+    /// since you last demanded from the pool, which is a fact about spending and
+    /// not about where the craft is, so landing after a long flight resumes regen
+    /// immediately instead of starting a fresh wait on touchdown.
     /// </summary>
     private void TickRegen()
     {
         float timeSinceLastConsume = Time.unscaledTime - lastConsumeTime;
         bool  recentlyConsumed     = timeSinceLastConsume < E.regenDelay;
-        bool  canRegen             = !recentlyConsumed && !IsEmpFrozen && Energy < E.maxEnergy;
+        bool  grounded             = !E.regenRequiresGround
+                                  || foundation == null
+                                  || foundation.HoverSupport > 0f;
+        bool  canRegen             = !recentlyConsumed && !IsEmpFrozen && grounded && Energy < E.maxEnergy;
 
         IsRegenerating = canRegen;
 
