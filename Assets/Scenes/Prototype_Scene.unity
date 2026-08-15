@@ -2819,7 +2819,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 8273330763968375851, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1910851199}
   m_SourcePrefab: {fileID: 100100000, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
 --- !u!1 &1276685658
 GameObject:
@@ -4062,6 +4065,21 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
   m_PrefabInstance: {fileID: 1266020441}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1910851199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1910851168}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01a20ff854e22b14eb667b2b790d1b1f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverController_Tricks
+  profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+  drawDebug: 1
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!1 &2055706313
 GameObject:
   m_ObjectHideFlags: 0

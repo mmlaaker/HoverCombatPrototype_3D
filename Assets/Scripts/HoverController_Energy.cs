@@ -2,7 +2,12 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Energy v1.0
+/// HoverController_Energy v1.1
+///
+/// v1.1: Grant(). The pool could only ever be debited, so there was no way to pay
+/// energy back into it from the world. Landed tricks are the first payer
+/// (HoverController_Tricks); pickups are the next. See the method for why it
+/// deliberately does not touch the regen lockout.
 ///
 /// Shared resource pool for non-damaging mobility abilities (boost, jump, dodge,
 /// shield, EMP). Weapons do NOT spend energy; they only check IsEmpFrozen.
@@ -168,6 +173,33 @@ public class HoverController_Energy : MonoBehaviour
 
         Energy = Mathf.Max(0f, Energy - amount);
         return true;
+    }
+
+    /// <summary>
+    /// Pays <paramref name="amount"/> energy INTO the pool. Returns how much was
+    /// actually added, which is less than requested once the pool fills.
+    ///
+    /// Deliberately does NOT touch lastConsumeTime, so a payout never suppresses
+    /// regen. The lockout is there to punish SPENDING: demanding from the pool
+    /// holds back its refill, which is what makes panic-mashing costly. Being paid
+    /// is the opposite transaction, and routing it through the same timestamp
+    /// would mean landing a trick briefly stalled the regen it was rewarding.
+    ///
+    /// Refuses to pay while EMP-frozen, matching TryConsume: a frozen pool is
+    /// frozen in both directions, so a freeze cannot be worked around by banking
+    /// a trick during it.
+    /// </summary>
+    public float Grant(float amount)
+    {
+        if (amount <= 0f)
+            return 0f;
+
+        if (IsEmpFrozen)
+            return 0f;
+
+        float before = Energy;
+        Energy = Mathf.Min(E.maxEnergy, Energy + amount);
+        return Energy - before;
     }
 
     /// <summary>

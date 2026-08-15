@@ -74,6 +74,7 @@ MonoBehaviour:
     jumpGroundedChargedEnergyCost: 25
     jumpAirEnergyCost: 15
     airJumpImpulse: 20
+    airJumpFallCancel: 0.6
     lateralDamp: 1
     forwardDamp: 1
     driftLateralDamp: 0.3
@@ -101,8 +102,17 @@ MonoBehaviour:
   energy:
     maxEnergy: 100
     startingEnergy: 100
-    regenRate: 20
+    regenRate: 10
     regenDelay: 1
+    trickBarrelRollEnergy: 10
+    trickBarrelRollRepeatEnergy: 15
+    trickFlipEnergy: 25
+    trickFlipRepeatEnergy: 30
+    trickCorkscrewMultiplier: 0.5
+    trickMaxLandingRollAngle: 45
+    trickMaxLandingFlipAngle: 45
+    trickMinRotations: 0.25
+    trickSettleSeconds: 0.25
   health:
     maxHealth: 100
     startingHealth: 100
