@@ -1590,7 +1590,7 @@ PrefabInstance:
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 3649194527859001394, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 3649194527859001394, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
@@ -1606,7 +1606,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4725997358399993205, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 4725997358399993205, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
@@ -2312,7 +2312,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 696110556930451447, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 696110556930451447, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
@@ -2678,6 +2678,10 @@ PrefabInstance:
       propertyPath: m_Enabled
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7329922606537100077, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: Lens.FarClipPlane
+      value: 5000
+      objectReference: {fileID: 0}
     - target: {fileID: 8043566517561028817, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_IsActive
       value: 0
@@ -2740,7 +2744,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar

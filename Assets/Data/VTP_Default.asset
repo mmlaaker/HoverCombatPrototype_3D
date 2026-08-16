@@ -95,7 +95,7 @@ MonoBehaviour:
     enableStrafe: 1
     strafeTopSpeed: 53
     strafeAccel: 47
-    strafePitchLimit: 25
+    strafePitchLimit: 36
     strafePitchSensitivity: 150
     strafeModeBlendSeconds: 0.2
     strafeLateralCapStrength: 3
