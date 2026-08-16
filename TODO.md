@@ -1848,23 +1848,24 @@ Cosmetic, no runtime effect, but misleading when reading the inspector:
 (`WD_Shotgun`'s stale `missileFireMode: 2` looks like it belongs here but does not -- it is a closed
 decision, recorded in `CLAUDE.md`.)
 
-### 3.15 An EMP freeze silently eats a landed trick, and the readout blames the wrong thing
+### 3.15 An EMP freeze silently eats a landed trick
 
 `Energy.Grant` refuses to pay while EMP-frozen, matching `TryConsume` so a freeze cannot be worked
 around by banking a trick during it. That is defensible and probably right, since EMP denies tempo.
-It was never DECIDED, though, and two things follow from it.
+**It was never DECIDED, and that decision is what remains open here.**
 
-**The player is told nothing.** They land the trick, the tracker turns the banked colour, and no
-energy arrives. Nothing on screen connects that to the freeze.
+**The readout half is fixed** (2026-08-15, `VehicleHUD` v1.5 / `Tricks` v1.6). Both the HUD and the
+gizmo used to report any shortfall between earned and granted as `(pool full)`, because a saturated
+pool was the only cause either knew about when it was written; a frozen pool produced the identical
+shortfall and got the identical, wrong, label. The two causes are now named separately, `(Full)` and
+`(EMP)`. That was the general form in `CLAUDE.md` trap 39, and it was fixed as a side effect of
+making the tracker show the payout rather than the granted energy.
 
-**The readout misattributes it.** `VehicleHUD` reports a shortfall between earned and granted as
-`(pool full)`, because a saturated pool was the only cause it knew about when it was written. A
-frozen pool produces the identical shortfall and gets the identical, wrong, label. See `CLAUDE.md`
-trap 39, which is the general form.
-
-**Not reachable in play today**, because the AI cannot fire an EMP (1.6), so this can wait for
+**What is left is the design question**, not the display. A landed trick during a freeze still pays
+nothing, and whether that is right has never been argued: the player did the work and the landing was
+clean. **Not reachable in play today**, because the AI cannot fire an EMP (1.6), so this can wait for
 weapons to be real. **Done looks like:** a decision on whether a freeze should forfeit the trick,
-cancel it, or merely defer the payout, and a readout that names the actual cause.
+cancel it, or merely defer the payout until the freeze lifts.
 
 ### 3.16 The trick system lives in scene overrides, not on the prefabs
 

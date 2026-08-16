@@ -1,7 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Tricks v1.5
+/// HoverController_Tricks v1.6
+///
+/// v1.6: OnTrickResolved reports the payout AND what reached the pool, rather than
+/// what reached the pool alone. The readout is how a player learns the price list,
+/// and the old signature could only ever show the leftover headroom in the pool --
+/// an arbitrary number, because regen leaves the pool at an arbitrary level, so a
+/// flip worth 25 landed at 82 energy read as "+18" and the rounding to fives looked
+/// broken from the outside. It was not; the number was never the payout.
 ///
 /// v1.5: trickPayoutRounding. A corkscrew-discounted payout is rounded to the
 /// nearest increment, and only a discounted one, since a clean trick already lands
@@ -206,15 +213,19 @@ public class HoverController_Tricks : MonoBehaviour
     public float EscrowEnergy => PendingPayout();
 
     /// <summary>
-    /// Raised once when a flight resolves. First argument is whether it was landed,
-    /// second is the energy that actually reached the pool, which is lower than the
-    /// payout when the pool was already full.
+    /// Raised once when a flight resolves. Arguments are whether it was landed, what
+    /// the flight was WORTH, and what actually reached the pool. The two numbers
+    /// differ whenever the pool could not take the whole payout -- because it was
+    /// already full, or because an EMP freeze refused the grant outright -- and a
+    /// readout needs both: the first teaches the price list, the second is the truth
+    /// about what was gained. Collapsing them to one number means lying about one or
+    /// the other.
     ///
     /// Added in v1.2 rather than v1.0 on purpose: this project has deleted three
     /// events that were raised with no subscriber. VehicleHUD's trick tracker is
     /// the subscriber that justifies it.
     /// </summary>
-    public event System.Action<bool, float> OnTrickResolved;
+    public event System.Action<bool, float, float> OnTrickResolved;
 
     // -------------------------------------------------------------------------
     // Runtime
@@ -276,6 +287,7 @@ public class HoverController_Tricks : MonoBehaviour
     private int    _dbgLastRolls;
     private int    _dbgLastFlips;
     private bool   _dbgLastWasBanked;
+    private bool   _dbgLastEmpBlocked;
     private string _dbgLastReason = "";
     private float  _dbgLastResolveTime = float.NegativeInfinity;
 
@@ -642,6 +654,11 @@ public class HoverController_Tricks : MonoBehaviour
         // What it EARNED and what FITTED are different numbers, and the readout must
         // not confuse them: landing a trick on a full pool grants nothing, and
         // reporting that as a lost trick would blame the player for a good landing.
+        // Sampled before the grant so the gizmo can name WHY a payout was refused.
+        // Grant does not clear the freeze, but reading it first keeps the two facts
+        // independent of each other's order.
+        bool empBlocked = energy != null && energy.IsEmpFrozen;
+
         float granted = payout > 0f ? energy.Grant(payout) : 0f;
 
         _dbgLastPayout      = payout;
@@ -649,6 +666,7 @@ public class HoverController_Tricks : MonoBehaviour
         _dbgLastRolls       = _rollCount;
         _dbgLastFlips       = _flipCount;
         _dbgLastWasBanked   = banked;
+        _dbgLastEmpBlocked  = empBlocked;
         _dbgLastReason      = reason;
         _dbgLastResolveTime = Time.unscaledTime;
 
@@ -656,7 +674,7 @@ public class HoverController_Tricks : MonoBehaviour
         // by this point, so the flight's state is complete and consistent, and a
         // subscriber can read BarrelRollCount and FlipCount to describe what just
         // happened. Raising it after would hand every listener zeroes.
-        OnTrickResolved?.Invoke(banked, granted);
+        OnTrickResolved?.Invoke(banked, payout, granted);
 
         _armed        = false;
         _rollCount    = 0;
@@ -717,7 +735,7 @@ public class HoverController_Tricks : MonoBehaviour
                 // Naming the shortfall matters: "earned 25, got 4" reads as a full
                 // pool, where a bare "+4" reads as the payout being wrong.
                 label = _dbgLastGranted < _dbgLastPayout - 0.01f
-                    ? $"TRICK BANKED +{_dbgLastGranted:F0} of {_dbgLastPayout:F0}  (pool full)"
+                    ? $"TRICK BANKED +{_dbgLastGranted:F0} of {_dbgLastPayout:F0}  ({(_dbgLastEmpBlocked ? "EMP frozen" : "pool full")})"
                     : $"TRICK BANKED +{_dbgLastGranted:F0}  (roll x{_dbgLastRolls} flip x{_dbgLastFlips})";
                 color = Color.green;
             }

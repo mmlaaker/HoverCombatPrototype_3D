@@ -3,8 +3,17 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// VehicleHUD v1.4
+/// VehicleHUD v1.5
 /// ----------------
+/// v1.5 changes:
+///   • The trick tracker reports what the trick was WORTH, not what fitted in the
+///     pool. It used to print the granted energy, which is the pool's leftover
+///     headroom and therefore an arbitrary number — a flip worth 25 landed at 82
+///     energy read "+18", and the payout rounding to increments of five looked
+///     broken when it was not. Now "+25", with a "(Full)" mark when the pool could
+///     not take all of it and "(EMP)" when a freeze refused it outright. See
+///     HandleTrickResolved.
+///
 /// v1.4 changes:
 ///   • Reticle no longer follows aim raycast depth. SyncReticle projects the aim
 ///     direction to a fixed reticleProjectionDistance instead of to whatever the ray
@@ -449,8 +458,16 @@ public class VehicleHUD : MonoBehaviour
     /// <summary>
     /// Freezes the label at whatever the flight earned and recolours it by outcome.
     /// Reads the counts live because Tricks raises this before it clears them.
+    ///
+    /// Shows the PAYOUT, not the granted energy. The two differ only when the pool
+    /// could not take the whole thing, and showing the granted figure made the
+    /// number unreadable as a price: the pool sits at an arbitrary level because
+    /// regen is continuous, so the leftover headroom is arbitrary too, and a trick
+    /// worth a flat 25 would print a different number every time. The shortfall is
+    /// still reported, as a mark rather than a different number, so the readout
+    /// never claims energy that was not gained.
     /// </summary>
-    private void HandleTrickResolved(bool banked, float energy)
+    private void HandleTrickResolved(bool banked, float payout, float granted)
     {
         if (trickText == null || _tricks == null)
             return;
@@ -466,8 +483,17 @@ public class VehicleHUD : MonoBehaviour
             return;
         }
 
-        if (banked && trickShowPayout && energy > 0f)
-            label += $"   +{Mathf.RoundToInt(energy)}";
+        if (banked && trickShowPayout && payout > 0f)
+        {
+            label += $"   +{Mathf.RoundToInt(payout)}";
+
+            // Named separately rather than lumped together as one "not all of it"
+            // mark, because they are different facts and the player's response to
+            // each is different: a full pool means spend some, a freeze means wait.
+            // The epsilon is for float noise in the grant, not a tolerance.
+            if (granted < payout - 0.01f)
+                label += (_energy != null && _energy.IsEmpFrozen) ? "  (EMP)" : "  (Full)";
+        }
 
         _trickOutcomeColor   = banked ? trickColorLanded : trickColorLost;
         _trickOutcomeColor.a = 1f;
