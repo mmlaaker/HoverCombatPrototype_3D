@@ -9909,8 +9909,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2893549940407336569}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.18910752, y: 0.0000000327188, z: -0.000000006301064, w: 0.9819564}
-  m_LocalPosition: {x: 0, y: 4.5, z: -7.4999995}
+  m_LocalRotation: {x: 0.20106587, y: -0.0000000031152918, z: 6.3943845e-10, w: 0.9795778}
+  m_LocalPosition: {x: 0, y: 4.5, z: -6.9999995}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9977,7 +9977,7 @@ MonoBehaviour:
     AngularDampingMode: 0
     RotationDamping: {x: 1, y: 1, z: 1}
     QuaternionDamping: 1
-  FollowOffset: {x: 0, y: 4.5, z: -7.4999995}
+  FollowOffset: {x: 0, y: 4.5, z: -6.9999995}
 --- !u!114 &6940715604228495666
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10199,6 +10199,7 @@ GameObject:
   - component: {fileID: 6195698811811710777}
   - component: {fileID: 5761321178091812356}
   - component: {fileID: 3191944406936877070}
+  - component: {fileID: 4059214200689346457}
   m_Layer: 6
   m_Name: HoverCar_PlayerController
   m_TagString: Untagged
@@ -10570,6 +10571,21 @@ MonoBehaviour:
   m_DefaultActionMap: Hover
   m_SplitScreenIndex: -1
   m_Camera: {fileID: 4978544463994653959}
+--- !u!114 &4059214200689346457
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4246840766707924649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 01a20ff854e22b14eb667b2b790d1b1f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HoverController_Tricks
+  profile: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+  drawDebug: 1
+  debugSettings: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
 --- !u!1 &4978026027279532553
 GameObject:
   m_ObjectHideFlags: 0
@@ -10907,33 +10923,33 @@ MonoBehaviour:
   inputProvider: {fileID: 5761321178091812356}
   propulsion: {fileID: 4964355425596500860}
   framing:
-    driveFollowOffset: {x: 0, y: 4.5, z: -7.5}
+    driveFollowOffset: {x: 0, y: 4.5, z: -7}
     driveTargetOffset: {x: 0, y: 1.5, z: 0}
     baseFov: 65
-    pitchSensitivity: 0.8
-    pitchDownRange: 18
-    pitchUpRange: 25
-    pitchRecenterSpeed: 2
+    pitchSensitivity: 1.5
+    pitchDownRange: 25
+    pitchUpRange: 35
+    pitchRecenterSpeed: 1.5
     lookDeadzone: 0.05
     turnBleedSuppression: 0.8
     minFrameMargin: 2
-    pitchUpDistanceGain: 0
+    pitchUpDistanceGain: 2
     shoulderShiftAmount: 1.8
     shoulderLookAheadAmount: 2.5
     shoulderShiftLerpSpeed: 8
   look:
     speedLookAheadMax: 6
-    speedLookAheadReference: 60
-    pitchLookLift: 2.5
-    pitchLookAhead: 6
+    speedLookAheadReference: 80
+    pitchLookLift: 1
+    pitchLookAhead: 1
     fadeLookAheadWhenInverted: 1
   boost:
-    fovIncrease: 5
+    fovIncrease: 4
     forwardGateSpeed: 2
     fovOvershoot: 6
-    zPullBack: 1
-    zLagOnEngage: 1.5
-    releaseSpeed: 2.5
+    zPullBack: 0.5
+    zLagOnEngage: 2.5
+    releaseSpeed: 3.5
     settleSpeed: 3.5
   strafe:
     followOffset: {x: 0, y: 3.5, z: -6}

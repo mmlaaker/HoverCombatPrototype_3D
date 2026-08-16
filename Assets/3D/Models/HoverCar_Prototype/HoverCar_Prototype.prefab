@@ -39985,6 +39985,10 @@ PrefabInstance:
       propertyPath: profile
       value: 
       objectReference: {fileID: 11400000, guid: e08611fa706f72b4da60eae146b57ca1, type: 2}
+    - target: {fileID: 5247650669254573615, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: Lens.FarClipPlane
+      value: 5000
+      objectReference: {fileID: 0}
     - target: {fileID: 5763857629899291177, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: weaponDefinition
       value: 
@@ -40153,7 +40157,7 @@ MonoBehaviour:
   collisionShakeEnabled: 1
   collisionMinSpeed: 8
   collisionMaxSpeed: 35
-  collisionMaxVelocity: 2.5
+  collisionMaxVelocity: 1
   collisionFloorMaxAngle: 60
   collisionCooldown: 0.2
   landingSuppressWindow: 0.3
