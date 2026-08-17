@@ -221,6 +221,33 @@ public class HoverController_Propulsion : MonoBehaviour
     // carries it back over minDriftSpeed and chatters against its own floor.
     private bool _driftSpent;
 
+    // When the entry hop last fired. Timestamp rather than a countdown, per the project
+    // convention: a countdown needs somewhere to be decremented and a timestamp just
+    // goes stale. NegativeInfinity so the first drift of a session is never blocked.
+    private float _lastDriftHopTime = float.NegativeInfinity;
+
+    /// <summary>
+    /// How long the entry hop stays disarmed after firing.
+    ///
+    /// This replaced a HoverSupport &gt; 0.9 test that was doing the same job by proxy
+    /// ("wait until the springs are carrying the craft again", which is roughly the hop's
+    /// own airtime). The proxy had a measured failure: it also suppressed the hop whenever
+    /// the craft happened to be crossing a bump, because support is 0 there for reasons
+    /// that have nothing to do with re-firing.
+    ///
+    /// 0.4s is set against the hop's own flight, not picked round: 10 m/s against 39.24
+    /// m/s^2 of grounded gravity apexes at 0.25s, and the springs catch the descent before
+    /// it completes. It is also short enough that entering a drift, exiting, and entering
+    /// the next corner still earns a second hop, which the old test allowed and a longer
+    /// cooldown would take away.
+    ///
+    /// A const rather than a tuning field on purpose: this guards a mechanism (the entry
+    /// gate is a threshold on turn input, so a wobbling stick would otherwise re-fire the
+    /// hop every crossing) rather than expressing a feel. Promote it to
+    /// VehicleTuningProfile if it ever needs to differ per vehicle.
+    /// </summary>
+    private const float DriftHopRearmSeconds = 0.4f;
+
     // -------------------------------------------------------------------------
     // 🎯 Strafe runtime state
     // -------------------------------------------------------------------------
@@ -796,21 +823,38 @@ public class HoverController_Propulsion : MonoBehaviour
                        && _cachedLocalVel.z >= P.minDriftSpeed;
         }
 
-        // Entry hop. Fires on the rising edge only, and only from a settled chassis.
+        // Entry hop. Fires on the rising edge, rate-limited by DriftHopRearmSeconds.
         //
-        // The support test is the rate limiter, and it is doing a real job: the entry
-        // gate is a threshold on turn input, so wobbling the stick across it would
-        // otherwise re-fire the hop every time it crossed. Requiring the springs to be
-        // carrying the craft again means it cannot re-fire until the last hop has
-        // landed, with no timer to own.
+        // TWO THINGS HAPPEN HERE AND THEY ARE GATED DIFFERENTLY ON PURPOSE.
+        //
+        // The EVENT marks a player action: the drift started. It fires on every
+        // rate-limited entry, unconditionally. It used to sit behind the same
+        // HoverSupport > 0.9 test as the impulse, and measured 2026-08-17 that dropped
+        // roughly one entry in three on real terrain (support at three sampled entries:
+        // 0.99, 0.23, 1.00, with 20% of cornering frames below the threshold). The
+        // owner's report was that the drift hop is unreliable "when I'm already turning",
+        // and this was why: not a weak hop, an absent one. Anything built on this event
+        // inherits that, so a cue hung here would have failed in exactly the same third
+        // of cases and looked like a broken cue.
+        //
+        // The IMPULSE is scaled by support rather than gated on it. A 10 m/s
+        // VelocityChange applied while the springs are not carrying the craft is a jump,
+        // not a hop, so it has to fade out. Scaling rather than switching follows what
+        // HoverSupport is for: Foundation crossfades fall gravity, air control, leveling
+        // and drag on it precisely so no feature has a cliff, and a boolean here would
+        // just move the cliff rather than remove it.
         //
         // No energy cost. This is punctuation, not a mobility tool, and charging for
         // entering a drift would tax the manoeuvre for having a sound.
         if (_isDrifting && !wasDrifting
-            && P.driftHopImpulse > 0f
-            && foundation.HoverSupport > 0.9f)
+            && Time.time - _lastDriftHopTime >= DriftHopRearmSeconds)
         {
-            rb.AddForce(Vector3.up * P.driftHopImpulse, ForceMode.VelocityChange);
+            _lastDriftHopTime = Time.time;
+
+            float hop = P.driftHopImpulse * foundation.HoverSupport;
+            if (hop > 0.001f)
+                rb.AddForce(Vector3.up * hop, ForceMode.VelocityChange);
+
             OnDriftHop?.Invoke();
 
             if (ShouldDrawDebug)
