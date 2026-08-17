@@ -5138,7 +5138,7 @@ ParticleSystem:
     startSpeed:
       serializedVersion: 2
       minMaxState: 0
-      scalar: 500
+      scalar: 1000
       minScalar: 5
       maxCurve:
         serializedVersion: 2
@@ -10989,7 +10989,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 500
+      value: 1000
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
@@ -11005,7 +11005,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 500
+      value: 1000
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar

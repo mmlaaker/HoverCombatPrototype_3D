@@ -178,7 +178,8 @@ Format is **Does** (current responsibility), **Public** (the surface other modul
 of also holding the craft up. Leveling torque as the single attitude authority. Two-path recovery
 (upright-stuck unstick, and flip righting). Air control torque on behalf of Propulsion. Asymmetric
 gravity (generous on the rise, decisive on the fall). Ceiling duck. Hard-landing spring give. Hover
-rays read the interpolated smooth surface normal, not the flat triangle normal.
+rays read the interpolated smooth surface normal, not the flat triangle normal, and are cast from
+where the sensors would be if the craft were not aiming.
 
 **Public.** `IsHoverGrounded`, `HoverSupport`, `HasAirControlClearance`, `AverageGroundNormal`,
 `IsDowned`, `SetRecoveryEnabled(bool)`, `SetAimPitch(degrees, weight)`,
@@ -186,10 +187,29 @@ rays read the interpolated smooth surface normal, not the flat triangle normal.
 
 **Constraints.**
 
-- **Do not modify without explicit justification.** The only currently queued justification is
-  `TODO.md` 0.12, and it is a camera item.
+- **Do not modify without explicit justification.** Modified 2026-08-17 on the owner's report that
+  aiming sank the craft into the terrain and it scraped. There is no queued justification now; the
+  next change needs a new one.
 - **Leveling torque is the SINGLE attitude authority.** Nothing else may apply pitch or roll torque.
   Propulsion hands over intent; it never applies the torque itself.
+- **The hover sensors are placed, pointed and loaded as if the craft were NOT aiming**, and every
+  term in the spring loop shares that frame: ray origin, ray direction, the gap, the closing rate
+  and the position the force is applied at. Splitting them puts the spring in one frame and its
+  damping in another. What this fixes is in `TuningLog.md` > Aiming and the hover sensors; the short
+  version is that a sensor bolted to a tilting hull measures a slant instead of a height, and that
+  one error sank the craft, drove `HoverSupport` to zero while parked, pointed the front sensors
+  past the nose, and unloaded the rear pair entirely past about 20 degrees.
+- **The un-aim angle is MEASURED FROM THE HULL, never from the commanded aim.** The chassis is a
+  torque servo and lags the stick, so anything sized from the command corrects a tilt the craft has
+  not reached yet. That shipped once and put ~19 m/s^2 of phantom lift under a fast stick sweep.
+  See `Measuring.md` trap 41.
+- **Un-aiming is PITCH ONLY.** Roll must keep reaching the sensors: bank is real, the drift flip
+  lived in the roll axis, and the wall-hover case (`TODO.md` 5.10) depends on the sensors rotating
+  with a rolled craft.
+- **Consequence, and it is a real one:** while aiming, the springs generate no pitch-restoring
+  torque, because all four now push on equal arms. Attitude on that axis is held entirely by the
+  leveling torque. That moves toward the single-attitude-authority rule rather than away from it,
+  but it is a behaviour change and not a refactor.
 - **Use `HoverSupport`, not `IsHoverGrounded`, for anything that should behave differently in the
   air.** `IsHoverGrounded` answers "can the rays see ground", which stays true for **2.5m of free
   fall** because above `hoverHeight` spring compression goes negative and clamps to zero. Four systems
@@ -261,6 +281,14 @@ burst. Grounded and air jump. Chassis bank. Forwards air-control intent to Found
   dead band twice.
 - **Continuous boost requires forward-dominant throttle.** Pure lateral stick plus boost fires a dodge
   instead, so a player cannot boost straight sideways at all.
+- **Drive thrust and forward drag act along `_driveAxis`, never along `transform.forward`.** In
+  strafe mode the nose is an AIM direction, not a travel direction, so raw chassis forward fired the
+  engine at the sky or the floor in proportion to the aim angle. Solved ONCE per FixedUpdate and
+  read by both, because drag is the force that opposes drive and a damping force on a different
+  axis than the thrust it opposes is not damping. Fixing only the thrust moves the artifact from the
+  press to the release, since full drag arrives at throttle 0. Drive mode is identity.
+- **Reverse is the binding case for anything aim-pitch related**, because `maxReverseAccel` is
+  deliberately not strafe-blended (it doubles as the brake), so it is the larger number.
 - **`ApplyChassisBank` is not visual-only:** `meshRoot` owns all five mesh colliders.
 - Lateral damp excludes intended strafe velocity, so dodge bursts at the cap are additive (surge, then
   glide back down).
@@ -426,7 +454,17 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
   source inspector is dead (trap 12).
 - Lives on the Camera object with all five sources as children, so `vehicleRoot` is a serialized field
   and crash detection needs `VehicleCollisionRelay`.
-- **Three of five channels are currently unassigned** (`TODO.md` 0.15).
+- **Three of five channels are unassigned ON PURPOSE, and this is a scoping decision rather than a
+  defect.** EMP, weapon recoil and denied jump are nulled for the current playtest, in which the
+  owner has disabled the shield, the EMP and every weapon except the machine gun to keep the session
+  about movement. Formerly `TODO.md` 0.15. **Consequence: 0.16 and 2.2 cannot be judged in this
+  build**, and 0.16 is a movement cue rather than a weapon one, so confirm whether the denied-jump
+  channel was meant to travel with the other two before restoring anything.
+- **The nulls are SCENE INSTANCE overrides; the prefab is fully wired.** `Prototype_Scene.unity`
+  overrides all three to `{fileID: 0}` on the vehicle instance. **Reading the prefab to answer "is
+  this hooked up" gives the wrong answer**, which cost a wrong conclusion on 2026-08-16 before the
+  owner corrected it. The runtime `Awake` warnings are the reliable check. Same hazard family as
+  3.16.
 
 ### `VehicleHUD.cs`
 
@@ -683,6 +721,7 @@ is stable and never reused.**
 | 38 | A quantity that discards sign measures effort, not achievement, and will pay out for going nowhere |
 | 39 | An instrument that collapses two causes into one label will confidently blame the wrong one |
 | 40 | The memory floor is not a proxy for editor accumulation, and a restart can fix what no counter shows |
+| 41 | A servo-driven quantity read from its COMMAND rather than its ACHIEVED value is wrong exactly during fast input |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
@@ -698,6 +737,33 @@ rediscovery of the thing that prompted it.
 
 ### Physics and handling
 
+- **AIMING DOES NOT MOVE THE CRAFT.** Decided 2026-08-17 across two fixes that turned out to be the
+  same principle: in strafe mode the chassis pitch exists to aim, and nothing physical may read it
+  as an intent to travel. Thrust and drag remove it (Propulsion), and the hover sensors are placed
+  and pointed as though it were not there (Foundation). **The craft is a turret in pitch: it pivots
+  about a mount held at hover height, and the mount does not care where the barrel points.** Roll is
+  explicitly excluded and still reaches everything. Drive mode is untouched in both cases, measured
+  to identity rather than assumed.
+- **ONE EXCEPTION, and it is deliberate: the AIR JUMP.** It fires along `transform.up`, so aim pitch
+  tilts it. Spotted from the scene view 2026-08-17 and left alone. Measured at `airJumpImpulse` 20:
+
+  | aim | vertical | horizontal | direction |
+  |---|---|---|---|
+  | 20 deg nose UP | 18.79 | 6.84 | up and **BACKWARD** |
+  | 0 | 20.00 | 0.00 | straight up |
+  | 20 deg nose DOWN | 18.79 | 6.84 | up and **FORWARD** |
+  | 36 deg nose DOWN | 16.18 | 11.76 | up and **FORWARD** |
+
+  **The direction is the opposite of the intuition**, because pitching the nose down tilts the roof
+  forward. **The grounded jump and the drift hop are NOT affected**; both fire along `Vector3.up`.
+  Kept because the local-up axis is the same property that makes a wall jump most of the way built
+  (`TODO.md` 5.10, where the 90 degree case measures as a clean horizontal shove). **Do not file a
+  sideways air jump in strafe as a regression against the rule above; it is outside it on purpose.**
+- **The costs of that were accepted with it, not overlooked.** Aiming no longer produces any sense of
+  the craft settling or leaning. The hull still tilts, so belly clearance still falls from 6.70m
+  level to about 4.31m at 36 degrees, and **the nose can approach terrain the sensors no longer look
+  at**, since they sit at un-aimed positions. If an unexplained scrape appears while aiming down over
+  a rise, that is the cause and `TuningLog.md` records the rejected middle option.
 - **`flipRecoveryDelay` is the flip punishment knob.** Raise it to make flipping hurt more; it is dead
   time, which reads as punishment. **Do not lower `flipRecoveryTorque`** for the same purpose, which
   just makes righting look sluggish, and **do not raise `flipRecoveryReleaseAngle` toward the arm
@@ -745,6 +811,25 @@ rediscovery of the thing that prompted it.
   rotates the axis yaw acts about.** Rolled 90 degrees, yaw input pitches you in world terms. That is why
   steering feels absent during a trick while measuring as fully live, and it is why the right stick is a
   good candidate for camera control in that state (`TODO.md` 0.13).
+
+### Judged good in the 2026-08-16 playtest
+
+**These are acceptance criteria, not observations.** A change that degrades one of them is a
+regression even if it improves something else.
+
+- **Boost, drive mode.** Owner: "boost generally feels pretty good". The multiplier and all four
+  shipped camera terms stand. **This withdraws the queued `boostBlendSeconds` 0.35 to 0.15 change**,
+  which was contingent on boost still reading flat, and it did not. What remains is presentation
+  only (`TODO.md` 2.11), which the owner independently reached the same conclusion about.
+- **Speed and turning.** `topSpeed` 80, `strafeTopSpeed` 53, the yaw pair and the drift yaw
+  multiplier are now bounded by a feel report rather than free.
+- **Drift, as a held slide.** `driftLateralDamp`, `driftForwardDamp`, `driftYawMultiplier`,
+  `driftSustainedTopSpeed` and the sustain/bleed pair are bounded. **The drift HOP is excluded and is
+  still an open complaint** (`TODO.md` 0.23).
+- **The strafe-to-drive top speed ratio, 66.25% in both boosted and unboosted form.** Owner accepted
+  it against the 5.0s continuous boost budget (`maxEnergy` 100 / `boostEnergyPerSecond` 20). Boost
+  scales both ceilings by the same factor, so **there is only one ratio and it cannot be tuned per
+  mode.** This bounds `TODO.md` 5.11 to the camping question alone.
 
 ### Trick economy
 

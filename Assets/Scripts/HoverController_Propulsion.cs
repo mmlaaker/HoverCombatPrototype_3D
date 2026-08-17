@@ -422,6 +422,68 @@ public class HoverController_Propulsion : MonoBehaviour
         => P.strafeTopSpeed * (effectiveTopSpeed / P.topSpeed);
 
     /// <summary>
+    /// The axis drive and reverse thrust act along, with the commanded AIM pitch
+    /// rotated back out, weighted by strafe blend.
+    ///
+    /// Drive thrust used raw transform.forward. In drive mode that is correct and
+    /// this returns it unchanged. In strafe mode it is not, because the chassis is
+    /// pitched to AIM rather than to travel, so aiming up commanded a climb and
+    /// aiming down commanded a dive, at full drive authority.
+    ///
+    /// What that cost, from the live values on 2026-08-16:
+    ///
+    ///   grounded gravity          9.81 * (1 + extraGravityMultiplier 3) = 39.24 m/s^2
+    ///   forward thrust in strafe  strafeAccel 47      * sin(36) = 27.6 m/s^2 vertical
+    ///   REVERSE thrust in strafe  maxReverseAccel 67  * sin(36) = 39.4 m/s^2 vertical
+    ///
+    /// Reverse is the binding case, and it is binding because maxReverseAccel is
+    /// deliberately NOT strafe-blended (it doubles as the brake). 67 * sin(t) reaches
+    /// 39.24 at t = 35.85 degrees, so at strafePitchLimit 36 a nose-down reverse is
+    /// already at neutral buoyancy and anything past it flies. That is the value at
+    /// which the owner reported functionality breaking, to within 0.15 degrees.
+    ///
+    /// Below that threshold it does not fly, it OSCILLATES, which is the reported
+    /// symptom. The spring clamps to zero above hoverHeight so it cannot pull down;
+    /// the craft rises, the spring bottoms out, gravity returns it, the spring
+    /// catches it. liftStrength 16 and liftDamping 2.2 give a damping ratio of
+    /// 2.2 / (2 * sqrt(16)) = 0.275, underdamped, period ~1.6s, decaying over
+    /// roughly a second. "Gentle rubber banding up and down for a bit."
+    ///
+    /// Removing the COMMANDED aim pitch rather than projecting onto the horizontal
+    /// is deliberate: terrain-induced pitch still contributes, so strafing up a ramp
+    /// still thrusts along the ramp. Only the part the player aimed with is removed.
+    ///
+    /// Uses the commanded value rather than the measured chassis attitude because
+    /// commanded is what the player asked for; the measured angle also carries the
+    /// terrain pitch this is meant to preserve, and reading it back would cancel
+    /// that too.
+    ///
+    /// Known and accepted, same shape as the ApplyBoostBlend note: _strafePitchAccum
+    /// is written by ApplyStrafePitch, which runs LATER in the same FixedUpdate, so
+    /// this reads last tick's value. At 100Hz and strafePitchSensitivity 150 that is
+    /// at most 1.5 degrees of stale aim. Hoisting ApplyStrafePitch would also change
+    /// what every other contributor sees, which is a behaviour change rather than a
+    /// consistency fix.
+    /// </summary>
+    private Vector3 ComputeDriveAxis()
+    {
+        if (_strafeModeBlend <= 0f)
+            return transform.forward;
+
+        // _strafePitchAccum is in Unity euler X convention (negative is nose up),
+        // so undoing it is a rotation of -accum about the chassis right axis.
+        float aimPitch = _strafePitchAccum * _strafeModeBlend;
+
+        return Quaternion.AngleAxis(-aimPitch, transform.right) * transform.forward;
+    }
+
+    /// <summary>
+    /// This tick's drive axis, written once in FixedUpdate. Read it; do not recompute
+    /// it. See ComputeDriveAxis.
+    /// </summary>
+    private Vector3 _driveAxis;
+
+    /// <summary>
     /// The forward cap drive actually clamps against: boost-scaled top speed, blended toward the
     /// boost-scaled strafe ceiling by strafe mode.
     ///
@@ -521,6 +583,13 @@ public class HoverController_Propulsion : MonoBehaviour
         // the inspector because both are derived from boost and strafe state.
         _dbgFwdCap = BlendedTopSpeed(effectiveTopSpeed);
         _dbgLatCap = StrafeTopSpeedScaled(effectiveTopSpeed);
+
+        // Solved once, after the strafe blend it depends on and before the two methods
+        // that read it. ApplyDrive and ApplyDrag MUST see the same axis: drag is the
+        // force that opposes drive, and a damping force on a different axis than the
+        // thrust it opposes is not damping. Caching makes that structural instead of
+        // relying on nothing between them happening to change the inputs.
+        _driveAxis = ComputeDriveAxis();
 
         ApplyDrive(grounded, effectiveTopSpeed, effectiveForwardAccel);
         ApplyStrafe(grounded, effectiveTopSpeed, effectiveForwardAccel);
@@ -1122,10 +1191,12 @@ public class HoverController_Propulsion : MonoBehaviour
         _dbgReverse    = rawAccel < 0f;
         _dbgDriveAccel = rawAccel;
 
-        rb.AddForce(transform.forward * rawAccel, ForceMode.Acceleration);
+        // Not transform.forward: in strafe mode the nose is an AIM direction, not a
+        // travel direction. See ComputeDriveAxis.
+        rb.AddForce(_driveAxis * rawAccel, ForceMode.Acceleration);
 
         if (ShouldDrawDebug)
-            Debug.DrawRay(transform.position, transform.forward * rawAccel, Color.yellow);
+            Debug.DrawRay(transform.position, _driveAxis * rawAccel, Color.yellow);
     }
 
     // -------------------------------------------------------------------------
@@ -1247,7 +1318,19 @@ public class HoverController_Propulsion : MonoBehaviour
             if (effectiveForwardDamp > 0f)
             {
                 _dbgDrag = true;
-                rb.AddForce(transform.forward * (-_cachedLocalVel.z * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
+
+                // Shares this tick's _driveAxis with ApplyDrive, and must. Drag is the
+                // force that opposes drive, so measuring or applying it on a different
+                // axis reintroduces the aim-pitch vertical component at the exact
+                // moment drive stops resisting it: full drag arrives at throttle 0, so
+                // the oscillation would simply move from the press to the release.
+                //
+                // Velocity is projected onto the same axis rather than read from
+                // _cachedLocalVel.z, because a damping force whose magnitude and
+                // direction disagree is not damping.
+                float alongAxis = Vector3.Dot(rb.linearVelocity, _driveAxis);
+
+                rb.AddForce(_driveAxis * (-alongAxis * effectiveForwardDamp * dragWeight), ForceMode.Acceleration);
             }
         }
     }

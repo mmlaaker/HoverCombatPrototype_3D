@@ -70,7 +70,7 @@ MonoBehaviour:
   emitter:
     emissionRate: 12
     burstCount: 0
-    startSpeed: 500
+    startSpeed: 1000
     startSpeedMin: 0
     startLifetime: 0.5
     coneAngle: 1

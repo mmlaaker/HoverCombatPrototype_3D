@@ -147,6 +147,103 @@ environment halved apparent speed) and the lever is speed lines rather than more
 
 ---
 
+### Aiming and the hover sensors
+*Closed as 0.22, shipped 2026-08-17. Owner: "this seems like a good change."*
+
+Reported as: raising `strafePitchLimit` to move the reticle up "breaks functionality" past some
+value, and even at 35 "there's this weird gentle rubber banding up and down for a bit" when
+strafing forward or backward at full aim.
+
+**Nothing was compensating for aim pitch anywhere.** That is the whole finding. Four independent
+defects fell out of one omission, and each was measured before it was touched.
+
+**1. Thrust followed the nose.** Drive applied force along raw `transform.forward`, so in strafe
+mode the chassis pitch that exists to AIM was also steering the engine.
+
+| | accel | vertical component at 36 deg |
+|---|---|---|
+| forward, strafe-blended | `strafeAccel` 47 | 27.6 m/s^2 |
+| **reverse, NOT strafe-blended** | `maxReverseAccel` 67 | **39.4 m/s^2** |
+| grounded gravity | | 39.24 m/s^2 |
+
+Reverse binds, because `maxReverseAccel` doubles as the brake and is deliberately never softened
+for strafe. `67 sin(t) = 39.24` solves at **t = 35.85 degrees**, against a shipped
+`strafePitchLimit` of 36. The owner found the edge at 35. Below that threshold it does not fly, it
+oscillates: the spring clamps at zero and cannot pull down, so the craft rises, the spring bottoms
+out, gravity returns it. `liftStrength` 16 against `liftDamping` 2.2 is a damping ratio of 0.275,
+underdamped, ~1.6s period, decaying over about a second. That is the reported rubber banding.
+
+**Fixed** by removing the commanded aim pitch from the drive axis, weighted by strafe blend.
+Terrain pitch is deliberately preserved, so strafing up a ramp still thrusts along the ramp.
+Verified: `driveAxis.y` is 0.0000 at every aim angle in strafe and equal to `forward.y` to four
+decimals in drive.
+
+**Forward drag had to move with it.** Full drag arrives at throttle 0, so fixing only the thrust
+relocates the oscillation from the press to the release.
+
+**2, 3 and 4 were all in the hover sensors**, which are bolted to the hull and tilt with it.
+Measured on flat ground, settled:
+
+| aim | vertical ride height | belly clearance | rear springs | sensors sample ahead |
+|---|---|---|---|---|
+| 0 | 7.00 m | 6.70 m | carrying | 0.00 m |
+| 20 | 6.58 m | 4.87 m | **UNLOADED** | 2.32 m |
+| 30 | 6.06 m | 3.72 m | **UNLOADED** | 3.69 m |
+| 37 | 5.66 m | 2.97 m | **UNLOADED** | 4.81 m |
+
+- **It measured a slant, not a height**, so the craft read itself as too high and settled 1.34m
+  lower at 36 degrees.
+- **`HoverSupport` read ZERO while parked and aiming.** Same distance, compared against a
+  `supportMargin` band ending at 7.75 while `avgDistance` sat at 8.65. Leveling, drag and energy
+  regen all scale by support; air control and fall gravity scale by `(1 - support)`. The craft was
+  aiming in something close to flight mode while sitting on the ground. **This was almost certainly
+  the larger half of the felt problem and nobody had looked for it.**
+- **The front sensors looked past the nose**, 4.81m ahead at 37 degrees against a nose tip only
+  4.17m forward of the origin.
+- **The rear pair carried nothing from about 20 degrees.** Tilting lifts them above ride height and
+  a spring only pushes. The craft balanced on two forward-looking probes with nothing behind to
+  steady it, which is the "thump when you start moving" the owner reported next.
+
+**Shipped fix:** the sensors are placed, pointed and loaded as though the craft were not aiming.
+Verified at 0, 20, 37 and 40 degrees: sensor height spread 0.000, ray direction `.y` -1.0000,
+sample offset 0.00m, and un-aim angle 0.0000 in drive mode.
+
+**Two attempts were rejected on the way, and both are worth not repeating.**
+
+- **Sizing the correction from the COMMANDED aim angle.** Shipped, and the owner immediately
+  reported "a really big overcorrection going full stick up and full stick down". The chassis is a
+  torque servo and lags the stick: command reached 36 while the hull was near 12, so the correction
+  was sized for a tilt that did not exist. Measured error and its consequence:
+
+  | commanded | actual hull | gap it computed | true gap | phantom lift |
+  |---|---|---|---|---|
+  | 36 | 12 | 5.79 m | 7.00 m | **+19.4 m/s^2** (gravity is 39.24) |
+  | 0 | 20 | 7.45 m | 7.00 m | -7.2 m/s^2, springs dropping out |
+
+  Up on the way out, down on the way back, which is exactly what both stick extremes produced.
+  **Measure the achieved attitude, never the command.** Generalised as `Measuring.md` trap 41.
+
+- **Option A: straighten the rays but leave the sensors at their real tilted positions.** Offered and
+  declined by the owner in favour of the full version. It removes the forward sampling but leaves the
+  rear pair unloaded, so the craft still balances on two points. **Kept on record because it is the
+  middle ground if the accepted cost below ever bites.**
+
+**Accepted costs, agreed rather than discovered.** Aiming no longer produces any sense of the craft
+settling or leaning. The hull still tilts, so clearance still falls to about 4.31m at 36 degrees,
+and **the nose can approach terrain the sensors no longer look at.** An unexplained scrape while
+aiming down over a rise is that, and option A is the answer.
+
+**One limit disappeared.** The interim version needed `hoverHeight / cos(aim)` of sensor reach,
+capping aim at `acos(7 / 9.5)` = **42.5 degrees**. Vertical rays need ~7m at any angle, so that
+ceiling is gone and `strafePitchLimit` is no longer bounded by sensor range.
+
+**Shipped value: `strafePitchLimit` 36 -> 20.** Set by the owner after the fix, and the direction is
+the interesting part: **20 now puts the reticle higher than 36 did before.** Consistent with the
+springs having been eating the aim angle, since the old front-compressed/rear-unloaded state
+generated a nose-up torque the aim servo had to overpower every frame. Hypothesis, not measured.
+
+---
+
 ### Drift
 *Closed as M.7, shipped and judged good 2026-08-13: "this really feels like what I was going for."*
 

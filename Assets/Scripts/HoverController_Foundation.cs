@@ -439,6 +439,71 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     /// <summary>
+    /// Floor on the hover ray's normal projection, so a hull tilted far from the
+    /// surface cannot manufacture lift. See the projection in ApplyHoverForces.
+    ///
+    /// Set to hoverHeight / sensorRange because that is the steepest tilt the sensors
+    /// can actually serve: holding hoverHeight perpendicular to the surface at tilt t
+    /// needs hoverHeight / cos(t) of ray, so at 7 and 9.5 the rays run out at
+    /// acos(7 / 9.5) = 42.5 degrees. Compensating past the point the ray can reach
+    /// would promise a ride height the sensors cannot see.
+    ///
+    /// CONSEQUENCE FOR TUNING: strafePitchLimit must stay meaningfully below 42.5.
+    /// Past it the rays miss, the craft reads as airborne and sinks anyway, which is
+    /// the original defect in a worse form. Buying more by raising sensorRange is not
+    /// free: it also defines GROUNDED, and widening it makes hard landings LESS
+    /// likely, which collides with TODO 0.21.
+    /// </summary>
+    private float MinGapProjection =>
+        F.sensorRange > 0.001f ? Mathf.Clamp01(F.hoverHeight / F.sensorRange) : 1f;
+
+    /// <summary>
+    /// The rotation that takes the chassis back to square on the surface, so the hover
+    /// sensors can be placed and pointed as though the craft were not aiming. Identity
+    /// whenever the craft is not aiming, so drive mode is untouched by construction.
+    ///
+    /// MEASURED FROM THE HULL, NEVER FROM THE COMMANDED AIM ANGLE. The chassis is a
+    /// torque servo and lags the stick, so sizing anything here from the command means
+    /// correcting a tilt the craft has not reached: that is what put roughly 19 m/s^2
+    /// of phantom lift under a fast stick sweep. Reading the achieved attitude has no
+    /// such failure mode, because there is nothing being predicted.
+    ///
+    /// The reference is AverageGroundNormal rather than world up, and that is not a
+    /// choice made here: ApplyLevelingTorque already defines the craft's attitude
+    /// target as AverageGroundNormal rotated by the aim angle. So "square on the
+    /// surface" is the existing definition of unaimed, and reading the deviation from
+    /// it recovers the aim the servo has actually achieved, plus whatever error it is
+    /// still carrying. Both should come out, which is why this is not clamped to
+    /// strafePitchLimit.
+    ///
+    /// PITCH ONLY, about the chassis right axis. Roll must survive untouched: bank is
+    /// real, the drift flip lived in the roll axis, and the wall-hover case in TODO
+    /// 5.10 depends on the sensors rotating with a rolled craft.
+    ///
+    /// Scaled by aimPitchWeight, which is the strafe blend, so this fades in and out
+    /// with strafe mode instead of switching.
+    /// </summary>
+    private Quaternion UnaimRotation()
+    {
+        if (aimPitchWeight <= 0.001f)
+            return Quaternion.identity;
+
+        Vector3 axis = transform.right;
+
+        // Both flattened into the plane the pitch axis turns in, so roll and yaw
+        // cannot leak into the angle.
+        Vector3 hullUp   = Vector3.ProjectOnPlane(transform.up,     axis);
+        Vector3 squareUp = Vector3.ProjectOnPlane(AverageGroundNormal, axis);
+
+        if (hullUp.sqrMagnitude < 1e-6f || squareUp.sqrMagnitude < 1e-6f)
+            return Quaternion.identity;
+
+        float pitchDeviation = Vector3.SignedAngle(hullUp, squareUp, axis);
+
+        return Quaternion.AngleAxis(pitchDeviation * aimPitchWeight, axis);
+    }
+
+    /// <summary>
     /// Sets the airborne pitch/roll control intent. Called by Propulsion every
     /// FixedUpdate (weight = air-control blend, strafe-suppressed), and with
     /// (0, 0, 0) when inactive or on EMP freeze.
@@ -755,16 +820,24 @@ public class HoverController_Foundation : MonoBehaviour
         float   distanceSum   = 0f;
         int     groundedCount = 0;
 
+        // Hovering is measured as though the craft were not aiming. Solved once per
+        // tick, not per point, because all four sensors must move together or the
+        // springs would tilt the chassis to correct a tilt nobody asked them to see.
+        Quaternion unaim = UnaimRotation();
+
         foreach (Transform point in hoverPoints)
         {
-            Vector3 rayDir = -point.up;
+            // Sensor placed and pointed where it would be with the aim removed.
+            // Rotated about the vehicle origin, so the four keep their layout.
+            Vector3 origin = transform.position + unaim * (point.position - transform.position);
+            Vector3 rayDir = unaim * -point.up;
 
             // QueryTriggerInteraction.Ignore (inside the helper): trigger volumes
             // (pickups, ability fields) must never feed the hover springs.
-            if (!RaycastIgnoringSelf(point.position, rayDir, F.sensorRange, out RaycastHit hit))
+            if (!RaycastIgnoringSelf(origin, rayDir, F.sensorRange, out RaycastHit hit))
             {
                 if (ShouldDrawDebug)
-                    Debug.DrawRay(point.position, rayDir * F.sensorRange, Color.red);
+                    Debug.DrawRay(origin, rayDir * F.sensorRange, Color.red);
                 continue;
             }
 
@@ -774,8 +847,56 @@ public class HoverController_Foundation : MonoBehaviour
             // along slightly different axes.
             Vector3 surfaceNormal = ResolveSurfaceNormal(hit);
 
-            float compression         = _effectiveHoverHeight - hit.distance;
-            float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(point.position), surfaceNormal);
+            // The ray is cast along the craft's own down, so a chassis tilted to AIM
+            // measures a slant, not a height: hit.distance is the true gap divided by
+            // cos(aim). The springs then hold hoverHeight along the slant, and the
+            // craft sinks. Measured 2026-08-16: at 36 degrees of aim the vertical ride
+            // height falls from 7.00m to 5.66m while the pitched hull drops one end by
+            // a further 2.4m, taking belly clearance from 6.70m to 2.97m. That is the
+            // scraping.
+            //
+            // Converted here, ONCE, so compression and HoverSupport cannot disagree.
+            // Leaving support on the raw distance is worse than the sinking it fixes:
+            // avgDistance 8.65 against a supportMargin band ending at 7.75 drives
+            // HoverSupport to ZERO while the craft is sitting on the ground, and
+            // leveling, drag and regen all scale by support while air control and fall
+            // gravity scale by (1 - support).
+            //
+            // MEASURED from the ray itself, never from the commanded aim angle. The
+            // first version of this used cos(commanded aim) and it kicked hard on a
+            // fast stick sweep, because the chassis is a torque servo and lags the
+            // stick: the command reached 36 degrees while the hull was still near 12,
+            // so the correction was sized for a tilt that did not exist yet. That
+            // under-read the gap by about 17%, which at liftStrength 16 is roughly
+            // 19 m/s^2 of phantom lift, half of gravity. Returning the stick inverted
+            // it: command back at 0 while the hull was still pitched, gap over-read,
+            // springs dropping out. Up on the way out and down on the way back, which
+            // is exactly what full stick up and full stick down produced.
+            //
+            // The projection has no such failure mode. It asks the geometry what the
+            // tilt IS rather than what it was asked to be, so there is nothing to lag.
+            // It also makes the whole term self-consistent: distance along the normal,
+            // velocity along the normal, force along the normal.
+            //
+            // It self-cancels where it should. A craft sitting square on a slope has
+            // its ray along the surface normal, the projection is 1, and nothing
+            // changes. It only bites when the hull is tilted RELATIVE to the ground,
+            // which is precisely when a slant distance stops being a height.
+            //
+            // Clamped because the projection collapses toward zero as the hull nears
+            // its side, and an uncapped version would turn a glancing wall hit into
+            // enormous lift. The floor is the same ratio the sensors can physically
+            // deliver (hoverHeight / sensorRange), so amplification is bounded at
+            // 1.36x and the wall-hover case in TODO 5.10 stays roughly as it was.
+            float alongNormal = Vector3.Dot(-rayDir, surfaceNormal);
+            float gap         = hit.distance * Mathf.Max(alongNormal, MinGapProjection);
+
+            float compression         = _effectiveHoverHeight - gap;
+            // Sampled at the un-aimed position too. Every term in this loop has to
+            // live in the same frame: reading the rate at the real sensor while
+            // measuring the gap at the un-aimed one damps a motion the spring is not
+            // responding to.
+            float velocityAlongNormal = Vector3.Dot(rb.GetPointVelocity(origin), surfaceNormal);
 
             // Gravity feedforward: each point carries its share of the chassis weight,
             // so the spring term only has to correct ERROR instead of also holding the
@@ -809,14 +930,19 @@ public class HoverController_Foundation : MonoBehaviour
             // behaves identically across vehicle masses. Values retuned from
             // Force-mode by dividing by vehicle mass (1000): 10000 -> 10,
             // 1500 -> 1.5. Identical forces at mass 1000; feel unchanged.
-            rb.AddForceAtPosition(surfaceNormal * springForce, point.position, ForceMode.Acceleration);
+            // Applied at the un-aimed position, which is what makes hovering blind to
+            // aim rather than merely better at measuring it. Applying at the real
+            // sensor would put the front pair on a longer arm than the rear and turn
+            // the springs into a pitch torque that fights the aim servo, which is the
+            // two-point balancing act that produced the thump.
+            rb.AddForceAtPosition(surfaceNormal * springForce, origin, ForceMode.Acceleration);
 
             normalSum    += surfaceNormal;
-            distanceSum  += hit.distance;
+            distanceSum  += gap;
             groundedCount++;
 
             if (ShouldDrawDebug)
-                Debug.DrawRay(point.position, rayDir * hit.distance, Color.green);
+                Debug.DrawRay(origin, rayDir * hit.distance, Color.green);
         }
 
         if (groundedCount > 0)
