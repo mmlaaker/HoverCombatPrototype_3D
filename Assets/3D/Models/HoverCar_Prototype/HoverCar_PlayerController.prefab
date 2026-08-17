@@ -9909,8 +9909,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2893549940407336569}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.20106587, y: -0.0000000031152918, z: 6.3943845e-10, w: 0.9795778}
-  m_LocalPosition: {x: 0, y: 4.5, z: -6.9999995}
+  m_LocalRotation: {x: 0.17067233, y: 8.18502e-17, z: -1.6918661e-17, w: 0.9853279}
+  m_LocalPosition: {x: 0, y: 3.9999998, z: -7}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -9977,7 +9977,7 @@ MonoBehaviour:
     AngularDampingMode: 0
     RotationDamping: {x: 1, y: 1, z: 1}
     QuaternionDamping: 1
-  FollowOffset: {x: 0, y: 4.5, z: -6.9999995}
+  FollowOffset: {x: 0, y: 3.9999998, z: -7}
 --- !u!114 &6940715604228495666
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10772,7 +10772,7 @@ MonoBehaviour:
     LookAtTarget: {fileID: 0}
     CustomLookAtTarget: 0
   Lens:
-    FieldOfView: 55
+    FieldOfView: 57
     OrthographicSize: 5
     NearClipPlane: 0.3
     FarClipPlane: 1000
@@ -10923,7 +10923,7 @@ MonoBehaviour:
   inputProvider: {fileID: 5761321178091812356}
   propulsion: {fileID: 4964355425596500860}
   framing:
-    driveFollowOffset: {x: 0, y: 4.5, z: -7}
+    driveFollowOffset: {x: 0, y: 4, z: -7}
     driveTargetOffset: {x: 0, y: 1.5, z: 0}
     baseFov: 65
     pitchSensitivity: 1.5
@@ -10953,7 +10953,7 @@ MonoBehaviour:
     settleSpeed: 3.5
   strafe:
     followOffset: {x: 0, y: 3.5, z: -6}
-    fovReduction: 10
+    fovReduction: 8
     verticalDamping: 0.25
   stabilization:
     maxStableTilt: 60

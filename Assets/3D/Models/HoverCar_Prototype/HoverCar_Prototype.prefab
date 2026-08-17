@@ -40005,6 +40005,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6046522640151712471, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: FollowOffset.z
+      value: -8
+      objectReference: {fileID: 0}
     - target: {fileID: 7460556337297359226, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: profile
       value: 
@@ -40044,6 +40048,14 @@ PrefabInstance:
     - target: {fileID: 7572663318074388499, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
       value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 8117794995601602338, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: strafe.followOffset.z
+      value: -8
+      objectReference: {fileID: 0}
+    - target: {fileID: 8117794995601602338, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: framing.minFrameMargin
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 8655408817913202911, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: ShapeModule.angle
