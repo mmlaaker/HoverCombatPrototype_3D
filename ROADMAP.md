@@ -35,18 +35,21 @@ camera in the top tier. Every row below is a Tier 0 item.
 |---|---|
 | **0.12** | a sliver of bumper still clips on the pitch-up. **Largely resolved 2026-08-17** by `minFrameMargin` 5; owner accepted the residual |
 | **0.13** | the camera has no answer while the craft is flipped. **Narrowed 2026-08-16:** the trick-camera half was tested and rejected |
-| **0.14** | strafe camera view retune. Owner's own task; retune the view first, then match `reticleProjectionDistance`. **Next up** |
-| **0.16** | a denied jump gives no usable feedback. **Not judgeable in this build**, its channel is deliberately off |
 | **0.18** | `flipRecoverySpeedThreshold` 2 is an unconfirmed guess. Settle alongside `0.13` |
 | **0.19** | no camera preview state can reproduce a mid-flip pose. Tooling, lowest priority here |
-| **0.20** | boost engaged from a standstill reads as a jolt. `ForwardGate` delivers the whole package in ~15ms |
-| **0.21** | fall gravity wants another increase, bounded by the hard-landing rules and the trick landing margin |
-| **0.23** | the drift hop has no cue of any kind. `OnDriftHop` has zero subscribers |
-| **0.24** | thruster VFX and the boost camera fall out of step on release. Depends on `0.20` |
+| **0.21** | fall gravity wants another increase, bounded by the hard-landing rules and the trick landing margin. **Next up** |
+| **0.25** | the charge jump has no wind-up and the charge is invisible. **Last in tier** by owner decision; hooks already exist |
+| **0.26** | the boost camera stepped on and off whenever travel speed crossed zero. **Fixed 2026-08-17**; open only for a feel judgement on its cost at engage |
 
-**Closed since this list was written:** `0.15` (never a defect, a deliberate playtest scoping
-decision), `0.17` (boost drive mode judged good; residual became `0.20`), and `0.22` (aiming moved
-the craft, opened and closed 2026-08-17). See `TODO.md` > Retired numbers.
+**Closed since this list was written**, all 2026-08-17 unless noted: `0.15` (never a defect, a
+deliberate playtest scoping decision), `0.17` (boost drive mode judged good; residual became `0.20`),
+`0.22` (aiming moved the craft), `0.14` (framing shipped for pre-alpha 1; the revisit is deferred to
+`5.12`), `0.23` (**a suppression bug rather than a missing cue**, and no cue was built), `5.10`
+(**wall jumping already works**, confirmed in play), `0.20` (**the mechanism the tracker had recorded
+was wrong**; the cause was the look-ahead, not the speed gate), `0.24` (**retired without being
+built**, deferred behind the thruster replacement as `2.14`), and `0.16` (**retired without being
+judged**; the scoping that hides it is intentional and confirmed, successor `2.15`). See `TODO.md` >
+Retired numbers.
 
 Also worth doing during the next long run, though it gates nothing: **4.4**, confirm the marker key
 works in a build and measure allocation under sustained fire.
@@ -75,11 +78,14 @@ The step is **weapon physics** and **a target worth hitting**. The AI punching b
 | **1.3** | four of six working weapons deal zero damage. **The root item** -- nothing can die until it moves |
 | **1.4** | every weapon has unlimited ammo |
 | **2.7** | automatic fire rates are far too low |
-| **2.2** | EMP launch has no acknowledgement. Wired, unjudged, and **not judgeable in this build**: its channel is deliberately off |
+| **2.2**, **2.15** | EMP launch, and a denied jump, have no acknowledgement. Both wired, both unjudged, and **neither judgeable in this build**: all three impulse channels are deliberately off and come back together. `2.15` succeeds `0.16` |
 | **2.4**, **2.5** | hard landings have no dust, missile detonations have no explosion. This milestone's "placeholder VFX" |
 | **2.11** | boost presentation FX: vignette, speed lines, duration-based rumble. Deferred here 2026-08-14, and **confirmed as the remaining boost gap** by the owner 2026-08-16 |
-| **2.12** | drift has no VFX. Blocked on VFX, so it joins the same pass. The camera half is `0.23` and is not blocked |
+| **2.12** | drift has no VFX. Now the whole of what remains from the drift report: `0.23` closed as a suppression bug and no cue was built |
+| **2.13** | charge jump wind-up VFX, energy gathering under the craft. The movement half is `0.25` and is not blocked |
+| **2.14** | thruster VFX and the boost camera fall out of step on release, measured at 2.2x. Deferred here 2026-08-17 because the thrusters it targets are placeholder; succeeds `0.24` |
 | **5.11** | whether players camp in strafe. Unanswerable until `1.3` gives combat something to pressure with |
+| **5.12** | revisit the aim framing once there is something to aim at. Succeeds `0.14`, same reasoning as `5.11` |
 | **3.1**, **3.6**, **3.7** | weapon-side traps worth clearing while the code is open |
 | **5.2**, **5.3**, **5.4** | the knock-around pass, only partly applied |
 

@@ -34,6 +34,24 @@ public class CameraLookTuning
     [Min(1f)]
     public float speedLookAheadReference = 60f;
 
+    [Tooltip("Ceiling on how fast the look point may travel, in metres per second. This limits " +
+             "the FRAMING, not the craft: the look point is what the camera aims at, so this " +
+             "caps how fast the aim can slide forward off the nose.\n\n" +
+             "It exists because boosting from a standstill was the only case that got the whole " +
+             "look-ahead swing AND the boost lens-and-pull-back inside the same third of a " +
+             "second. Each of those alone was already judged good; together they were not.\n\n" +
+             "Measured 2026-08-17 over 50ms windows: flooring it from rest peaks at 7.7 m/s of " +
+             "look-point travel and reads fine, boosting from rest peaks at 11.5 and reads as a " +
+             "jolt. So 8 sits deliberately just above the case already accepted, which makes it " +
+             "a no-op there and a clip only on the boost case. At cruise it does nothing at all, " +
+             "because the term is saturated and the look point is not moving.\n\n" +
+             "It is symmetric, so it also stops the look point snapping back 6m in one frame when " +
+             "a collision takes the craft from top speed to zero.\n\n" +
+             "Raise toward 12 to hand the jolt back. Set to 0 to remove the limit entirely and " +
+             "restore the pre-fix behaviour.")]
+    [Min(0f)]
+    public float speedLookAheadSlew = 8f;
+
     // -------------------------------------------------------------------------
     // 🕹 Stick Coupling
     // -------------------------------------------------------------------------

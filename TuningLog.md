@@ -147,6 +147,124 @@ environment halved apparent speed) and the lever is speed lines rather than more
 
 ---
 
+### The drift hop was being suppressed, not weak
+*Closed as 0.23, shipped 2026-08-17. Owner after driving it: "this already feels a good degree better."*
+
+Reported as: "sometimes the hop doesn't feel punctual enough, it might be when I'm already turning...
+it's missing that satisfying little thump that the drift has started."
+
+**The item was written as a missing-cue problem and that was wrong.** `Propulsion.OnDriftHop` had no
+subscribers, which was true and looked like the whole answer. The actual defect was that the hop was
+**not firing at all**, gated behind `HoverSupport > 0.9f` alongside the impulse.
+
+Measured on a scripted corner, 20s, throttle 0.85 and turn 0.7, 94-95% grounded:
+
+| | entries | hop fired | lost | support at each entry |
+|---|---|---|---|---|
+| before | 3 | 2 | **1** | 0.99, **0.23**, 1.00 |
+| after | 3 | 3 | 0 | 0.99, **0.00**, 1.00 |
+
+**The shape is the useful part, not the rate.** Support is not chronically marginal: median 1.000,
+and 80% of cornering frames above 0.9. What happens is that about a fifth of the time the craft is
+genuinely off its springs, and an entry landing in one of those windows was silently dropped. Note
+the failures read 0.23 and 0.00, not 0.89 -- these were not near misses, which is why it felt random
+rather than weak.
+
+**The window is wider than it looks, and it is not "airborne".** `heightFactor` falls to zero
+0.75m above ride height while `IsHoverGrounded` stays true for 2.5m, so there is a **1.75m band where
+drift will happily engage and support reads exactly zero.** Cresting a rise, the rebound after a
+bump, or one sensor overhanging an edge all land in it, and none of them look dramatic on screen when
+the belly already rides 4.7m up. This is `CLAUDE.md`'s "IsHoverGrounded stays true for 2.5m of free
+fall" warning seen from the other side.
+
+**The fix splits one gate into two, because it was doing two unrelated jobs.**
+
+- **The EVENT fires on every entry**, rate-limited only by a 0.4s rearm. It marks a player action, so
+  dropping it for a bump was the bug. Anything built on it later inherits the reliability.
+- **The IMPULSE scales by support** rather than being gated on it. A 10 m/s VelocityChange applied
+  while the springs are not carrying the craft is a jump, not a hop. Scaling follows what
+  `HoverSupport` is for: Foundation already crossfades fall gravity, air control, leveling and drag
+  on it so no feature has a cliff, and a boolean here would only move the cliff.
+- **The 0.4s rearm replaces the support test as the rate limiter**, which the old comment says was
+  its real job (stopping a wobbling stick re-firing across the turn threshold). Set against the hop's
+  own flight: 10 m/s against 39.24 m/s^2 apexes at 0.25s. Short enough that exiting one corner and
+  entering the next still earns a second hop.
+
+**Two cues were proposed and both rejected by the owner, worth not re-proposing.**
+
+- **A camera impulse channel.** Built, then reverted. The owner's challenge was the right one: drift
+  exists to aim, so shaking the view at drift entry spends aim stability at the moment the player
+  entered drift in order to aim. That is 2.9's open objection about shaking on weapon hits, applied
+  to a manoeuvre that happens far more often.
+- **Snapping the chassis bank at entry.** Rejected on a general principle worth keeping: **poses
+  blend, they do not snap.** A snap on one axis reads as a different system rather than as emphasis.
+
+**No cue was built at all, and the report was answered anyway.** The physical hop is sufficient once
+it actually fires. The remaining visual work is 2.12.
+
+---
+
+### Drive and strafe framing
+*Closed as 0.14, shipped 2026-08-17 for pre-alpha 1. Revisit deferred to pre-alpha 2 as 5.12.*
+
+**Shipped by the owner after a long assisted search.** Read from the prefab: drive follow offset
+(0, 4, -7) at `baseFov` 65; strafe follow offset (0, 3.5, -6) at `fovReduction` **8**, so strafe FOV
+57; strafe composer `TargetOffset.y` 1; `reticleProjectionDistance` 200.
+
+**Only two numbers actually moved**, and that is the headline. Drive dropped 0.5m, and the strafe FOV
+reduction went 10 to 8. Everything else returned to where it started after wider candidates were
+tried and rejected.
+
+| | look-down | horizon | reticle | crosshair gap | hull |
+|---|---|---|---|---|---|
+| drive before | 23.2 deg | 0.836 | +455px | 0.166 | 51.6% |
+| **drive shipped** | **19.7 deg** | **0.780** | **+382px** | **0.128** | **50.7%** |
+| strafe before | 22.6 deg | 0.900 | +552px | 0.133 | 72.6% |
+| **strafe shipped** | **22.6 deg** | **0.884** | **+383px** | **0.127** | **69.6%** |
+
+**THE RESULT THAT MATTERS IS THE ONE THAT WAS REJECTED**, because it is the reason the shipped values
+are so close to the originals.
+
+**Two candidate framings were built, measured and thrown away.**
+
+1. **Flatten the camera to bring the horizon toward centre.** Strafe at (0, 2.2, -7) FOV 58 put the
+   horizon at 0.655 and the hull at 47.9%, both large improvements, and was **unusable**: the
+   crosshair gap collapsed from 0.133 to **0.003**. The reticle sat four pixels above the roofline
+   and welded itself to the cab. Owner: "the reticle looks fixed to the top of my cab in a way that
+   I'm not aiming at what's out in front of me, and I can't even see my own bullets as a result."
+   **The gap comes from how far the camera sits above the ROOFLINE** (2.05m above the craft origin),
+   and flattening the camera to roof height merges the roof with the horizon. Every metre of height
+   removed costs roughly 0.075 of gap.
+2. **Pull back and narrow the lens to shrink the hull.** Strafe at (0, 4.2, -11) FOV 48 achieved
+   everything on paper -- horizon 0.623, hull 42.3%, gap 0.136, biggest target size of any candidate
+   -- and produced the **Vertigo effect**. Pulling back while narrowing cancels on subject size and
+   adds on perspective, which is the dolly zoom, literally. Owner: "the FOV change making my car
+   appear to squash... it just kinda looks weird flattening the world and car like that."
+
+**Use the dolly index when judging any future framing change: apparent size of the craft in strafe
+divided by its size in drive.** 1.00 means the car holds still while the perspective reshapes around
+it, which is the artifact. The rejected candidate measured **1.10**. The original was 1.73 and never
+bothered anyone. **The shipped 1.37 is the number to stay near.** Most third-person games avoid this
+by keeping the FOV delta small and moving the camera toward the subject; this project's delta is now
+8 degrees, down from 13.
+
+**The trade curve, so it is not re-derived.** Crosshair clearance, horizon height and hull size cannot
+all be improved at once with the hull fully on screen. Holding the original's 0.133 gap while getting
+the horizon down to 0.623 required (0, 4.2, -11) at FOV 48, which is the Vertigo candidate. Nothing
+inside 6-8m of distance satisfied all three.
+
+**Also settled: `reticleProjectionDistance` has almost no authority at this framing.** Across 200m
+down to 70m the reticle moves about 23px, because a flat forward ray converges near the horizon
+regardless of distance. It regains authority only if the camera gets much flatter. **0.14's
+instruction to "retune the view then set that number to match" is effectively a no-op now**, which is
+a good state: one less coupled knob.
+
+**What was NOT fixed and is the biggest number on the table: the hull still occupies 69.6% of screen
+height in strafe.** Every candidate that improved it broke something judged more important. That is
+5.12's first question.
+
+---
+
 ### Aiming and the hover sensors
 *Closed as 0.22, shipped 2026-08-17. Owner: "this seems like a good change."*
 
@@ -411,6 +529,140 @@ between the boost level and a slower copy of itself, so a snappier ramp opens a 
 to 0.15 took peak surge 0.56 -> 0.77 with no camera tuning at all. **It is also the one boost knob
 that touches gameplay rather than presentation**, so if the craft ever feels twitchy to commit, revert
 this before touching any camera value. The general form of the trap is `CLAUDE.md` trap 21.
+
+**Values above have drifted since this was written.** Read live 2026-08-17 from the scene instance:
+`fovIncrease` 4, `fovOvershoot` **6** (not 12), `zPullBack` **0.5** (not 0.7), `zLagOnEngage` 2.5,
+`releaseSpeed` 3.5, `settleSpeed` 3.5, `forwardGateSpeed` 2. Re-measured peak at engage is FOV 65 to
+**72.4** and follow Z to **-8.95** from -7, reached 0.35s after engaging. The prose above still holds;
+only the magnitudes moved.
+
+### The boost jolt at a standstill
+*Shipped 2026-08-17, closing `TODO.md` 0.20. **The recorded mechanism was wrong and the measurement
+disproved it.***
+
+Owner, 2026-08-16: *"There is the occasion where I start a boost with zero or barely any speed, and
+the camera movement can feel kinda jarring in that moment."*
+
+**What 0.20 claimed, and why it was wrong.** The item had it that `ForwardGate` =
+`Clamp01(travelSpeed / forwardGateSpeed)` with `forwardGateSpeed` at 2 delivered the whole camera
+package as a step within ~15ms of engaging. That was arithmetic done without a run, and it is
+backwards. `boostLerp` is a `MoveTowards` over `boostBlendSeconds` 0.35, so **the gate opens before
+the envelope has any magnitude to gate**: measured, the gate reads 1.000 at the first frame sampled
+after engage, 51ms in, when the boost envelope is at 6.6% of full. Raising `forwardGateSpeed` would
+have changed behaviour, but not the behaviour that was reported. The gate is doing only its original
+narrow job of killing the FOV kick when you boost in reverse.
+
+**The discriminating measurement.** Three runs on one flat 340m lane, same start, scripted input, one
+variable changed at a time. Sampled per frame off live `Camera.main` and the live camera transform,
+not off the commanded values (`Measuring.md` traps 26 and 41).
+
+| run | look-point swing | rig pull-back | lens | verdict |
+|---|---|---|---|---|
+| throttle from rest, no boost | **6.00m** over 0.92s | 1.53m | none | never reported |
+| boost at speed | **1.91m** | 2.44m | +7.5 deg | judged good |
+| **boost from rest** | **6.00m** over 0.70s | 2.59m | +7.5 deg | **the report** |
+
+**The boost package is identical at rest and at speed** — 72.47 against 72.41 degrees peak, 2.59m
+against 2.44m of rig travel — which is what rules it out as the cause. What is unique to the bad case
+is that boost is the only thing that drags the look-ahead through its **entire** six-metre swing,
+because at speed the term is already saturated and does not move at all. Each ingredient alone was
+already accepted; only the standstill case carries both, inside the same third of a second, against
+a world that is not yet flowing past to hide it in.
+
+**The fix: a slew limit on the look point, `speedLookAheadSlew` = 8 m/s.** Peak rates over 50ms
+windows, which is the quantity that separates the cases:
+
+| | before | after |
+|---|---|---|
+| boost from rest | **11.49 m/s** | **8.03 m/s** |
+| throttle from rest | 7.74 m/s | never reaches the limit |
+
+Chosen so it cannot touch the case already judged good. Verified by logging the limited and unlimited
+values inside the same run rather than comparing peaks across runs: flooring it from rest, **the
+largest gap the limit ever opened was 0.05m**, and full look-ahead was reached at 0.918s against
+0.921s unlimited. At cruise it never engages, the term being saturated.
+
+Cost, and it is the only one: the look point reaches full extension at **0.85s instead of 0.70s**
+under boost, so the craft sits fractionally higher in frame for that 0.15s. Raise toward 12 to hand
+the jolt back.
+
+**Rejected: raising `forwardGateSpeed` toward 30.** It was the item's own proposal and it does have
+the shape of a fix — the package would ramp with speed and cruise is provably untouched, the gate
+being saturated above 30. Rejected because the measurement showed the package is not what differs
+between the good case and the bad one, and because delaying it breaks what it is for. The engage
+transient is a "you just committed" cue; a cue that waits is a worse cue. **`forwardGateSpeed` stays
+at 2 and its tooltip's "keep this LOW" still stands.**
+
+**Side effect nobody has judged:** the limit is symmetric, so a collision that takes the craft from
+top speed to a standstill no longer snaps the look point back six metres in one frame. It retracts
+over roughly 0.75s instead.
+
+**Why a slew limit rather than smoothing.** The quantity separating good from bad is a peak rate, and
+a lerp cannot bound a peak rate: its speed scales with the gap, so a 0-to-6m gap starts fast whatever
+constant is chosen. The limit also moved the look-ahead into the integrate stage, since a rate limit
+is memory; `ContributeLookAhead` stays pure and `SpeedLookAheadTarget` is the single expression of
+the speed-to-distance mapping, shared with the preview states so the two cannot diverge.
+
+### The boost gate was a step against reversing
+*Shipped 2026-08-17, `TODO.md` 0.26. **Found in marker data, then reproduced.***
+
+Owner, 2026-08-17: *"If I boost and flick the left stick forward and backwards, I can create a camera
+jumping back and forth kind of bug."*
+
+**How it was found is worth recording.** The owner pressed `M` twice during a 105s session for what
+they described as hitches. Marker 1 (`t=47.04`) was the worst frame of the session at 25.04ms against
+a 3.39ms baseline, and turned out to be the already-closed editor GC sawtooth: memory climbs ~4.5 MB/s
+from 760MB to 825-857MB and collapses back roughly every 24s, and the marker sits at a peak. **Marker
+2 (`t=74.34`) had no frame problem at all** — worst frame within 1.2s either side was 4.83ms — and was
+instead this bug, caught live: a flick from +0.88 to -0.99 with boost held, decelerating from 103 m/s,
+crossing zero at `t≈72.93` and reaching 83.75 m/s in reverse, which is exactly `reverseTopSpeed` 67 x
+`boostSpeedMultiplier` 1.25. Travel direction swung from -2 to -179 degrees in about 60ms.
+
+**Mechanism, then reproduced with boost pinned at 1.00 through a scripted flick:**
+
+| | before | after |
+|---|---|---|
+| gate 1.000 -> 0.000 | **23ms** | **287ms** |
+| FOV carried | 4.00 deg | 4.00 deg |
+| commanded rig Z | -7.502 -> -7.000 | -7.502 -> -7.000 |
+| rig travel rate | **21.2 m/s** | **3.2 m/s** |
+
+Nothing was removed; the same swing now takes 0.29s instead of a frame and a half. With the engage
+surge still live rather than decayed the untreated case would carry nearer 7.4 degrees and 3m in the
+same 23ms, since `fovOvershoot` and `zLagOnEngage` are gated too.
+
+**Fixed by `forwardGateSlew` 3.5, a limit on the RESULT rather than on the threshold.** That split is
+the whole design. Widening `forwardGateSpeed` would soften the step as well, but it would buy that by
+turning a direction test into a speed ramp, which its own tooltip argues against and which this file
+already rejected for 0.20. The gate answers "am I backing up"; how fast is not its question.
+
+**Symmetric**, because the artifact is an oscillation. Limiting only the closing edge would cost
+nothing at engage but leave the re-opening snap intact, which is half the reported behaviour.
+
+**THE COST, which is real and larger than predicted.** The arithmetic said 0.8 degrees because it
+counted only the sustained term. The gate multiplies the overshoot as well, and the overshoot is
+already substantial early, so the measured cost from a standstill is **up to 1.8 degrees of lens
+through the first quarter second**, with the gate needing about 0.31s to open. **The peak is
+untouched: 72.48 against 72.43**, because the overshoot crests at 0.35s once the gate has finished
+opening. So the ramp changes shape and the transient still lands at full strength.
+
+That cost pushes the same way 0.20 did — a softer first third to an engage from a standstill is what
+that item wanted — but it is a change to a feel that was signed off, which is why 0.26 stays open for
+a judgement rather than closing here.
+
+**Two alternatives if it reads wrong**, in order of how much they give back:
+
+1. **Raise `forwardGateSlew` toward 8.** The reversal transit becomes ~125ms, still five times
+   calmer than the 23ms step, and the engage cost roughly halves.
+2. **Make it asymmetric**, opening instantly and closing at the limit. Zero engage cost, and it fixes
+   the forward-to-reverse half. It does NOT fix reverse-to-forward, which snaps the package back on in
+   the same 23ms, so it trades away half the bug for all of the cost.
+
+A third was considered and not built: **change what the gate reads at rest.** At zero travel speed the
+gate currently evaluates to 0, meaning "not going forward", when the honest answer to "am I backing
+up" is no. Re-centring it so zero speed reads open would remove the engage cost outright. It also
+changes what boosting from a standstill into reverse looks like, and that is a design question about
+what the gate means rather than a tuning one, so it wants the owner rather than a measurement.
 
 ---
 

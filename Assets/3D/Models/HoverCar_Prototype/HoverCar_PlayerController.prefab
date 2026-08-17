@@ -10940,6 +10940,7 @@ MonoBehaviour:
   look:
     speedLookAheadMax: 6
     speedLookAheadReference: 80
+    speedLookAheadSlew: 8
     pitchLookLift: 1
     pitchLookAhead: 1
     fadeLookAheadWhenInverted: 1

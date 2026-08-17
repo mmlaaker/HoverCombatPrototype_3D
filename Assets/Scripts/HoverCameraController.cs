@@ -428,6 +428,18 @@ public class HoverCameraController : MonoBehaviour
         // wants the chassis number, since its offset is chassis-local.
         public float travelSpeed;
 
+        // 0..1 direction gate on every boost term, ALREADY slew-limited. Carried
+        // solved rather than derived in the contributors because the limit is
+        // memory. See IntegrateForwardGate.
+        public float forwardGate;
+
+        // Metres the speed term pushes the look point ahead, ALREADY slew-limited.
+        // Carried as a distance rather than derived from forwardSpeed inside the
+        // contributor because the limit is on how fast the FRAMING may travel, and
+        // that is a property of the look point rather than of the craft. See
+        // IntegrateLookAheadDistance.
+        public float lookAheadDistance;
+
         // Boost arrives as TWO numbers rather than as Propulsion.BoostLerp, because
         // BoostLerp only ever says "how far into boost am I right now" and two of
         // the four boost effects need memory. See IntegrateBoostEnvelope.
@@ -557,6 +569,12 @@ public class HoverCameraController : MonoBehaviour
     // cannot express an overshoot or an asymmetric release.
     private float _boostHold;
     private float _boostSettle;
+
+    // Slew-limited speed look-ahead, in metres. See IntegrateLookAheadDistance.
+    private float _lookAheadDistance;
+
+    // Slew-limited forward gate, 0..1. See IntegrateForwardGate.
+    private float _forwardGate;
 
     // Tracks previous strafe state for transition detection
     private bool _wasStrafingLastFrame;
@@ -974,6 +992,12 @@ public class HoverCameraController : MonoBehaviour
         // moment you raised the crosshair.
         IntegrateBoostEnvelope();
 
+        // Also outside the strafe branch, and for the same reason: freezing the
+        // look point while the crosshair is up would let it arrive as a step the
+        // moment drive resumed, which is the defect this limit exists to remove.
+        IntegrateLookAheadDistance();
+        IntegrateForwardGate();
+
         // ── Solve and commit ──────────────────────────────────────────────
         FramingInputs inputs = GatherLiveInputs(strafing);
 
@@ -1007,6 +1031,13 @@ public class HoverCameraController : MonoBehaviour
             elevation        = _currentElevation,
             forwardSpeed     = forwardSpeed,
             travelSpeed      = travelSpeed,
+
+            // Off the integrated distance, not recomputed from forwardSpeed here,
+            // for the same reason boost is read off its envelope: the memory has
+            // already been advanced for this frame.
+            lookAheadDistance = _lookAheadDistance,
+            forwardGate       = _forwardGate,
+
             driftLerp        = propulsion != null ? propulsion.DriftLerp        : 0f,
 
             // Read off the integrated envelope, not off BoostLerp. This method is
@@ -1138,6 +1169,19 @@ public class HoverCameraController : MonoBehaviour
         // forget it and silently render with its boost gated off, which is exactly
         // how StrafeBoost sat wrong from v2.4 until someone noticed.
         inp.travelSpeed = inp.forwardSpeed;
+
+        // Settled by definition: a preview state is a destination, never a moment
+        // in transit, so the slew limit has already been paid off and the look
+        // point is wherever that state's speed asks for. Assigned out here rather
+        // than per case for the reason immediately above — a state added later
+        // cannot forget it and silently render with its look-ahead at zero.
+        inp.lookAheadDistance = SpeedLookAheadTarget(inp.forwardSpeed);
+
+        // Settled for the same reason. Note this is what makes a preview state
+        // honest about a GATED case: the warning above about a state that omits a
+        // gate input silently rendering the UNGATED case applies here directly,
+        // and assigning outside the switch is what stops it happening again.
+        inp.forwardGate = ForwardGateTarget(inp.travelSpeed);
 
         return inp;
     }
@@ -1317,14 +1361,12 @@ public class HoverCameraController : MonoBehaviour
 
         if (authority <= 0f) return;
 
-        // Speed term. Forward component only, so reversing does not push the
-        // look point out behind the direction of travel.
-        if (look.speedLookAheadReference > 0f)
-        {
-            float speedT = Mathf.Clamp01(inp.forwardSpeed / look.speedLookAheadReference);
-
-            s.targetOffset.z += look.speedLookAheadMax * speedT * authority;
-        }
+        // Speed term. Arrives already solved and already slew-limited, so this
+        // stays a pure contributor: the rate limit is memory, and memory belongs
+        // in the integrate stage. Forward component only, so reversing does not
+        // push the look point out behind the direction of travel — that sign is
+        // handled upstream, since Clamp01 of a negative speed is zero.
+        s.targetOffset.z += inp.lookAheadDistance * authority;
 
         // Stick term. Normalised against whichever range the stick is inside, so
         // asymmetric up/down ranges still both reach full effect at their limit.
@@ -1371,10 +1413,13 @@ public class HoverCameraController : MonoBehaviour
     /// forwards. Measured at 7ms per crossing, twice per rotation, which is a
     /// visible hitch rather than a transition. The stable heading has neither
     /// problem, for the same reason v2.7 bounded the proxy against travel.
+    ///
+    /// SLEW-LIMITED since 2026-08-17; see IntegrateForwardGate. This method is the
+    /// TARGET, and contributors read the limited value off FramingInputs.
     /// </summary>
-    private float ForwardGate(in FramingInputs inp) =>
+    private float ForwardGateTarget(float travelSpeed) =>
         boost.forwardGateSpeed > 0f
-            ? Mathf.Clamp01(inp.travelSpeed / boost.forwardGateSpeed)
+            ? Mathf.Clamp01(travelSpeed / boost.forwardGateSpeed)
             : 1f;
 
     /// <summary>
@@ -1388,7 +1433,7 @@ public class HoverCameraController : MonoBehaviour
     /// </summary>
     private void ContributeBoostLens(ref FramingSolution s, in FramingInputs inp)
     {
-        float gate = ForwardGate(inp);
+        float gate = inp.forwardGate;
 
         s.fov += boost.fovIncrease  * inp.boostHold  * gate;
         s.fov += boost.fovOvershoot * inp.boostSurge * gate;
@@ -1416,7 +1461,7 @@ public class HoverCameraController : MonoBehaviour
     /// </summary>
     private void ContributeBoostPullback(ref FramingSolution s, in FramingInputs inp)
     {
-        float gate = ForwardGate(inp);
+        float gate = inp.forwardGate;
 
         // Negative Z is behind the craft, so pulling back is subtraction.
         s.followOffset.z -= boost.zPullBack    * inp.boostHold  * gate;
@@ -1635,6 +1680,121 @@ public class HoverCameraController : MonoBehaviour
             : Mathf.Lerp(_boostHold, target, boost.releaseSpeed * Time.deltaTime);
 
         _boostSettle = Mathf.Lerp(_boostSettle, _boostHold, boost.settleSpeed * Time.deltaTime);
+    }
+
+    /// <summary>
+    /// Where the speed term WANTS the look point, before any limit. The single
+    /// expression of that mapping, so the live integrator and the preview states
+    /// cannot answer the question differently.
+    /// </summary>
+    private float SpeedLookAheadTarget(float forwardSpeed) =>
+        look.speedLookAheadReference > 0f
+            ? look.speedLookAheadMax * Mathf.Clamp01(forwardSpeed / look.speedLookAheadReference)
+            : 0f;
+
+    /// <summary>
+    /// Advances the speed look-ahead under a slew limit.
+    ///
+    /// WHY THIS EXISTS. The look point used to be a pure function of speed,
+    /// recomputed every frame with no memory, so it travelled exactly as fast as
+    /// the craft accelerated. That is fine everywhere except one case, and the
+    /// 2026-08-17 measurement isolated it by running the same lane three times:
+    ///
+    ///   flooring it from rest    6.00m of look-point swing, no lens change
+    ///   boosting at speed        1.91m of swing, plus the lens and the pull-back
+    ///   boosting from rest       6.00m of swing, AND the lens and the pull-back
+    ///
+    /// Each of the first two was already judged good. The third is the only case
+    /// carrying both ingredients, and it is the one that was reported as jarring.
+    /// So the defect was never in the boost package — measured identical at rest
+    /// and at speed — it was that boost is the only thing that drags the whole
+    /// look-ahead swing through in the same third of a second the package lands in.
+    ///
+    /// A slew limit is the right instrument rather than smoothing, because the
+    /// quantity that separates the good cases from the bad one is a PEAK RATE
+    /// (7.7 m/s versus 11.5 m/s over 50ms windows), and a lerp cannot bound a
+    /// peak rate: its speed scales with the gap, so a 0-to-6m gap starts fast no
+    /// matter what constant is chosen.
+    ///
+    /// Symmetric on purpose. Retracting is limited too, which additionally stops
+    /// the look point snapping back the full six metres in a single frame when a
+    /// collision takes the craft from top speed to a standstill.
+    ///
+    /// Reads the Rigidbody directly, as the other integrators read propulsion and
+    /// input directly. GatherLiveInputs owns the world for the SOLVE stage; the
+    /// integrate stage necessarily runs before it.
+    ///
+    /// NOTE: seeds from zero, so a craft that begins life already at speed eases
+    /// its look point out over roughly speedLookAheadMax / speedLookAheadSlew
+    /// seconds. Harmless today, since the craft starts at rest and respawn is
+    /// still a stub (TODO 1.1). Worth a seed if respawn ever hands back a moving
+    /// craft.
+    /// </summary>
+    private void IntegrateLookAheadDistance()
+    {
+        float forwardSpeed = _vehicleRb != null && vehicleTarget != null
+            ? Vector3.Dot(_vehicleRb.linearVelocity, vehicleTarget.forward)
+            : 0f;
+
+        float target = SpeedLookAheadTarget(forwardSpeed);
+
+        _lookAheadDistance = look.speedLookAheadSlew > 0f
+            ? Mathf.MoveTowards(_lookAheadDistance, target, look.speedLookAheadSlew * Time.deltaTime)
+            : target;
+    }
+
+    /// <summary>
+    /// Advances the forward gate under a slew limit.
+    ///
+    /// WHY THIS EXISTS. forwardGateSpeed is 2 m/s, deliberately, so the gate is a
+    /// DIRECTION test rather than a speed ramp — see ForwardGateTarget for why
+    /// scaling by speed would be the wrong instrument. The cost of that narrow
+    /// band is that the gate behaves as a STEP against anything that reverses,
+    /// and reversing under boost is not exotic: boost in reverse works on purpose,
+    /// so travel speed crossing zero while boost is held is ordinary play.
+    ///
+    /// Measured 2026-08-17, boost pinned at 1.00 through a forward-to-reverse
+    /// flick: the gate went 1.000 to 0.000 in 23ms, carrying FOV 69.0 to 65.0 and
+    /// the rig 0.49m, which is about 21 m/s of camera travel. Flicking back
+    /// snapped the whole package on again the same way, and that oscillation is
+    /// what the owner reported. With the engage surge still live rather than
+    /// decayed, the same 23ms would carry about 7.4 degrees and 3m.
+    ///
+    /// The limit is on the RESULT, not on the threshold, and that split is the
+    /// point. Widening forwardGateSpeed would soften the step too, but it would
+    /// buy that by turning a direction test into a speed ramp, which is exactly
+    /// what its tooltip argues against and what TuningLog rejected for 0.20.
+    ///
+    /// Symmetric, because the reported artifact is an oscillation and limiting
+    /// only the closing edge would leave the re-opening snap intact.
+    ///
+    /// IT IS NOT FREE AT ENGAGE, and the cost is larger than the arithmetic first
+    /// suggested, because the gate multiplies the OVERSHOOT as well as the
+    /// sustained terms. Measured from a standstill: the gate takes about 0.31s to
+    /// open, and through the first quarter second the lens sits up to 1.8 degrees
+    /// narrower than unslewed. What is NOT affected is the peak — 72.48 against
+    /// 72.43 — because the overshoot crests at 0.35s, by which time the gate has
+    /// finished opening. So the ramp changes shape and the transient still lands
+    /// at full strength, which is the part TuningLog says does the selling.
+    ///
+    /// That cost pushes in the same direction as 0.20 rather than against it: a
+    /// slightly softer first third to an engage from a standstill is what that
+    /// item wanted. It is still a change to a feel that was signed off, so it is
+    /// called out here rather than buried.
+    /// </summary>
+    private void IntegrateForwardGate()
+    {
+        float travelSpeed = _vehicleRb != null
+            ? Vector3.Dot(_vehicleRb.linearVelocity,
+                          _headingProxy != null ? _headingProxy.forward
+                                                : (vehicleTarget != null ? vehicleTarget.forward : Vector3.forward))
+            : 0f;
+
+        float target = ForwardGateTarget(travelSpeed);
+
+        _forwardGate = boost.forwardGateSlew > 0f
+            ? Mathf.MoveTowards(_forwardGate, target, boost.forwardGateSlew * Time.deltaTime)
+            : target;
     }
 
     // ── Framing: commit ───────────────────────────────────────────────────

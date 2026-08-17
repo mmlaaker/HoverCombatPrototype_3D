@@ -204,8 +204,8 @@ where the sensors would be if the craft were not aiming.
   not reached yet. That shipped once and put ~19 m/s^2 of phantom lift under a fast stick sweep.
   See `Measuring.md` trap 41.
 - **Un-aiming is PITCH ONLY.** Roll must keep reaching the sensors: bank is real, the drift flip
-  lived in the roll axis, and the wall-hover case (`TODO.md` 5.10) depends on the sensors rotating
-  with a rolled craft.
+  lived in the roll axis, and **wall jumping depends on the sensors rotating with a rolled craft**
+  (see the wall jump entry below; it is confirmed working, not speculative).
 - **Consequence, and it is a real one:** while aiming, the springs generate no pitch-restoring
   torque, because all four now push on equal arms. Attitude on that axis is held entirely by the
   leveling torque. That moves toward the single-attitude-authority rule rather than away from it,
@@ -400,6 +400,13 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
 - **`ForwardGate` reads TRAVEL, never the nose.** The gate answers "am I backing up", which is a
   question about travel. The chassis only answers it while the nose points along the travel line, and
   a flip breaks that for about 7ms per crossing, slamming every boost cue shut at full speed.
+- **The gate is SLEW-LIMITED, and the limit is on the result rather than the threshold.**
+  `forwardGateSpeed` stays low so the gate remains a direction test; `forwardGateSlew` bounds how fast
+  the gate value may move. Without it the gate stepped 1 to 0 in 23ms whenever travel speed crossed
+  zero — ordinary play, since boost in reverse is supported — carrying 4 degrees of lens and half a
+  metre of rig at 21 m/s, and snapping back on when the stick came forward again. **Do not "fix" a
+  future recurrence by widening `forwardGateSpeed`**: that converts a direction test into a speed
+  ramp, which `TuningLog.md` rejected twice, for 0.20 and again for 0.26.
 - **The travel-heading bound limits drift SINCE air control engaged, never absolute offset from
   travel.** Do not "simplify" this back. The absolute form assumes a craft takes off pointing roughly
   where it is going; take off sliding backwards and the clamp is unsatisfiable at entry, so it hauls
@@ -412,10 +419,19 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
 - **The rate ceiling is NOT dead code, despite not being what fixed the stutter.** It is what
   guarantees no single frame can snap, and it is applied ONCE to the total move rather than to a branch
   step, so neither branch nor the bound can produce a snap whatever the others do.
+- **Speed look-ahead is RATE-LIMITED, and that limit is memory, so it lives in the integrate stage.**
+  `IntegrateLookAheadDistance` slews `_lookAheadDistance` toward `SpeedLookAheadTarget` at
+  `speedLookAheadSlew`; `ContributeLookAhead` just adds the arriving distance and stays pure.
+  **`FramingInputs.lookAheadDistance` is metres, already limited** — do not "simplify" it back into a
+  function of `forwardSpeed` inside the contributor, which is what it was before 2026-08-17 and is
+  what let boost drag the look point through its whole six-metre swing 50% faster than throttle can.
+  The integrator runs OUTSIDE the strafe branch for the same reason the boost envelope does: freezing
+  it while the crosshair is up would let it arrive as a step when drive resumed. Reasoning and the
+  three-run measurement are in `TuningLog.md` > The boost jolt at a standstill.
 - **Preview and live feed the SAME solver**, through `GatherLiveInputs` and `BuildPreviewInputs`. A
   preview that recomputes the framing starts lying the first time a contributor changes.
-- **`BuildPreviewInputs` assigns `travelSpeed = forwardSpeed` once after its switch, not per case**, so
-  a state added later cannot forget it. A per-case assignment is how one preview state sat silently
+- **`BuildPreviewInputs` assigns `travelSpeed = forwardSpeed`, `lookAheadDistance` and `forwardGate`
+  once after its switch, not per case**, so a state added later cannot forget any of them. A per-case assignment is how one preview state sat silently
   wrong for five versions. Note a preview state that omits an input a GATE reads will silently show the
   ungated case, and it looks like a correct row rather than a missing one.
 - **Every seed is live-editable and everything derived from it is recomputed per frame, not cached**,
@@ -457,9 +473,13 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
 - **Three of five channels are unassigned ON PURPOSE, and this is a scoping decision rather than a
   defect.** EMP, weapon recoil and denied jump are nulled for the current playtest, in which the
   owner has disabled the shield, the EMP and every weapon except the machine gun to keep the session
-  about movement. Formerly `TODO.md` 0.15. **Consequence: 0.16 and 2.2 cannot be judged in this
-  build**, and 0.16 is a movement cue rather than a weapon one, so confirm whether the denied-jump
-  channel was meant to travel with the other two before restoring anything.
+  about movement. Formerly `TODO.md` 0.15. **Consequence: 2.2 and 2.15 cannot be judged in this
+  build.**
+- **The denied-jump null is intentional too, and that is settled.** It was held open for a while on
+  the reasoning that a denied jump is a MOVEMENT cue rather than a weapon or energy one, so it might
+  have travelled with the other two by accident. Owner, 2026-08-17: it did not, and it will not be
+  evaluated before the pre-alpha 1 playtest. **Do not restore `jumpDeniedSource` to make 2.15
+  judgeable early** — all three channels come back together when the abilities do.
 - **The nulls are SCENE INSTANCE overrides; the prefab is fully wired.** `Prototype_Scene.unity`
   overrides all three to `{fileID: 0}` on the vehicle instance. **Reading the prefab to answer "is
   this hooked up" gives the wrong answer**, which cost a wrong conclusion on 2026-08-16 before the
@@ -514,7 +534,7 @@ because they change continuously and have no transition to hang an event on.
 | `VehicleHealth.cs` | HP pool, `OnDamaged`/`OnDeath`, invulnerability, `Respawn()` | `Respawn()` has no callers and is incomplete (`TODO.md` 1.1); timed invulnerability can never be switched on (1.2) |
 | `VehicleLayerAssigner.cs` | `[DefaultExecutionOrder(-20)]`. Assigns the hierarchy to `PlayerVehicle` / `AIVehicle` by input component | **This is what lets one shared prefab split into two collision identities at runtime.** Everything that strips "my own layer" from a mask depends on running after it |
 | `VehicleCollisionRelay.cs` | Forwards `OnCollisionEnter` from the vehicle root to the impulse router | **Exists because Unity delivers collision callbacks only to the GameObject owning the Rigidbody**, never to children, and there is no subscribe API. **Deliberately holds no tuning and makes no decisions**: a relay that started filtering would be a second place to look |
-| `HoverVehicleVFX.cs` | Three-tier cosmetic particle driver, side bursts on dodge, ground dust on hard landing | The dust prefab slots are empty, so the code path runs and produces nothing (`TODO.md` 2.4) |
+| `HoverVehicleVFX.cs` | Three-tier cosmetic particle driver, side bursts on dodge, ground dust on hard landing | The dust prefab slots are empty, so the code path runs and produces nothing (`TODO.md` 2.4). **Everything the tiers vary is an EMISSION-TIME parameter**, so the rendered plume can never track its driving signal promptly and always trails by up to one particle lifetime. `emissionRate` is the only knob that reaches particles already in the air, and it is 40 at all three tiers, so it is doing nothing. Measured 2026-08-17; it is a requirement on the replacement effects, see `TODO.md` 2.14 |
 | `EnemyHealthBar.cs` | World-space health bar, billboards in LateUpdate | Re-syncs in `OnEnable`, so it is respawn-safe. Currently the only thing that is |
 | `PlayerHoverInput.cs` | Unity Input System reader | **Left stick is read as a Vector2 from ONE action**, deliberately: per-axis actions let Unity's normalization crush one component when both are deflected. Disables itself and logs if any action is missing. Rising edges are derived here, not in consumers |
 | `AIHoverInput.cs` | Full `IHoverInputProvider` with a Roam / Flee / Dead FSM | Swapping this for `PlayerHoverInput` is the only change needed to make a craft AI-driven. **Two real gaps and several deferrals: `TODO.md` 1.6 and 3.3.** Doubles as the scripted-input rig for measurement |
@@ -722,6 +742,7 @@ is stable and never reused.**
 | 39 | An instrument that collapses two causes into one label will confidently blame the wrong one |
 | 40 | The memory floor is not a proxy for editor accumulation, and a restart can fix what no counter shows |
 | 41 | A servo-driven quantity read from its COMMAND rather than its ACHIEVED value is wrong exactly during fast input |
+| 42 | A recorded-but-never-run mechanism needs the third arm: the case that is fine AND shares an ingredient with the bad one |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
@@ -757,7 +778,7 @@ rediscovery of the thing that prompted it.
   **The direction is the opposite of the intuition**, because pitching the nose down tilts the roof
   forward. **The grounded jump and the drift hop are NOT affected**; both fire along `Vector3.up`.
   Kept because the local-up axis is the same property that makes a wall jump most of the way built
-  (`TODO.md` 5.10, where the 90 degree case measures as a clean horizontal shove). **Do not file a
+  (and it is confirmed working, see the wall jump entry). **Do not file a
   sideways air jump in strafe as a regression against the rule above; it is outside it on purpose.**
 - **The costs of that were accepted with it, not overlooked.** Aiming no longer produces any sense of
   the craft settling or leaning. The hull still tilts, so belly clearance still falls from 6.70m
@@ -806,6 +827,14 @@ rediscovery of the thing that prompted it.
 - **Unifying strafe acceleration across all four directions is withdrawn.** It would trade away
   `maxReverseAccel` staying unblended so braking is identical in both modes.
 - **The air jump is KEPT**, as a mid-air juke and trick-height extender.
+- **WALL JUMPING WORKS, and it was never built.** Confirmed by the owner in play 2026-08-17: orient
+  toward a wall, air jump, and you push off it. It falls out of the air jump firing along the craft's
+  LOCAL up, so tilting toward a surface aims the shove away from it, and the hover rays cast along
+  `-point.up` so a rolled craft genuinely puts rays on the wall and the springs push. **It is
+  difficult to do, and that is accepted rather than a defect:** the owner classes it as advanced
+  movement. Closed as `TODO.md` 5.10 without a line of code.
+  **Two things this now constrains.** The air jump must keep firing along local up, and **un-aiming
+  the hover sensors must stay PITCH ONLY**, because roll is the axis this depends on.
 - **Airborne yaw is working, and the confusion about it is a coordinate frame.** `ApplyTurning` uses the
   craft's LOCAL up and is never scaled by air-control weight, so **air control does not suppress yaw, it
   rotates the axis yaw acts about.** Rolled 90 degrees, yaw input pitches you in world terms. That is why
@@ -825,7 +854,8 @@ regression even if it improves something else.
   multiplier are now bounded by a feel report rather than free.
 - **Drift, as a held slide.** `driftLateralDamp`, `driftForwardDamp`, `driftYawMultiplier`,
   `driftSustainedTopSpeed` and the sustain/bleed pair are bounded. **The drift HOP is excluded and is
-  still an open complaint** (`TODO.md` 0.23).
+  was a separate complaint, closed 2026-08-17 as a suppression bug rather than a missing cue
+  (`TuningLog.md` > The drift hop was being suppressed). Its VFX half is `TODO.md` 2.12.
 - **The strafe-to-drive top speed ratio, 66.25% in both boosted and unboosted form.** Owner accepted
   it against the 5.0s continuous boost budget (`maxEnergy` 100 / `boostEnergyPerSecond` 20). Boost
   scales both ceilings by the same factor, so **there is only one ratio and it cannot be tuned per
@@ -898,6 +928,10 @@ regression even if it improves something else.
   streaming past, where booming along the radius would hold the angle and only add distance. **Strafe
   gets the lens and nothing else, because the strafe crosshair is yaw and pitch and moving the rig moves
   the player's aim.**
+- **POSES BLEND, THEY DO NOT SNAP.** Owner rule, 2026-08-17, given when a snapped chassis bank was
+  proposed as a drift-entry cue: everything on this craft eases into a new pose, and a snap on one
+  axis reads as a different system rather than as emphasis. Applies to bank, attitude, framing and
+  ride height. **An event that needs punctuation has to find it somewhere other than a discontinuity.**
 - **Right-stick camera pitch is attenuated by steering effort.** Right stick X is yaw, so holding a drift
   line means holding X hard over, and no thumb pushes a stick perfectly horizontally. **Scaled on turn
   magnitude rather than on drift**, because the same bleed happens in any hard corner.

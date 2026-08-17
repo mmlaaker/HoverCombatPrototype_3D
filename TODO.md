@@ -59,12 +59,12 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.13 · 0.14 · 0.16 · 0.18 · 0.19 · 0.20 · 0.21 · 0.23 · 0.24 |
+| **0** | 0.12 · 0.13 · 0.18 · 0.19 · 0.21 · 0.25 · 0.26 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
-| **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 |
-| **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 |
+| **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
+| **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
 | **4** | 4.1 · 4.2 · 4.3 · 4.4 · 4.5 |
-| **5** | 5.1 · 5.2 · 5.3 · 5.4 · 5.5 · 5.7 · 5.8 · 5.10 · 5.11 |
+| **5** | 5.1 · 5.2 · 5.3 · 5.4 · 5.5 · 5.7 · 5.8 · 5.11 · 5.12 |
 | **6** | 6.1 · 6.2 · 6.3 · 6.4 · 6.5 · 6.6 |
 
 ### The agreed working order for Tier 0
@@ -74,15 +74,23 @@ tuning and features.** Struck items are done.
 
 1. ~~**0.12**~~ resolved by tuning rather than by the code fix, see the item
 2. ~~**0.22**~~ shipped 2026-08-17, outcome in `TuningLog.md` > Aiming and the hover sensors
-3. **0.14** the strafe camera retune. Wants doing now that 0.22 has stopped the pitch range moving
-4. **0.23** cheapest item in the tier, against a drift otherwise judged good
-5. **0.20** boost engage at a standstill. Confirmed mechanism, one run to falsify
-6. **0.24** thruster VFX timing. Wiring, once 0.20 has settled the low-speed case
-7. **0.21** fall gravity, and it spends the barrel-roll landing margin
+3. ~~**0.14**~~ shipped and closed 2026-08-17. Revisit deferred to pre-alpha 2 as **5.12**
+4. ~~**0.23**~~ closed 2026-08-17. **It was a suppression bug, not a missing cue**, and no cue was
+   built. The drift VFX half remains as 2.12
+5. ~~**0.20**~~ shipped 2026-08-17, outcome in `TuningLog.md` > The boost jolt at a standstill.
+   **The mechanism this list recorded was wrong** and three runs disproved it; see the entry
+6. ~~**0.24**~~ **retired 2026-08-17 without being built.** Deferred behind the thruster replacement
+   by owner decision; the successor carrying the measurements is **2.14**
+7. **0.21** fall gravity, and it spends the barrel-roll landing margin. **Next**
 8. **0.13** needs an owner call between three shapes before any code
 9. **0.18** pairs with 0.13 by subject
-10. **0.16** cannot be judged in this build at all, see the item
+10. ~~**0.16**~~ **retired 2026-08-17 without being judged.** The scoping that hides it is intentional
+    and confirmed by the owner; the successor is **2.15**
 11. **0.19** tooling that prevents a future bug rather than work you can feel
+12. **0.26** boost gate step on reversing. **Fixed 2026-08-17**, open only for a feel judgement on
+    the engage cost. Play it before the others; it is the only item with code already in
+13. **0.25** charge jump squat. **Placed last by the owner**: it touches only the charge jump and the
+    hooks already exist, so it is the least urgent thing here rather than the least valuable
 
 ### Before the next playtest build
 
@@ -90,7 +98,10 @@ Cheap things that make a long session worth more, or that stop it producing an u
 
 - **4.4** press `M` once in the first thirty seconds and confirm the marker landed in `Player.log`
   before continuing. Eight sessions have already been lost to a marker key that silently never arrived.
-- **0.14** the strafe camera retune is the owner's own task and gates nothing else.
+- **Watch:** the speed look-ahead is now rate-limited to 8 m/s of look-point travel (`TuningLog.md` >
+  The boost jolt at a standstill). If the framing feels like it lags behind hard acceleration, that
+  is the first number to suspect. It also changes how the aim point retracts after a collision at
+  speed, which nobody has judged yet.
 - **Watch:** the two-barrel-roll landing margin is 0.12s at the shipped fall gravity (`TuningLog.md`).
   If landing tricks feels inconsistent, that is the first number to suspect, not the trick scorer.
 - **Watch:** aiming no longer moves the craft at all (`CLAUDE.md` > Standing Decisions), so the nose
@@ -227,45 +238,6 @@ snaps at 3.7ms and both stop protecting at 194ms. A `Mathf.Min(Time.deltaTime, ~
 camera hitch-proof. **Not applied:** it was never demonstrated to cause a felt artifact, and the
 editor's idle allocation means the hitch may not exist in a build at all.
 
-### 0.14 Strafe camera view retune
-
-**The owner's own task, not work to schedule.** The camera update changed the strafe view and it wants
-retuning by hand.
-
-One dependency: the reticle's resting height is set by `reticleProjectionDistance` (200 rests ~438px
-above centre, 50 ~381px, 10 ~200px), and moving the strafe camera moves the crosshair with it.
-**Retune the view first, then set that number to match.**
-
-### 0.16 A denied jump gives no usable feedback
-
-**Wired, feel unjudged, and NOT JUDGEABLE IN THIS BUILD.** The player presses jump, nothing happens, and there is
-no way to tell "out of energy" from "input didn't register" from "still in the post-land lockout". This
-matters more than a normal missing cue because energy as tempo is a design pillar: a resource the
-player is meant to manage as their primary tempo tool currently gives no feedback when it runs out.
-
-Shipped mechanism: a camera impulse on its own channel, thrown down the chassis axis so a denial while
-banked still reads as failing to rise. The air value is smaller deliberately, because the token is not
-consumed and the failure is not final. Audio is out of scope, which is why this landed on the camera.
-
-The owner's first pass was "just feels bad". Unlike the crash and EMP channels this was NOT the
-screen-direction bug, so it is a genuine shape problem. Changed from a 0.12s recoil to a 0.18s bump:
-0.12s is seven frames and reads as a frame hitch, and a bump returns to where it started, so it lands
-as a lurch rather than a one-way shove. **Still unjudged.**
-
-**If it still reads wrong, the next lever is direction rather than duration.** A denial is a failure to
-LAUNCH, so a brief up-twitch that falls back may be more legible than a downward sag.
-
-**Judge it by draining the meter and pressing jump, not with the test hotkey**, which fires without the
-empty meter that gives it meaning. Note jump costs changed (tap is now much cheaper than a full charge),
-so how often denial arrives has moved.
-
-**Blocked, and by a decision rather than a defect.** `jumpDeniedSource` is nulled on the scene
-instance along with EMP and weapon recoil, deliberately, because the owner has scoped this playtest
-to movement and disabled the shield, EMP and all weapons except the machine gun (`CLAUDE.md` >
-`HoverCameraImpulseRouter`). **Open question worth one line of confirmation: a denied jump is a
-MOVEMENT cue, not a weapon or energy firing cue, so it may have travelled with the other two by
-accident.** If it was accidental, restoring that one source makes this judgeable immediately.
-
 ### 0.18 `flipRecoverySpeedThreshold` is an unconfirmed guess
 
 Currently 2. The tooltip says so explicitly: 0.5 was too tight for this chassis and 2 is a guess.
@@ -289,23 +261,6 @@ differ from `forwardSpeed`, which `BuildPreviewInputs` currently pins equal on p
 
 Lowest priority in this tier: it is tooling that prevents a future bug rather than work you can feel.
 
-### 0.20 Boost engaged from a standstill reads as a jolt
-
-Owner, 2026-08-16: *"There is the occasion where I start a boost with zero or barely any speed, and
-the camera movement can feel kinda jarring in that moment."* Everything else about boost was judged
-good in the same breath, so this is the single residual from a closed feature.
-
-**Mechanism identified, not yet fixed.** Every camera boost term is multiplied by `ForwardGate` =
-`Clamp01(travelSpeed / forwardGateSpeed)`, and `forwardGateSpeed` is **2**. Boost acceleration is
-`maxForwardAccel` 87 x `boostAccelMultiplier` 1.5 = 130 m/s^2, so from a standstill the craft crosses
-2 m/s in roughly **15ms** and the entire camera package arrives as a step function. At speed the gate
-is already saturated and this never happens, which matches the report exactly.
-
-**Falsifiable in one run:** raise `forwardGateSpeed` and the artifact should move with it.
-
-**Done looks like:** the engage cue scales with actual speed at engage, without weakening the
-at-speed case that was just judged good. **Do first:** 0.24 has to match whatever this settles on.
-
 ### 0.21 Fall gravity wants another increase, bounded by the hard-landing rules
 
 Owner, 2026-08-16: *"I could maybe go for another slight increase to fall gravity. I would want to
@@ -324,49 +279,94 @@ against: `extraFallGravity` 30, `extraGravityMultiplier` 3, `hardLandingMinSpeed
 charge+air, `hardLandingMinSpeed` moved if needed to hold both rules, and the barrel-roll margin
 re-measured and still positive.
 
-### 0.23 The drift hop has no cue of any kind
+### 0.25 The charge jump has no wind-up, and the charge itself is invisible
 
-Owner, 2026-08-16: *"sometimes the hop doesn't feel punctual enough, it might be when I'm already
-turning and since I'm hovering and not hopping up and down on the ground like CTR. Like it's missing
-that satisfying little thump that the drift has started."* Drift itself was judged good in the same
-report, so this is bounded: the hop is the only part in question.
+**LAST IN THIS TIER by owner decision 2026-08-17**, on the grounds that it touches only the charge
+jump and the hooks are already in place. Not speculative and not blocked; simply the least urgent
+thing here.
 
-**`Propulsion.OnDriftHop` has ZERO subscribers.** Declared and invoked, and nothing anywhere in
-`Assets/Scripts/` listens. Drift entry is `driftHopImpulse` 10 of physical impulse and nothing else:
-no camera punch, no VFX, no audio. The router owns five channels and this is not one of them.
+Owner idea, with the reference: **Jak 3's hoverboard high jump**, where holding the button crouches
+the board and plays VFX gathering energy underneath it, released on the jump. The craft would do the
+same: settle lower while charging, gather, and launch.
 
-**The "when I'm already turning" clue is unexplained and worth measuring before tuning.** One
-candidate: the hop fires along local up while the craft is banked up to `maxBankAngle` 18 mid-corner,
-so some of it goes sideways instead of up.
+**The strongest argument for it is not feel, it is readability.** `jumpMaxChargeTime` is 2 and the
+impulse runs `jumpImpulseMin` 20 to `jumpImpulseMax` 40 across it. That is a two-second window with a
+doubling payoff, and **nothing anywhere tells the player where they are in it** -- no HUD element, no
+vehicle state. A squat makes the ride height itself the charge meter, read off the craft rather than
+off a corner of the screen, which is better placed than a bar would be because the player is already
+looking there.
 
-**Done looks like:** a short, punctual camera cue on drift entry, legible while already cornering.
-**It needs a SIXTH impulse source, not a reuse:** shape and duration are authored on the source, so a
-snap cannot share a channel with anything softer (trap 14). Pairs with 2.12, which is the VFX half.
+**Scope, decided with the owner:** charge jumps only.
 
-### 0.24 Thruster VFX and the boost camera fall out of step on release
+- **No squat on a tap jump.** There is no hold, so any wind-up is pure added latency decorating a
+  charge that does not exist. A charge jump is already a hold, so **the charge time IS the squat time
+  and it costs no responsiveness at all.**
+- **No squat on the air jump.** Nothing to compress against.
 
-Owner, 2026-08-16: *"I'd like to see the timing of the thruster VFX to be tied to the boost blend
-directly, so they grow/shrink at the same rate as the camera move."*
+**What already exists, and this is why it is cheap.**
 
-**The VFX is ALREADY tied to the boost blend directly, and that is the cause rather than the fix.**
-`HoverVehicleVFX` reads `Propulsion.BoostLerp` and lerps emission rate, start size, start speed and
-lifetime by it. The camera does not read `BoostLerp`; it integrates its own envelope.
+- **`ComputeEffectiveHoverHeight()` is the mechanism, already shipped and proven.** The ceiling duck
+  uses it to lower the craft smoothly on its springs from `hoverHeight` 7 down to
+  `minDuckHoverHeight` 1.5. The squat is a second consumer of it, not new physics.
+- **The charge fraction already exists.** `jumpChargeTimer` against `jumpMaxChargeTime`, and the jump
+  code already computes the normalised value to lerp the impulse with.
+- **`SetAimPitch(degrees, weight)` is the pattern to copy** for handing intent from Propulsion to
+  Foundation without Propulsion touching the Rigidbody itself.
 
-- **Rising, they already match exactly.** `_boostHold` is assigned from `BoostLerp` unsmoothed, on
-  purpose, because `BoostLerp` is already the authored ramp.
-- **On release they cannot match.** The camera decays at `releaseSpeed` 3.5, roughly 0.86s to settle,
-  against `boostBlendSeconds` 0.35. **The plume collapses about two and a half times faster.**
-- **At low speed they are decoupled entirely**, because every camera boost term is gated by
-  `ForwardGate` and the VFX has no such gate. That is 0.20's territory.
-- **Plus a tail the parameters cannot express:** `startSize` and `startLifetime` only affect newly
-  emitted particles, so the rendered plume trails the parameter by up to one particle lifetime.
+**Three traps, and the first one will bite immediately.**
 
-**Done looks like:** plume and camera rise together and settle together at every speed, with the
-particle lifetime tail accounted for rather than ignored. The likely shape is exposing the camera's
-envelope and having the VFX read that instead of `BoostLerp`.
+1. **A SQUAT DRIVES `HoverSupport` TO ZERO WHILE IT DESCENDS.** `heightFactor` is keyed to
+   `_effectiveHoverHeight`, so dropping the target to 5 while the craft is still at 7 puts
+   `avgDistance` outside the band and support reads **0**. Support gates energy regen, leveling
+   strength, drag, air control, fall gravity and the drift hop impulse, so mid-squat the craft would
+   look exactly like it was airborne. **The ceiling duck has this same latent problem today and
+   nobody has hit it**, which is evidence the trap is real rather than theoretical. Settle this
+   before anything else.
+2. **Effective hover height gains a second writer.** Both the duck and the squat want to lower it, so
+   use the seed / contribute / commit pattern the camera framing uses rather than letting whoever
+   ran last win. Both lower, so the safe combination is the lowest of the two.
+3. **A squat spends belly clearance**, which rests at about 4.7m. On uneven ground a deep squat
+   scrapes while charging. Keep it shallow or clamp its depth against measured clearance.
 
-**Not blocked on VFX**, so it stays in Tier 0: the emitters and all three tiers already exist and
-this is a wiring change. **Depends on 0.20.**
+**The design question that blocks building it: does the squat STORE energy or only express it?**
+Lowering the springs and releasing them genuinely pushes, which would be honest and satisfying, but
+it stacks on `jumpImpulseMax` and would overshoot the arc already tuned in `TuningLog.md`. Decide
+before writing code, because it changes what gets written.
+
+**The VFX half is Tier 2** with the rest of the blocked FX work, same split used for the drift cue.
+The squat is Tier 0 because the movement half is not blocked on anything.
+
+### 0.26 The boost camera steps on and off when travel speed crosses zero
+
+**FIXED 2026-08-17, awaiting a feel judgement.** Outcome in `TuningLog.md` > The boost gate was a
+step against reversing. Left open because the fix has a measured cost at engage that nobody has
+judged yet; close it once that has been played.
+
+Owner, 2026-08-17: *"If I boost and flick the left stick forward and backwards, I can create a camera
+jumping back and forth kind of bug. This is definitely an edge case."* **Found in the marker data
+before it was reproduced**, at `t=74.34` of `motiontrace_20260817_151605.csv`.
+
+**Mechanism.** `ForwardGate` multiplies every boost term by `Clamp01(travelSpeed / forwardGateSpeed)`
+and `forwardGateSpeed` is 2, which makes the gate a step against anything that reverses. Measured
+with boost pinned at 1.00 through a forward-to-reverse flick: **the gate went 1.000 to 0.000 in 23ms**,
+taking 4.00 degrees of FOV and 0.502m of rig with it, about 21 m/s of camera travel. Flicking back
+snapped it on again identically, and that oscillation is the report.
+
+**Less of an edge case than it looks.** Boost in reverse is supported on purpose, so travel speed
+crossing zero under boost is ordinary play — a panicked reverse does it as readily as a deliberate
+flick. What the owner found was the fastest way to trigger it, not the only way.
+
+**Fixed by `forwardGateSlew` 3.5**, a rate limit on the gate value rather than a widening of the
+threshold, so the gate stays a direction test. Same instrument as `speedLookAheadSlew`, and for the
+same reason. **After: 287ms and 3.2 m/s of rig.**
+
+**What still needs judging, and it is the reason this is open:** the gate multiplies the overshoot as
+well as the sustained terms, so from a standstill the lens now sits up to **1.8 degrees narrower
+through the first quarter second** of an engage. The peak is untouched (72.48 against 72.43) because
+the overshoot crests after the gate has finished opening. That pushes the same way 0.20 did, but it
+is a change to a feel that was signed off, and `TuningLog.md` records two alternatives if it reads
+wrong.
+
 
 ---
 
@@ -485,7 +485,7 @@ cut from a 0.35s wallow. **Needs re-judging after that fix.** Whether the weight
 largest single energy commitment is still open; it currently sits at a little over half the landing punch.
 
 *Filed here rather than Tier 0 because the subject is an ability, not movement. It becomes judgeable at
-the same moment 0.16 does.*
+the same moment 2.15 does, when the three nulled impulse channels come back.*
 
 ### 2.4 Hard landings land with no dust
 
@@ -619,9 +619,114 @@ Owner, 2026-08-16: *"Some VFX will probably go a long way for communicating a dr
 the same breath as judging drift itself good, so this is presentation on a mechanic that is already
 right, not a fix.
 
-**Filed separately from 0.23 on purpose.** 0.23 is the camera cue for drift ENTRY and is not blocked
-on anything, so it stays in Tier 0. This is the sustained visual for the slide itself. Doing 0.23
-alone will not fully answer the owner's report, and doing this alone will not either.
+**Filed separately from 0.23 on purpose.** 0.23 turned out to be a suppression bug and closed without
+a cue being built (`TuningLog.md` > The drift hop was being suppressed). This is the sustained visual
+for the slide itself, and it is now the whole of what remains from the owner's drift report.
+
+### 2.13 Charge jump wind-up VFX: energy gathering under the craft
+
+**BLOCKED ON VFX**, so it joins 2.11 and 2.12 in the pre-alpha 2 FX pass.
+
+The visual half of 0.25. Owner's reference is **Jak 3's hoverboard high jump**, where holding the
+button gathers visible energy under the board and releases it on the launch. Here it would build
+under the craft while the charge squat settles it lower, and discharge on the jump.
+
+**The movement half is NOT blocked and lives in 0.25**, which is where the mechanism, the traps and
+the open design question are recorded. Same split as 0.23 and 2.12.
+
+**Sequencing note that matters here:** the squat makes the charge readable through ride height
+alone, so 0.25 is worth judging on its own before this lands. If the squat already communicates the
+charge, this becomes polish. If it does not, this is the thing that was actually missing.
+
+### 2.14 Thruster VFX and the boost camera fall out of step on release
+
+**BLOCKED ON VFX, and this is the successor to 0.24**, which was retired without anything being
+built. See Retired numbers for why the tier changed.
+
+Owner, 2026-08-16: *"I'd like to see the timing of the thruster VFX to be tied to the boost blend
+directly, so they grow/shrink at the same rate as the camera move."*
+
+**The VFX is ALREADY tied to the boost blend directly, and that is the cause rather than the fix.**
+`HoverVehicleVFX` reads `Propulsion.BoostLerp`. The camera does not; it integrates its own envelope.
+Measured 2026-08-17 on a scripted engage-and-release:
+
+| | plume (`BoostLerp`) | camera (`_boostHold`) |
+|---|---|---|
+| rise | identical, sample for sample | identical, sample for sample |
+| falls below 50% after release | 0.18s | 0.39s |
+| falls below 25% | 0.27s | 0.59s |
+| falls below 10% | 0.32s | 0.85s |
+| falls below 5% | 0.34s | **still above it a full second after release** |
+
+So they agree perfectly going up and disagree by **2.2x, widening to 2.7x at the tail**, coming down.
+
+**THE CONSTRAINT THAT MATTERS FOR WHOEVER AUTHORS THE REPLACEMENT**, found 2026-08-17 by reading the
+live component rather than the class defaults. Of the four parameters the tiers vary, `emissionRate`
+is the only one that acts on particles already in the air — and it is **40 at idle, 40 at
+acceleration and 40 at boost**, so it is doing no work at all. Everything that does change under
+boost (`startSize` 0.5 -> 0.8, `startSpeed` 3 -> 4, `startLifetime` 0.2 -> 0.3) applies only at the
+moment a particle is born. **The rendered plume therefore cannot track any signal promptly, no
+matter what drives it**, and will always trail by up to one particle lifetime. That is a requirement
+on the new effects, not a defect in the old ones.
+
+**Why this deferred rather than being wired now**, owner's decision 2026-08-17: the current
+thrusters are explicitly bare-minimum placeholder and are being replaced, and the replacement may
+well vary different parameters. The rewiring itself would survive that, but two things argued
+against doing it early — the defect is a timing disagreement between two plume states that are
+barely distinguishable on this placeholder, so no playtester would see it; and it would mean tuning
+the release rates against art that is about to be thrown away.
+
+**Done looks like:** plume and camera rise together and settle together, with the emission-time lag
+above accounted for rather than ignored.
+
+**The likely shape, recorded so it is not re-derived:** one owner for "how boosty does this look
+right now". Propulsion is the right owner, since it already owns `BoostLerp` and both the camera and
+the VFX are downstream of it; `releaseSpeed` and `settleSpeed` would move from `CameraBoostTuning`
+into the vehicle profile with it. Two consequences worth knowing in advance. The plume would inherit
+the camera's engage overshoot for free, so it would spike and settle rather than merely ramp. And
+the camera's `ForwardGate` must **not** travel with the signal: the thrusters genuinely are firing
+at full when you boost from a standstill, even though the camera has decided not to dramatise it.
+The gate is a camera judgement, not a thruster fact.
+
+**No longer depends on 0.20**, which closed by limiting the look-ahead and never touched the boost
+package at all.
+
+### 2.15 A denied jump gives no usable feedback
+
+**Wired, feel unjudged, and DELIBERATELY NOT EVALUATED BEFORE THE PRE-ALPHA 1 PLAYTEST.** This is the
+successor to 0.16, which was retired without being judged. See Retired numbers for why the tier
+changed.
+
+**The open question 0.16 carried is now answered.** It asked whether `jumpDeniedSource` had travelled
+with EMP and weapon recoil by accident, a denied jump being a movement cue rather than a weapon or
+energy one. Owner, 2026-08-17: **it is intentional**, disabled along with the shield and the EMP, and
+it will not be evaluated before the pre-alpha 1 playtest. So this is scoping, not an oversight, and
+nothing should be restored to make it judgeable early.
+
+The player presses jump, nothing happens, and there is no way to tell "out of energy" from "input
+didn't register" from "still in the post-land lockout". This matters more than a normal missing cue
+because **energy as tempo is a design pillar**: a resource the player is meant to manage as their
+primary tempo tool currently gives no feedback when it runs out.
+
+Shipped mechanism: a camera impulse on its own channel, thrown down the chassis axis so a denial while
+banked still reads as failing to rise. The air value is smaller deliberately, because the token is not
+consumed and the failure is not final. Audio is out of scope, which is why this landed on the camera.
+
+The owner's first pass was "just feels bad". Unlike the crash and EMP channels this was NOT the
+screen-direction bug, so it is a genuine shape problem. Changed from a 0.12s recoil to a 0.18s bump:
+0.12s is seven frames and reads as a frame hitch, and a bump returns to where it started, so it lands
+as a lurch rather than a one-way shove. **Still unjudged.**
+
+**If it still reads wrong, the next lever is direction rather than duration.** A denial is a failure to
+LAUNCH, so a brief up-twitch that falls back may be more legible than a downward sag.
+
+**Judge it by draining the meter and pressing jump, not with the test hotkey**, which fires without the
+empty meter that gives it meaning. Note jump costs changed (tap is now much cheaper than a full charge),
+so how often denial arrives has moved.
+
+*Filed here rather than Tier 0 despite being a movement cue, because what gates it is the energy and
+ability scoping rather than anything about movement. It becomes judgeable at the same moment 2.2 does,
+when the three nulled impulse channels come back.*
 
 ---
 
@@ -781,6 +886,37 @@ instances, then apply deliberately.
 
 Note the AI craft has no `HoverController_Tricks` at all, which is correct rather than an oversight:
 `AIHoverInput` hardcodes drift to false so it can never arm air control and would bank nothing.
+
+### 3.17 Solved camera OUTPUTS are being saved into the scene as prefab overrides
+
+`Prototype_Scene.unity` carries instance overrides for the vcams' `FollowOffset.y`, `FollowOffset.z`
+and `Lens.FieldOfView`. **None of those is a setting.** They are the framing solver's per-frame
+output: `CommitDrive` and `CommitStrafe` write them every `LateUpdate`, and in edit mode those writes
+persist, so whatever pose the camera happened to be solving gets serialised into the scene.
+
+Found 2026-08-17 during the 0.14 retune, and it had already caused real confusion in that session:
+one of the saved values was `FollowOffset.z: -11` from a candidate framing that was tried and
+abandoned, still sitting in the scene shadowing the prefab.
+
+**Why it will be misdiagnosed:** the authored inputs live on `HoverCameraController`
+(`framing.driveFollowOffset`, `strafe.followOffset`, `framing.baseFov`, `strafe.fovReduction`). The
+vcam fields are downstream of those. So changing an authored value and seeing nothing happen looks
+like the tuning field being dead, when in fact the scene is holding a stale copy of the output. It
+will read as "the camera ignores its own settings".
+
+**This is the known cost of an existing decision, not a new defect.** `CLAUDE.md` already records
+that edit-mode writes are skipped when unchanged precisely because an unconditional per-tick write
+leaves the scene permanently dirty. The skip reduces the churn; it does not stop a genuinely changed
+value from being saved.
+
+**Done looks like:** the overrides cleared, and a decision about whether to prevent them recurring.
+Options, cheapest first: revert those specific overrides by hand whenever they appear; stop the
+edit-mode commit writing `FollowOffset` and `Lens` at all and let the preview drive a runtime-only
+copy; or mark the vcam fields so they are never serialised from a preview write. **Do not solve it by
+disabling the preview**, which is the feature that makes the framing judgeable without driving.
+
+Same family as 3.16 (scene overrides shadowing a prefab) but a different cause: 3.16 is authored work
+that never got applied, this is machine-written output that should never have been saved.
 
 ---
 
@@ -971,36 +1107,6 @@ INHERITS the scale and is expensive to redo:
 If it is ever revisited, the cheapest single improvement is **narrowing the hull.** Width is the least coupled
 dimension to the tuning, since the attitude torques ignore the inertia tensor.
 
-### 5.10 Wall jump / wall riding, speculative
-
-Owner idea: count as grounded when deliberately oriented against a wall with sensors in range.
-
-**Partly pre-built already.** The air jump now fires along the craft's LOCAL up, so tilting toward a wall
-propels you away from it, and the measured 90-degree case is a clean pure-horizontal shove
-(`TuningLog.md` > Air jump). That is most of a wall jump reached from a different direction and for a
-different reason. **Re-read this item against that table; the remaining gap may be small enough that this
-stops being speculative.**
-
-**The same axis is now visible in ordinary play, which is free evidence for this item.** Aim pitch in
-strafe tilts the air jump too: at `strafePitchLimit` 20 it is 18.79 vertical against 6.84 horizontal,
-and at 36 it was 11.76 horizontal. Full table and the direction convention are in `CLAUDE.md` >
-Standing Decisions. **So the mechanism this item depends on is already being exercised at small
-angles every time someone air jumps while aiming**, rather than only at the untested 90 degrees.
-
-**One correction to the paragraph below, made 2026-08-17.** Hover rays still rotate with the craft in
-ROLL, which is the axis this item needs, and that was preserved deliberately. They no longer rotate
-with aim PITCH, since the sensors are now placed and pointed as though the craft were not aiming
-(`CLAUDE.md` > `HoverController_Foundation`). Orienting against a wall is a roll manoeuvre, so
-nothing here is blocked, but do not test it by pitching.
-
-**Test before building.** It may already partly work: hover points cast along `-point.up`, which rotates with
-the craft, so orienting against a wall does put rays on it and the springs will push off. `IsDowned` is the
-thing that would block it, and only on CONTACT past the flip threshold. A craft hovering the wall without
-touching it keeps full control by design.
-
-*Filed here rather than Tier 0 because it is speculative new movement, not polish on what exists. Promote it
-if it becomes a decision to build rather than a question to test.*
-
 ### 5.11 Boosted strafe reaches a large fraction of drive top speed
 
 **DEFERRED to PRE-ALPHA 2, and the deferral is principled rather than a punt:** the open question is whether
@@ -1036,6 +1142,36 @@ instead. **A player cannot boost straight sideways at all.**
 paying-for-nothing bug already fixed for reverse boost (energy drained for acceleration into an unchanged
 cap), so it would need boost in strafe to become dodge-only, which is a larger behaviour change than it first
 appears.
+
+### 5.12 Revisit the aim framing once weapons can actually be judged
+
+**DEFERRED to PRE-ALPHA 2 by the owner 2026-08-17**, on the same principled grounds as 5.11 rather
+than as a punt. Succeeds 0.14, which shipped and closed; **the number is new because 0.14's job was
+the pre-alpha 1 retune and that is done.** Shipped values and the full reasoning are in
+`TuningLog.md` > Drive and strafe framing.
+
+**Why it cannot be settled now.** The strafe camera exists so the player can aim, and the shipped
+framing was judged against a reticle with almost nothing to shoot: four of six weapons deal zero
+damage (1.3), and there is no combat pressure to frame against (1.6, 5.11). **A camera tuned for
+aiming, judged without aiming, is tuned against the wrong thing.** The right moment is when weapons
+and weapon physics are far enough along that engagement range, target size on screen and time to
+react are real quantities.
+
+**What to re-judge specifically, all measured and recorded so the comparison is cheap:**
+
+- **The hull occupies 69.6% of screen height in strafe.** Improving that is the biggest available
+  win and every candidate that achieved it cost something else.
+- **Target size against hull size.** A craft at 60m subtends 9.6% of screen height. That number
+  becomes judgeable only once you are shooting at one.
+- **The crosshair-to-roof gap, 183px.** Enough that the reticle reads as out in the world rather
+  than stuck to the cab, which was the failure of one candidate.
+- **`reticleProjectionDistance` 200.** Nearly inert at the shipped framing, and it regains authority
+  if the camera gets flatter.
+
+**Read `TuningLog.md` before touching any of it.** Two candidate framings were built and rejected in
+the 2026-08-17 session, one of which reproduced the Vertigo effect exactly, and the trade curve
+between crosshair clearance, horizon height and hull size is recorded there. Re-deriving it is a
+half-day.
 
 ---
 
@@ -1108,7 +1244,7 @@ worked next. **Old numbers are dead and are not reused.** `ROADMAP.md` was updat
 | M.11 | **0.13** | Camera. **Narrowed**: the trick-camera half is closed, see the item |
 | M.13 | **0.14** | Camera. Top tier |
 | 3.13 | **0.15** | Camera, unblocked, and it gates two feel items |
-| 2.1 | **0.16** | Jump is movement |
+| 2.1 | **0.16** | Jump is movement. **Since retired to 2.15**, effectively back where it started: the cue is movement, but what gates it is the ability scoping, and that is the tier that matters |
 | 2.6 | **0.17** | Movement and camera feel (had already absorbed 0.9) |
 | 5.6 | **0.18** | Movement. Already gated PRE-ALPHA 1 |
 | 3.14 | **0.19** | Camera tooling |
@@ -1133,6 +1269,12 @@ reused.
 | **0.15** | `CLAUDE.md` > `HoverCameraImpulseRouter`. **Never a defect:** the three nulled channels are a deliberate playtest scoping decision, corrected by the owner 2026-08-16 |
 | **0.17** | `CLAUDE.md` > Judged good in the 2026-08-16 playtest. Boost drive mode judged good; its one residual became **0.20** |
 | **0.22** | `TuningLog.md` > Aiming and the hover sensors. Shipped 2026-08-17. Opened and closed inside one session, so it never appeared in this file as open work |
+| **0.14** | `TuningLog.md` > Drive and strafe framing. Shipped 2026-08-17 for pre-alpha 1. **The pre-alpha 2 revisit is 5.12**, a new number rather than this one reopened |
+| **0.23** | `TuningLog.md` > The drift hop was being suppressed. **Never a missing cue:** the hop was being silently skipped about one entry in three, and no cue was built. The VFX half is 2.12 |
+| **0.20** | `TuningLog.md` > The boost jolt at a standstill. Shipped 2026-08-17. **The mechanism this file had recorded was wrong:** the speed gate was never the cause, and three runs showed the culprit was the look-ahead being dragged through its whole swing at boost acceleration. See `Measuring.md` trap 42 |
+| **0.16** | **2.15**, which carries the shipped mechanism and the tuning history forward. **Retired without ever being judged**, 2026-08-17. It had been held open by one question — whether the denied-jump channel was disabled along with EMP and weapon recoil by accident, being a movement cue rather than a weapon one. **The owner confirmed it is intentional** and that it will not be evaluated before the pre-alpha 1 playtest, which makes the gate energy-and-ability scoping rather than anything about movement, so the tier changed with it |
+| **0.24** | **2.14**, which carries the measurements forward. **Retired without anything being built**, 2026-08-17: the thrusters it targets are placeholder and are being replaced, so both the tier and the timing changed. Retired rather than moved because numbers encode their tier and are never reused |
+| **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |
 
 **The old Tier 4 was a deletion list and is fully executed**, which is why the number was free to reuse for
 verification debt. Three dead APIs were removed. If a lock tone or a HUD pitch indicator is ever wanted, add

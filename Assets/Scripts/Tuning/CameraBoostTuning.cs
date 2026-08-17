@@ -43,6 +43,30 @@ public class CameraBoostTuning
     [Range(0.5f, 15f)]
     public float forwardGateSpeed = 2f;
 
+    [Tooltip("Ceiling on how fast the forward gate itself may open or close, per second. 3.5 means a " +
+             "full swing takes about 0.29s.\n\n" +
+             "Forward Gate Speed above is deliberately LOW, which makes the gate a direction test " +
+             "rather than a speed ramp. The cost is that it behaves as a STEP against anything that " +
+             "reverses: boosting in reverse is supported on purpose, so travel speed crossing zero " +
+             "while boost is held is ordinary, and at boosted acceleration the 2 m/s band is crossed " +
+             "in about 20ms.\n\n" +
+             "Measured 2026-08-17, boost held at full through a flick from forward to reverse: the " +
+             "gate went 1 to 0 in 23ms, taking 4 degrees of FOV and half a metre of rig with it, " +
+             "about 21 m/s of camera travel. Flicking back snapped it on again the same way. With " +
+             "the surge still live the worst case is nearer 7.4 degrees and 3m.\n\n" +
+             "This limits the RESULT without widening the threshold, so the gate stays a direction " +
+             "test. Measured after: the same reversal takes 287ms and moves the rig at 3.2 m/s.\n\n" +
+             "IT IS NOT FREE AT ENGAGE, and the cost is bigger than first predicted because the " +
+             "OVERSHOOT is gated too, not just the sustained terms. From a standstill the gate needs " +
+             "about 0.31s to open, and through the first quarter second the lens sits up to 1.8 " +
+             "degrees narrower than it would unslewed. The PEAK is untouched (72.48 against 72.43), " +
+             "because the overshoot crests at 0.35s once the gate has already finished opening, so " +
+             "what changes is the shape of the ramp rather than how far it goes.\n\n" +
+             "Raise it toward 8 to shrink that cost and still remove most of the step. Set to 0 to " +
+             "remove the limit and restore the pre-fix behaviour entirely.")]
+    [Min(0f)]
+    public float forwardGateSlew = 3.5f;
+
     [Tooltip("Extra degrees of FOV at the PEAK of the engage transient, on top of FOV Increase. " +
              "This is the part that spikes and settles rather than the part that stays.\n\n" +
              "Why a transient is worth more than a bigger sustained value: a wider lens is a " +
