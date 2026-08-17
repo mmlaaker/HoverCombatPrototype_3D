@@ -41,7 +41,7 @@ MonoBehaviour:
     flipRecoveryTorque: 60
     flipRecoverySpeedThreshold: 2
     extraGravityMultiplier: 3
-    extraFallGravity: 30
+    extraFallGravity: 35
     enableHardLanding: 1
     hardLandingMinSpeed: 58
     hardLandingMaxSpeed: 85

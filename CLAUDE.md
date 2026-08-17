@@ -807,8 +807,20 @@ rediscovery of the thing that prompted it.
   `(liftDamping x v + gravityShare) / liftStrength` metres above ride height, so a slow fall is caught
   ~2.2m up and a fast one over 6.5m up. A tap jump spends roughly three quarters of its descent already
   cushioned. **That is the hovercraft's character rather than a defect.**
-- **A flat-ground charge jump still cannot trigger a hard landing**, but a charge jump plus an air jump
-  now can, since fall gravity rose. Was previously unreachable by any jump. Numbers in `TuningLog.md`.
+- **A flat-ground charge jump must never trigger a hard landing. A charge jump plus an air jump is
+  allowed to.** Owner's rule, 2026-08-16, and it is a constraint on tuning rather than a description:
+  it caps `extraFallGravity` at **43** against `hardLandingMinSpeed` 58, and the slider stops at 40 to
+  keep a margin. At the shipped 35 the charge jump lands at 55.0 m/s, 3 clear. Numbers in
+  `TuningLog.md` > Fall gravity and airtime.
+- **`extraFallGravity` is a weak lever on airtime and a strong one on descent weight.** 30 to 40 is
+  14% heavier on the way down and only ~3% less time in the air, because the rise runs on separate
+  gravity and the fall shortens by a square root. **Do not reach for it to fix "too long in the
+  air"**; that complaint wants presentation (`TODO.md` 2.11), and this has been the wrong lever twice.
+- **What actually bounds fall gravity is the barrel-roll landing margin, not the hard landing.** Both
+  hard-landing rules survive the entire usable range; the margin just degrades continuously at about
+  **25ms per 5 units**, with no ceiling to trip. It is 0.09s at the shipped 35. **Anything that moves
+  fall gravity, roll rate or jump impulse re-prices it**, so re-measure rather than assuming the last
+  figure holds.
 - **The banking contract: decided not to decouple.** At full bank the inertia magnitudes are unchanged
   but the basis rotates, the COM shifts 2.5cm, and a unit yaw command leaks -3.91% into pitch. Not
   decoupled, because the hull's own principal axes are already 0.81 degrees off its local axes and leak
@@ -873,6 +885,12 @@ Added 2026-08-17, judged the same day they were built:
 - **The speed look-ahead rate limit**, `speedLookAheadSlew` 8, which closed 0.20. Chosen to be a
   provable no-op on flooring it from rest, so that case remains the reference the number is set
   against: if the accepted case ever changes, this bound has to be re-derived rather than kept.
+- **`extraFallGravity` 35**, which closed 0.21. Owner: *"I can still hit two barrel rolls so as long
+  as that and the ability to do one flip persists and air time went down by a little bit, that's
+  good enough for me."* **This is the only entry in this section that ships with its own test.**
+  Two rolls is the binding case — a flip is faster, so it fails second — which means **any future
+  change that spends trick margin can be judged against the two-roll landing alone.** The margin is
+  0.09s here, and the 50-degree roll tolerance no longer covers it (see Trick economy).
 
 ### Trick economy
 
@@ -885,6 +903,13 @@ Added 2026-08-17, judged the same day they were built:
 - **Partial revolutions pay nothing, and this is self-consistent rather than harsh:** three quarters of a
   roll is 270 degrees of bank, which the arrival gate rejects, so a partial trick cannot produce a clean
   landing anyway. Either you roll out and get paid, or you unwind and land clean for nothing.
+- **The landing roll tolerance and the airtime margin are two different gates on the same trick, and
+  which one binds depends on fall gravity.** `trickMaxLandingRollAngle` 50 is worth about 0.116s of
+  grace at the measured roll rate. While the two-roll airtime margin was 0.12s the tolerance covered
+  it completely, so you could roll straight into the ground and pass. At `extraFallGravity` 35 the
+  margin is 0.09s and **airtime binds alone.** The two numbers were never designed to match; they
+  matched by accident and stopped. Expect the failure to read as "I finished the roll and it still
+  didn't count".
 - **The landing limits are measured, not guessed, and the asymmetry is real.** Roll goes downed at a
   much lower angle than pitch, because rolling puts the craft on its 3.8m width about its lowest-inertia
   axis so it keeps tipping, while pitching puts it on its 6.9m length so it settles. **A single limit

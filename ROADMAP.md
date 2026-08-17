@@ -37,7 +37,6 @@ camera in the top tier. Every row below is a Tier 0 item.
 | **0.13** | the camera has no answer while the craft is flipped. **Narrowed 2026-08-16:** the trick-camera half was tested and rejected |
 | **0.18** | `flipRecoverySpeedThreshold` 2 is an unconfirmed guess. Settle alongside `0.13` |
 | **0.19** | no camera preview state can reproduce a mid-flip pose. Tooling, lowest priority here |
-| **0.21** | fall gravity wants another increase, bounded by the hard-landing rules and the trick landing margin. **Next up** |
 | **0.25** | the charge jump has no wind-up and the charge is invisible. **Last in tier** by owner decision; hooks already exist |
 
 **Closed since this list was written**, all 2026-08-17 unless noted: `0.15` (never a defect, a
@@ -49,7 +48,14 @@ was wrong**; the cause was the look-ahead, not the speed gate), `0.24` (**retire
 built**, deferred behind the thruster replacement as `2.14`), and `0.16` (**retired without being
 judged**; the scoping that hides it is intentional and confirmed, successor `2.15`), and `0.26`
 (**opened and closed the same session**: the boost camera stepped on and off whenever travel speed
-crossed zero). See `TODO.md` > Retired numbers.
+crossed zero), and `0.21` (`extraFallGravity` 30 -> 35, **judged good in play the same day**; the
+hard-landing framing this milestone carried was the wrong headline, and the real cost is the
+barrel-roll landing margin). See `TODO.md` > Retired numbers.
+
+**`0.21` carries its own regression test**, which is unusual and is recorded in `CLAUDE.md` > Judged
+good: the owner accepted the value on the condition that two barrel rolls still land. That makes the
+trick margin, not the hard landing, the thing to re-check after anything that touches fall gravity,
+roll rate or jump impulse.
 
 Also worth doing during the next long run, though it gates nothing: **4.4**, confirm the marker key
 works in a build and measure allocation under sustained fire.

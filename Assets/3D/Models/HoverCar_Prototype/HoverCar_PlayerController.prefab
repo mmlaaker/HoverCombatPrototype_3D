@@ -10947,6 +10947,7 @@ MonoBehaviour:
   boost:
     fovIncrease: 4
     forwardGateSpeed: 2
+    forwardGateSlew: 3.5
     fovOvershoot: 6
     zPullBack: 0.5
     zLagOnEngage: 2.5

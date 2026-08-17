@@ -145,6 +145,67 @@ explicitly welcome, since the effects are severity-scaled.
 perception. If it is not felt, the cause is likely perceptual rather than physical (the doubled
 environment halved apparent speed) and the lever is speed lines rather than more gravity.
 
+#### Reopened as 0.21 and closed at 35, 2026-08-17
+
+Owner, 2026-08-16: *"I could maybe go for another slight increase to fall gravity."* Shipped
+`extraFallGravity` **30 -> 35** and **judged good in play the same day.**
+
+Owner after driving it: *"I can still hit two barrel rolls so as long as that and the ability to do
+one flip persists and air time went down by a little bit, that's good enough for me."*
+
+**That is an acceptance criterion with a test attached, which is rare and worth keeping literally.**
+Three conditions: two barrel rolls still land, one flip still lands, airtime measurably down. **The
+second is implied by the first** — a flip is slightly faster than two rolls (`airRollTorque` = 2 x
+`airPitchTorque` locks the ratio), so two rolls is the binding case and always fails first. **Any
+future change that costs trick margin can therefore be tested against the two-roll case alone.**
+
+**No new play measurements were needed, because the closed-form model reproduces the 2026-08-14
+table exactly.** Built from the asset (`extraGravityMultiplier` 3, `jumpImpulseMax` 40,
+`Physics.gravity` -9.81) it predicts the shipped apex at 20.4m against 21.0m measured, airtime
+1.787s against 1.79s, and the hard-landing ceiling at 43.0 against the 43 recorded. Agreement that
+close on three independent quantities means the sweep would only have re-measured arithmetic.
+**Every input to the old ceiling was re-read from `VTP_Default.asset` first and none had moved.**
+
+| `extraFallGravity` | Fall gravity | Charge-jump impact | Two-roll margin |
+|---|---|---|---|
+| 30 (was) | 69.2 | 53.2 m/s | 0.12s |
+| **35 (shipped)** | **74.2** | **55.0** | **0.09s** |
+| 38 | 77.2 | 56.1 | 0.08s |
+| 40 (slider cap) | 79.2 | 56.9 | 0.07s |
+| 43 (hard-landing ceiling) | 82.2 | 57.9 | 0.05s |
+
+Roughly **25ms of trick margin per 5 units**. 35 keeps the charge jump 3 m/s clear of
+`hardLandingMinSpeed` 58.
+
+**Quote the total, never the knob.** 30 -> 35 is a 17% increase in `extraFallGravity` but only a
+**7.2% heavier descent**, because `extraGravityMultiplier` 3 already contributes 39.24 m/s² that the
+knob adds on top of. The assistant reported the 17% to the owner and it was wrong in the direction
+that oversells the change. For scale: 13 -> 30 was +33% on the total, so **this increase is about a
+fifth the size of the last one**, which is what "slight" bought.
+
+**The hard landing was never the constraint, and the tracker had it as the headline.** Both of the
+owner's rules survive the entire range: a flat charge jump is safe to 43, and charge-plus-air is
+permitted to hard-land and already did at 30. The real constraint is the barrel-roll landing margin,
+which has no ceiling to hit -- it just gets worse continuously.
+
+**Two stale facts found while re-deriving, both worth keeping:**
+
+1. **The charge-plus-air ceiling of 27 is dead.** `airJumpFallCancel` 0.6 was added afterwards (see
+   the air jump entry below). Killing 60% of the fall before adding the impulse raises the stacked
+   apex, so it lands harder than when 27 was measured and the true ceiling is lower still. This does
+   not block anything, but **it moves which half of the owner's sentence binds**: the clause to watch
+   is "not happening all the time", not "never for a charge jump".
+2. **The roll tolerance and the airtime margin were nearly equal at 30, and that was luck.**
+   `trickMaxLandingRollAngle` 50 is about 0.116s of grace at the measured roll rate, against 0.12s
+   of airtime margin -- so at 30 you could keep rolling right into the landing and still pass the
+   attitude gate. **At 35 airtime becomes the binding gate on its own** and the tolerance no longer
+   covers for it. That is the mechanism to suspect first if landing tricks starts feeling
+   inconsistent, and it is a different failure from the one the 2026-08-14 disagreement predicted.
+
+**Not done, and deliberately:** suspending extra fall gravity while a trick is armed would decouple
+descent weight from the trick window entirely and cost nothing measurable. Left unbuilt because it
+adds a mechanic to solve a tuning problem the owner has not yet reported feeling.
+
 ---
 
 ### The drift hop was being suppressed, not weak

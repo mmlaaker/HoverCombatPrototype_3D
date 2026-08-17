@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.13 · 0.18 · 0.19 · 0.21 · 0.25 |
+| **0** | 0.12 · 0.13 · 0.18 · 0.19 · 0.25 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -81,8 +81,10 @@ tuning and features.** Struck items are done.
    **The mechanism this list recorded was wrong** and three runs disproved it; see the entry
 6. ~~**0.24**~~ **retired 2026-08-17 without being built.** Deferred behind the thruster replacement
    by owner decision; the successor carrying the measurements is **2.14**
-7. **0.21** fall gravity, and it spends the barrel-roll landing margin. **Next**
-8. **0.13** needs an owner call between three shapes before any code
+7. ~~**0.21**~~ shipped and **judged good 2026-08-17** at `extraFallGravity` 35, outcome in
+   `TuningLog.md` > Fall gravity and airtime. The owner drove it and supplied the acceptance test:
+   two barrel rolls still land
+8. **0.13** needs an owner call between three shapes before any code. **Next**
 9. **0.18** pairs with 0.13 by subject
 10. ~~**0.16**~~ **retired 2026-08-17 without being judged.** The scoping that hides it is intentional
     and confirmed by the owner; the successor is **2.15**
@@ -102,8 +104,13 @@ Cheap things that make a long session worth more, or that stop it producing an u
   The boost jolt at a standstill). If the framing feels like it lags behind hard acceleration, that
   is the first number to suspect. It also changes how the aim point retracts after a collision at
   speed, which nobody has judged yet.
-- **Watch:** the two-barrel-roll landing margin is 0.12s at the shipped fall gravity (`TuningLog.md`).
-  If landing tricks feels inconsistent, that is the first number to suspect, not the trick scorer.
+- **Watch:** the two-barrel-roll landing margin is **0.09s at `extraFallGravity` 35, down from 0.12s
+  at 30.** The owner judged 35 good on the explicit condition that two rolls still land, so this is
+  now an acceptance criterion rather than a caution. **The specific new risk:** at 30 the 50-degree
+  landing roll tolerance was wide enough to cover the whole margin, so you could roll straight into
+  the ground and still pass. At 35 it no longer is, so a failure will read as "I finished the roll
+  and it still didn't count" — suspect this, not the trick scorer (`TuningLog.md` > Fall gravity and
+  airtime).
 - **Watch:** aiming no longer moves the craft at all (`CLAUDE.md` > Standing Decisions), so the nose
   can now approach terrain the hover sensors do not look at. An unexplained scrape while aiming down
   over a rise is that, and `TuningLog.md` records the middle option that fixes it.
@@ -260,24 +267,6 @@ judgeable without driving**, which is the argument for building it. Needs `Frami
 differ from `forwardSpeed`, which `BuildPreviewInputs` currently pins equal on purpose.
 
 Lowest priority in this tier: it is tooling that prevents a future bug rather than work you can feel.
-
-### 0.21 Fall gravity wants another increase, bounded by the hard-landing rules
-
-Owner, 2026-08-16: *"I could maybe go for another slight increase to fall gravity. I would want to
-balance the hard landing to make sure it's tuned in a way that it's not happening all the time, never
-for a charge jump, possibly for a charge jump plus an air jump."*
-
-**Those two rules are already the shipped behaviour** (`CLAUDE.md` > Standing Decisions), so they are
-an invariant to preserve while the gravity moves, not a change to make. Values it was written
-against: `extraFallGravity` 30, `extraGravityMultiplier` 3, `hardLandingMinSpeed` 58,
-`hardLandingMaxSpeed` 85.
-
-**The risk is not the hard landing, it is the trick economy.** The two-barrel-roll landing margin is
-0.12s at the shipped fall gravity, and more gravity spends that directly.
-
-**Done looks like:** a new `extraFallGravity`, a re-measured impact-speed table for tap / charge /
-charge+air, `hardLandingMinSpeed` moved if needed to hold both rules, and the barrel-roll margin
-re-measured and still positive.
 
 ### 0.25 The charge jump has no wind-up, and the charge itself is invisible
 
@@ -1243,6 +1232,7 @@ reused.
 | **0.26** | `TuningLog.md` > The boost gate was a step against reversing. Shipped and **judged good 2026-08-17** by playing exactly the manoeuvre that produced it. Opened and closed inside one session. **Its engage cost was accepted rather than merely tolerated** — see `CLAUDE.md` > Judged good — so do not "restore" the sharper ramp |
 | **0.16** | **2.15**, which carries the shipped mechanism and the tuning history forward. **Retired without ever being judged**, 2026-08-17. It had been held open by one question — whether the denied-jump channel was disabled along with EMP and weapon recoil by accident, being a movement cue rather than a weapon one. **The owner confirmed it is intentional** and that it will not be evaluated before the pre-alpha 1 playtest, which makes the gate energy-and-ability scoping rather than anything about movement, so the tier changed with it |
 | **0.24** | **2.14**, which carries the measurements forward. **Retired without anything being built**, 2026-08-17: the thrusters it targets are placeholder and are being replaced, so both the tier and the timing changed. Retired rather than moved because numbers encode their tier and are never reused |
+| **0.21** | `TuningLog.md` > Fall gravity and airtime, in the 2026-08-17 continuation rather than a new entry. Shipped `extraFallGravity` 30 -> 35. **Closed without a sweep**, because the closed-form model reproduced the 2026-08-14 table to within measurement slop on three independent quantities, so a sweep would have re-measured arithmetic. **The hard-landing framing this file carried was the wrong headline:** both of the owner's rules survive the whole usable range and the real cost is the barrel-roll landing margin, which has no ceiling to trip — it degrades continuously, ~25ms per 5 units. **Judged good in play the same day**, against a test the owner supplied: two barrel rolls still land |
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |
 
 **The old Tier 4 was a deletion list and is fully executed**, which is why the number was free to reuse for

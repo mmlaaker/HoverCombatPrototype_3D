@@ -319,8 +319,21 @@ public class FoundationTuning
              "jump impulses to win the height back. Putting the weight on the descent alone keeps " +
              "the rise generous, which is where tricks live, while the landing still reads as " +
              "decisive. Rise time goes up, fall time comes down, total airtime barely moves.\n\n" +
+             "DO NOT REACH FOR THIS TO SHORTEN HANG TIME. It is a weak lever on airtime and a " +
+             "strong one on descent weight: 30 to 40 is 14% heavier on the way down but only ~3% " +
+             "less time in the air, because the rise runs on separate gravity and the fall " +
+             "shortens by a square root. If the complaint is 'too long in the air', this knob " +
+             "will disappoint you at every value.\n\n" +
+             "TWO CEILINGS, both measured rather than guessed:\n" +
+             "- 43 is where a flat-ground charge jump starts tripping Hard Landing Min Speed. A " +
+             "charge jump must never hard-land (Standing Decision), so that is a hard cap. The " +
+             "slider stops at 40 to keep a margin.\n" +
+             "- Every +5 here costs about 25ms of the window between finishing two barrel rolls " +
+             "and touching down. At the shipped 35 that window is ~0.09s.\n\n" +
              "The catch: a jump now lands FASTER than it launched. Recheck Hard Landing Min Speed " +
-             "whenever you move this. Try 8 to 20.")]
+             "whenever you move this. Shipped 35 and JUDGED GOOD on the condition that two barrel " +
+             "rolls still land, so test that before accepting any new value. History in " +
+             "TuningLog.md.")]
     [Range(0f, 40f)]
     public float extraFallGravity = 13f;
 
