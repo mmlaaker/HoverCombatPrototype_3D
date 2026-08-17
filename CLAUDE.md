@@ -861,6 +861,19 @@ regression even if it improves something else.
   scales both ceilings by the same factor, so **there is only one ratio and it cannot be tuned per
   mode.** This bounds `TODO.md` 5.11 to the camping question alone.
 
+Added 2026-08-17, judged the same day they were built:
+
+- **The boost camera across a reversal**, `forwardGateSlew` 3.5. The owner drove the manoeuvre that
+  produced the defect — boosting backwards and forwards — and accepted the result. **The engage cost
+  was accepted, not merely tolerated:** the gate multiplies the overshoot as well as the sustained
+  terms, so the lens sits up to 1.8 degrees narrower through the first quarter second from a
+  standstill. **That softer first third is now the intended ramp shape.** Restoring the sharper one
+  is a regression, not a fix, and re-introduces the 23ms step (`TuningLog.md` > The boost gate was a
+  step against reversing).
+- **The speed look-ahead rate limit**, `speedLookAheadSlew` 8, which closed 0.20. Chosen to be a
+  provable no-op on flooring it from rest, so that case remains the reference the number is set
+  against: if the accepted case ever changes, this bound has to be re-derived rather than kept.
+
 ### Trick economy
 
 - **Revolutions are COMPLETED, never accumulated travel**, and bank on the crossing, so a counter-rotation

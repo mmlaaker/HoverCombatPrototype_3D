@@ -604,7 +604,9 @@ is memory; `ContributeLookAhead` stays pure and `SpeedLookAheadTarget` is the si
 the speed-to-distance mapping, shared with the preview states so the two cannot diverge.
 
 ### The boost gate was a step against reversing
-*Shipped 2026-08-17, `TODO.md` 0.26. **Found in marker data, then reproduced.***
+*Shipped and **judged good** 2026-08-17, closing `TODO.md` 0.26. **Found in marker data, then
+reproduced.** The owner re-drove the exact manoeuvre that produced it — boosting backwards and
+forwards — and accepted the result including its cost at engage.*
 
 Owner, 2026-08-17: *"If I boost and flick the left stick forward and backwards, I can create a camera
 jumping back and forth kind of bug."*
@@ -647,10 +649,12 @@ untouched: 72.48 against 72.43**, because the overshoot crests at 0.35s once the
 opening. So the ramp changes shape and the transient still lands at full strength.
 
 That cost pushes the same way 0.20 did — a softer first third to an engage from a standstill is what
-that item wanted — but it is a change to a feel that was signed off, which is why 0.26 stays open for
-a judgement rather than closing here.
+that item wanted — and **the owner played it and accepted it the same day**, which closes the
+question rather than leaving it tolerated. `forwardGateSlew` 3.5 is therefore a judged value, not a
+provisional one, and the softer first third of the engage ramp is now the intended shape.
 
-**Two alternatives if it reads wrong**, in order of how much they give back:
+**Two alternatives, kept only in case the judgement is ever revisited**, in order of how much they
+give back:
 
 1. **Raise `forwardGateSlew` toward 8.** The reversal transit becomes ~125ms, still five times
    calmer than the 23ms step, and the engage cost roughly halves.

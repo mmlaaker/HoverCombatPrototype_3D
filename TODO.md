@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.13 · 0.18 · 0.19 · 0.21 · 0.25 · 0.26 |
+| **0** | 0.12 · 0.13 · 0.18 · 0.19 · 0.21 · 0.25 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -87,8 +87,8 @@ tuning and features.** Struck items are done.
 10. ~~**0.16**~~ **retired 2026-08-17 without being judged.** The scoping that hides it is intentional
     and confirmed by the owner; the successor is **2.15**
 11. **0.19** tooling that prevents a future bug rather than work you can feel
-12. **0.26** boost gate step on reversing. **Fixed 2026-08-17**, open only for a feel judgement on
-    the engage cost. Play it before the others; it is the only item with code already in
+12. ~~**0.26**~~ fixed and **judged good 2026-08-17**, outcome in `TuningLog.md` > The boost gate was
+    a step against reversing. The engage cost it carried was played and accepted
 13. **0.25** charge jump squat. **Placed last by the owner**: it touches only the charge jump and the
     hooks already exist, so it is the least urgent thing here rather than the least valuable
 
@@ -335,38 +335,6 @@ before writing code, because it changes what gets written.
 
 **The VFX half is Tier 2** with the rest of the blocked FX work, same split used for the drift cue.
 The squat is Tier 0 because the movement half is not blocked on anything.
-
-### 0.26 The boost camera steps on and off when travel speed crosses zero
-
-**FIXED 2026-08-17, awaiting a feel judgement.** Outcome in `TuningLog.md` > The boost gate was a
-step against reversing. Left open because the fix has a measured cost at engage that nobody has
-judged yet; close it once that has been played.
-
-Owner, 2026-08-17: *"If I boost and flick the left stick forward and backwards, I can create a camera
-jumping back and forth kind of bug. This is definitely an edge case."* **Found in the marker data
-before it was reproduced**, at `t=74.34` of `motiontrace_20260817_151605.csv`.
-
-**Mechanism.** `ForwardGate` multiplies every boost term by `Clamp01(travelSpeed / forwardGateSpeed)`
-and `forwardGateSpeed` is 2, which makes the gate a step against anything that reverses. Measured
-with boost pinned at 1.00 through a forward-to-reverse flick: **the gate went 1.000 to 0.000 in 23ms**,
-taking 4.00 degrees of FOV and 0.502m of rig with it, about 21 m/s of camera travel. Flicking back
-snapped it on again identically, and that oscillation is the report.
-
-**Less of an edge case than it looks.** Boost in reverse is supported on purpose, so travel speed
-crossing zero under boost is ordinary play — a panicked reverse does it as readily as a deliberate
-flick. What the owner found was the fastest way to trigger it, not the only way.
-
-**Fixed by `forwardGateSlew` 3.5**, a rate limit on the gate value rather than a widening of the
-threshold, so the gate stays a direction test. Same instrument as `speedLookAheadSlew`, and for the
-same reason. **After: 287ms and 3.2 m/s of rig.**
-
-**What still needs judging, and it is the reason this is open:** the gate multiplies the overshoot as
-well as the sustained terms, so from a standstill the lens now sits up to **1.8 degrees narrower
-through the first quarter second** of an engage. The peak is untouched (72.48 against 72.43) because
-the overshoot crests after the gate has finished opening. That pushes the same way 0.20 did, but it
-is a change to a feel that was signed off, and `TuningLog.md` records two alternatives if it reads
-wrong.
-
 
 ---
 
@@ -1272,6 +1240,7 @@ reused.
 | **0.14** | `TuningLog.md` > Drive and strafe framing. Shipped 2026-08-17 for pre-alpha 1. **The pre-alpha 2 revisit is 5.12**, a new number rather than this one reopened |
 | **0.23** | `TuningLog.md` > The drift hop was being suppressed. **Never a missing cue:** the hop was being silently skipped about one entry in three, and no cue was built. The VFX half is 2.12 |
 | **0.20** | `TuningLog.md` > The boost jolt at a standstill. Shipped 2026-08-17. **The mechanism this file had recorded was wrong:** the speed gate was never the cause, and three runs showed the culprit was the look-ahead being dragged through its whole swing at boost acceleration. See `Measuring.md` trap 42 |
+| **0.26** | `TuningLog.md` > The boost gate was a step against reversing. Shipped and **judged good 2026-08-17** by playing exactly the manoeuvre that produced it. Opened and closed inside one session. **Its engage cost was accepted rather than merely tolerated** — see `CLAUDE.md` > Judged good — so do not "restore" the sharper ramp |
 | **0.16** | **2.15**, which carries the shipped mechanism and the tuning history forward. **Retired without ever being judged**, 2026-08-17. It had been held open by one question — whether the denied-jump channel was disabled along with EMP and weapon recoil by accident, being a movement cue rather than a weapon one. **The owner confirmed it is intentional** and that it will not be evaluated before the pre-alpha 1 playtest, which makes the gate energy-and-ability scoping rather than anything about movement, so the tier changed with it |
 | **0.24** | **2.14**, which carries the measurements forward. **Retired without anything being built**, 2026-08-17: the thrusters it targets are placeholder and are being replaced, so both the tier and the timing changed. Retired rather than moved because numbers encode their tier and are never reused |
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |

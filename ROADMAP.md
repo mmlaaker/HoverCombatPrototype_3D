@@ -39,7 +39,6 @@ camera in the top tier. Every row below is a Tier 0 item.
 | **0.19** | no camera preview state can reproduce a mid-flip pose. Tooling, lowest priority here |
 | **0.21** | fall gravity wants another increase, bounded by the hard-landing rules and the trick landing margin. **Next up** |
 | **0.25** | the charge jump has no wind-up and the charge is invisible. **Last in tier** by owner decision; hooks already exist |
-| **0.26** | the boost camera stepped on and off whenever travel speed crossed zero. **Fixed 2026-08-17**; open only for a feel judgement on its cost at engage |
 
 **Closed since this list was written**, all 2026-08-17 unless noted: `0.15` (never a defect, a
 deliberate playtest scoping decision), `0.17` (boost drive mode judged good; residual became `0.20`),
@@ -48,8 +47,9 @@ deliberate playtest scoping decision), `0.17` (boost drive mode judged good; res
 (**wall jumping already works**, confirmed in play), `0.20` (**the mechanism the tracker had recorded
 was wrong**; the cause was the look-ahead, not the speed gate), `0.24` (**retired without being
 built**, deferred behind the thruster replacement as `2.14`), and `0.16` (**retired without being
-judged**; the scoping that hides it is intentional and confirmed, successor `2.15`). See `TODO.md` >
-Retired numbers.
+judged**; the scoping that hides it is intentional and confirmed, successor `2.15`), and `0.26`
+(**opened and closed the same session**: the boost camera stepped on and off whenever travel speed
+crossed zero). See `TODO.md` > Retired numbers.
 
 Also worth doing during the next long run, though it gates nothing: **4.4**, confirm the marker key
 works in a build and measure allocation under sustained fire.
