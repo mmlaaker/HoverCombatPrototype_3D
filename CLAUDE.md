@@ -430,6 +430,18 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
   three-run measurement are in `TuningLog.md` > The boost jolt at a standstill.
 - **Preview and live feed the SAME solver**, through `GatherLiveInputs` and `BuildPreviewInputs`. A
   preview that recomputes the framing starts lying the first time a contributor changes.
+- **Three preview states deliberately break the nose-follows-travel assumption**, and they exist
+  because two shipped defects hid in exactly that gap and neither was reproducible in the dropdown.
+  `ReverseBoost` (gate must read 0 and kill every boost term), `NoseAcrossTravel` (forward speed 0
+  while travelling at full speed, so the look-ahead collapses while the boost terms stay live), and
+  `Downed` (camera at the limit of its downed orbit). **A gate that fails OPEN is invisible in every
+  other state**, because everywhere else the gate is supposed to be open anyway -- which is precisely
+  why `0.26` survived in the inspector.
+- **`travelOverride` is null by default and that default is load-bearing.** A preview state that says
+  nothing about travel gets travel aligned to its nose, which is both the honest pose and the safe
+  one. Disagreement now has to be stated explicitly. Do not invert this by making states declare
+  agreement -- the whole point is that forgetting produces a correct row rather than a contradictory
+  one.
 - **The downed camera orbit rotates about `Vector3.up`, NEVER the craft up, and this is load-bearing.**
   The drive rig is bound `LockToTargetWithWorldUp`, so the follow offset lives in a frame that yaws
   with the chassis but never pitches or rolls with it. Rotating about world up therefore keeps the
@@ -445,12 +457,11 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
   guard.** It rotates the finished offset rather than adding to it, so everything else that displaced
   the camera orbits with it; and the guard still has to measure the pose that ships. It leaves
   `targetOffset` alone on purpose, which is what makes it a look-around rather than a pan off the craft.
-- **`BuildPreviewInputs` assigns `travelSpeed = forwardSpeed`, `lookAheadDistance` and `forwardGate`
-  once after its switch, not per case**, so a state added later cannot forget any of them. `downedYaw` is assigned there too, at zero:
-  **no preview state is downed**, which is a known gap and precisely the class of pose `TODO.md` 0.19
-  exists to add. A per-case assignment is how one preview state sat silently
-  wrong for five versions. Note a preview state that omits an input a GATE reads will silently show the
-  ungated case, and it looks like a correct row rather than a missing one.
+- **`BuildPreviewInputs` assigns `travelSpeed`, `lookAheadDistance`, `forwardGate` and `downedYaw`
+  once after its switch, not per case**, so a state added later cannot forget any of them. A per-case
+  assignment is how one preview state sat silently wrong for five versions. Note a preview state that
+  omits an input a GATE reads will silently show the ungated case, and it looks like a correct row
+  rather than a missing one.
 - **Every seed is live-editable and everything derived from it is recomputed per frame, not cached**,
   so dragging one during play takes effect immediately.
 - **The framing budget cannot be tuned away.** The craft sits at the CENTRE of the drive camera's

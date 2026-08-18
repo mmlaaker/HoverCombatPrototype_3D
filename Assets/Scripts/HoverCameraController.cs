@@ -1104,6 +1104,14 @@ public class HoverCameraController : MonoBehaviour
             uprightness = 1f
         };
 
+        // Set ONLY by a state whose travel deliberately disagrees with its nose.
+        // Null means "the craft is going where it is pointing", which is true of
+        // every state above the disagreement block and is the safe default: a
+        // state added later that forgets this still renders an honest pose
+        // rather than a silently contradictory one.
+        float? travelOverride   = null;
+        float  downedYawPreview = 0f;
+
         switch (state)
         {
             case CameraPreviewState.Resting:
@@ -1185,14 +1193,44 @@ public class HoverCameraController : MonoBehaviour
                 inp.uprightness      = 0f;
                 inp.airControlWeight = 1f;
                 break;
+
+            // Nose forward, travel backward. Only the SIGN of travel matters:
+            // the gate saturates long before the magnitude does, so using the
+            // camera reference rather than the vehicle reverse cap costs nothing
+            // and keeps this state derived from camera tuning alone.
+            case CameraPreviewState.ReverseBoost:
+                inp.forwardSpeed = -fullFast;
+                inp.boostHold    = 1f;
+                travelOverride   = -fullFast;
+                break;
+
+            // Broadside: moving at full speed with the nose square across it.
+            // forwardSpeed 0 collapses the speed look-ahead while travelSpeed
+            // fullFast leaves the gate wide open, so the boost terms stay live.
+            // The two disagreeing is the entire point of the state.
+            case CameraPreviewState.NoseAcrossTravel:
+                inp.forwardSpeed = 0f;
+                inp.boostHold    = 1f;
+                travelOverride   = fullFast;
+                break;
+
+            // At the limit of the downed orbit. No speed: a downed craft has
+            // come to rest, and giving it one would quietly re-introduce the
+            // aligned-travel assumption this block exists to break.
+            case CameraPreviewState.Downed:
+                inp.uprightness  = 0f;
+                downedYawPreview = framing.downedYawRange;
+                break;
         }
 
-        // Every defined state has the craft travelling along its own nose, so the
-        // two speeds agree and the preview stays honest. Assigned after the switch
-        // rather than inside each case on purpose: a state added later cannot then
-        // forget it and silently render with its boost gated off, which is exactly
-        // how StrafeBoost sat wrong from v2.4 until someone noticed.
-        inp.travelSpeed = inp.forwardSpeed;
+        // Travel follows the nose UNLESS a state explicitly said otherwise. That
+        // default is the honest one and it is also the safe one: a state added
+        // later cannot forget this and silently render with its boost gated off,
+        // which is exactly how StrafeBoost sat wrong from v2.4 until someone
+        // noticed. Disagreeing now requires saying so, which is the right way
+        // round -- for most of this file's life the two were pinned equal with no
+        // way to separate them at all, and two defects hid in that gap.
+        inp.travelSpeed = travelOverride ?? inp.forwardSpeed;
 
         // Settled by definition: a preview state is a destination, never a moment
         // in transit, so the slew limit has already been paid off and the look
@@ -1207,12 +1245,9 @@ public class HoverCameraController : MonoBehaviour
         // and assigning outside the switch is what stops it happening again.
         inp.forwardGate = ForwardGateTarget(inp.travelSpeed);
 
-        // Settled at ZERO, and that is a known gap rather than an oversight: no
-        // preview state is downed, so none of them can show what the camera does
-        // while the player is swinging it around a flipped craft. That is exactly
-        // the class of pose `TODO.md` 0.19 exists to add. Assigned out here so a
-        // future downed state only has to override it.
-        inp.downedYaw = 0f;
+        // Zero unless a state swung the camera. Same pattern and same reason as
+        // travelOverride above.
+        inp.downedYaw = downedYawPreview;
 
         return inp;
     }

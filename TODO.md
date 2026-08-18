@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.19 · 0.25 |
+| **0** | 0.12 · 0.25 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -91,7 +91,8 @@ tuning and features.** Struck items are done.
    downed window > Closed as 0.18
 10. ~~**0.16**~~ **retired 2026-08-17 without being judged.** The scoping that hides it is intentional
     and confirmed by the owner; the successor is **2.15**
-11. **0.19** tooling that prevents a future bug rather than work you can feel
+11. ~~**0.19**~~ shipped 2026-08-17. Three preview states that break the nose-follows-travel
+    assumption; the two defects that hid in that gap are now judgeable with the game stopped
 12. ~~**0.26**~~ fixed and **judged good 2026-08-17**, outcome in `TuningLog.md` > The boost gate was
     a step against reversing. The engage cost it carried was played and accepted
 13. **0.25** charge jump squat. **Placed last by the owner**: it touches only the charge jump and the
@@ -129,6 +130,11 @@ items below are bounded by something already confirmed to feel right, and those 
 acceptance criteria.
 
 ### 0.12 A sliver of bumper still clips on the pitch-up
+
+**CONFIRMED STILL PRESENT 2026-08-17.** Owner, asked to glance at it after four separate changes to
+the drive camera: *"0.12 is still true"*. So the residual is not something the framing rework, the
+look-ahead rate limit, the boost gate slew or the downed orbit happened to fix along the way, and it
+should stop being treated as probably-already-gone. It remains accepted rather than fixed.
 
 **LARGELY RESOLVED 2026-08-17 by raising `minFrameMargin` to 5**, which is a PREFAB-VARIANT override
 stored in `HoverCar_Prototype.prefab` (committed at `137b6c7`), not a scene override and not a change
@@ -210,20 +216,6 @@ rather than the frame the solver intended.
 **Test discipline, and it cost three bad conclusions:** the first runs let the craft accelerate from
 wherever the previous test left it, so no two were comparable and one apparent regression was pure
 starting-state noise. **Pin position, rotation and velocity before any camera framing test.**
-
-### 0.19 No camera preview state can reproduce a mid-flip pose
-
-`CameraPreviewState.Inverted` sets the craft upside down but still travelling along its own nose, so it
-cannot express the moment that mattered in the boost-gate bug: **nose swept past perpendicular to travel
-while moving at speed.** Every one of the twelve states has velocity aligned with the chassis, which is
-precisely the assumption that bug lived under.
-
-That is part of why the defect survived so long: it was invisible in the inspector and only appeared
-under a controlled playtest. **A state carrying a nose/travel disagreement would make this class of bug
-judgeable without driving**, which is the argument for building it. Needs `FramingInputs.travelSpeed` to
-differ from `forwardSpeed`, which `BuildPreviewInputs` currently pins equal on purpose.
-
-Lowest priority in this tier: it is tooling that prevents a future bug rather than work you can feel.
 
 ### 0.25 The charge jump has no wind-up, and the charge itself is invisible
 
@@ -1190,6 +1182,7 @@ reused.
 | **0.16** | **2.15**, which carries the shipped mechanism and the tuning history forward. **Retired without ever being judged**, 2026-08-17. It had been held open by one question — whether the denied-jump channel was disabled along with EMP and weapon recoil by accident, being a movement cue rather than a weapon one. **The owner confirmed it is intentional** and that it will not be evaluated before the pre-alpha 1 playtest, which makes the gate energy-and-ability scoping rather than anything about movement, so the tier changed with it |
 | **0.24** | **2.14**, which carries the measurements forward. **Retired without anything being built**, 2026-08-17: the thrusters it targets are placeholder and are being replaced, so both the tier and the timing changed. Retired rather than moved because numbers encode their tier and are never reused |
 | **0.13** | `TuningLog.md` > Camera control while downed, and > The downed window for the measurement that sized it. Shipped and judged good 2026-08-17. **Two of this item's three shapes were never built and were not rejected** -- a downed framing and "something else" both remain available if a play report ever asks for them. **The handback was closed on the owner's play evidence over the assistant's measurements:** the 19 m/s "fling" was vertical, the craft returning to ride height, and being downed is rare on this chassis |
+| **0.19** | `CLAUDE.md` > `HoverCameraController.cs`. Shipped 2026-08-17. Added `ReverseBoost`, `NoseAcrossTravel` and `Downed`, and replaced the hard-pinned `travelSpeed = forwardSpeed` with a null-defaulted override so disagreement must be stated rather than being impossible. **The gap was never that a state was missing, it was that the data model could not express one:** every field existed, but the preview pinned the two speeds equal, so `0.20` and `0.26` were both invisible in the inspector and each cost a driven playtest |
 | **0.18** | `TuningLog.md` > The downed window > Closed as 0.18. Shipped 2026-08-17. **The title of this item was the wrong diagnosis:** `flipRecoverySpeedThreshold` was never the defect and stayed at 2. The arming clock was RESETTING to zero on any excursion past it, pricing a one-frame blip and a 229ms one identically, and the craft is pushed out of the gate by its own settling tumble -- so recovery interrupted its own clock. `flipRecoveryProgressDecay` 1 makes the cost symmetric. Worth 0.78s on a 25 m/s wipeout and 2ms at rest |
 | **0.21** | `TuningLog.md` > Fall gravity and airtime, in the 2026-08-17 continuation rather than a new entry. Shipped `extraFallGravity` 30 -> 35. **Closed without a sweep**, because the closed-form model reproduced the 2026-08-14 table to within measurement slop on three independent quantities, so a sweep would have re-measured arithmetic. **The hard-landing framing this file carried was the wrong headline:** both of the owner's rules survive the whole usable range and the real cost is the barrel-roll landing margin, which has no ceiling to trip — it degrades continuously, ~25ms per 5 units. **Judged good in play the same day**, against a test the owner supplied: two barrel rolls still land |
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |

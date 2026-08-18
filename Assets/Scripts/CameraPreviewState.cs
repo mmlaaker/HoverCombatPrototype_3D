@@ -76,5 +76,52 @@ public enum CameraPreviewState
     /// fade, which should collapse both look-ahead terms to zero. If the look
     /// point moves at all in this state, the fade is broken.
     /// </summary>
-    Inverted
+    Inverted,
+
+    // ── States where the nose and the travel direction DISAGREE ───────────
+    //
+    // Everything above this line has the craft travelling along its own nose.
+    // That was an unstated assumption rather than a decision, and it is the
+    // assumption two shipped defects lived under: neither was reproducible in
+    // this dropdown, and both cost a driven playtest to find instead.
+    //
+    // These exist so that class of bug is judgeable with the game stopped.
+
+    /// <summary>
+    /// Boosting in REVERSE. Nose forward, travel backward, boost fully held.
+    ///
+    /// The forward gate should read zero here and kill every boost term, so
+    /// this state should look like plain Resting apart from the lens. If it
+    /// shows any pull-back or any widening, the gate is broken -- and a gate
+    /// that fails open is invisible in every other state, because everywhere
+    /// else the gate is meant to be open anyway.
+    ///
+    /// The speed magnitude is the camera's own reference rather than the
+    /// vehicle's reverse cap, which is lower. Nothing here depends on it: the
+    /// gate saturates on the SIGN long before the magnitude matters.
+    /// </summary>
+    ReverseBoost,
+
+    /// <summary>
+    /// Travelling at full speed with the nose swept fully across the direction
+    /// of travel -- broadside, mid-spin, or the far side of a hard drift.
+    ///
+    /// This is the pose no previous state could express, and it is the exact
+    /// shape of the boost-gate defect: forward speed reads zero while the craft
+    /// is genuinely moving at speed. Speed look-ahead should therefore collapse
+    /// to nothing while the boost terms stay fully live, because the two read
+    /// DIFFERENT speeds. That asymmetry is the thing to judge.
+    /// </summary>
+    NoseAcrossTravel,
+
+    /// <summary>
+    /// Flipped, helpless, and the player has swung the camera to the limit of
+    /// its downed range.
+    ///
+    /// The worst case for the downed orbit: the camera is as far off-axis as it
+    /// can get. Judge whether the craft is still readable from there, and
+    /// whether the horizon is still level -- the orbit rotates about world up
+    /// precisely so that it is, and this is the state that shows it.
+    /// </summary>
+    Downed
 }
