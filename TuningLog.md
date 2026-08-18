@@ -226,7 +226,7 @@ the righting torque, and it additionally needs tilt >= `flipRecoveryArmAngle` (7
 | Righting authorizes | 1.02s | 3.77s |
 | **Control returns** | **1.96s** | **4.84s** |
 | Tilt at handback | 34.8 deg | 32.6 deg |
-| Speed at handback | — | **19.0 m/s** |
+| Speed at handback | — | **19.0 m/s, almost all VERTICAL** |
 
 **Three findings, each of which changed a decision:**
 
@@ -239,8 +239,12 @@ the righting torque, and it additionally needs tilt >= `flipRecoveryArmAngle` (7
    settling tumble at 161 degrees of tilt — **the recovery interrupts its own clock.** **Fixed the
    same day, see below.** Note the excursions were 352ms and 229ms rather than single frames, which
    this entry originally implied; the reset's defect is that it charged the same price either way.
-3. **The handback is abrupt.** Control returns mid-swing at ~33 degrees with the craft still rotating
-   at 4.6 rad/s, and in the sliding case being flung at 19 m/s as the hover springs re-acquire.
+3. **The handback returns control mid-swing**, at ~33 degrees with the craft still rotating at 4.6
+   rad/s. **The 19 m/s in that table is NOT a lateral launch and describing it as being "flung" was
+   wrong.** The craft rises 6.7m across that window, from resting on its hull to its ride height, so
+   the speed is the hovercraft standing back up -- unavoidable, and correct. Corrected 2026-08-17
+   after the owner, who had played it, said the craft "just flips over basically right where it's
+   at". They were right and the number had been characterised misleadingly.
 
 **The at-rest case cannot see finding 2 at all** — it never resets once. Flat ground at rest is not a
 sufficient test here, exactly as it was not for the release-angle equilibrium.

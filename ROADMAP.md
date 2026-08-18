@@ -34,7 +34,6 @@ camera in the top tier. Every row below is a Tier 0 item.
 | | |
 |---|---|
 | **0.12** | a sliver of bumper still clips on the pitch-up. **Largely resolved 2026-08-17** by `minFrameMargin` 5; owner accepted the residual |
-| **0.13** | the camera has no answer while the craft is flipped. **Half-built and judged good 2026-08-17:** the player can now swing the camera around a downed craft. What remains is the handback |
 | **0.19** | no camera preview state can reproduce a mid-flip pose. Tooling, lowest priority here |
 | **0.25** | the charge jump has no wind-up and the charge is invisible. **Last in tier** by owner decision; hooks already exist |
 
@@ -47,7 +46,7 @@ was wrong**; the cause was the look-ahead, not the speed gate), `0.24` (**retire
 built**, deferred behind the thruster replacement as `2.14`), and `0.16` (**retired without being
 judged**; the scoping that hides it is intentional and confirmed, successor `2.15`), and `0.26`
 (**opened and closed the same session**: the boost camera stepped on and off whenever travel speed
-crossed zero), `0.18` (**the speed threshold was never the defect**: the arming clock reset to zero instead of decaying, which cost 0.78s on a wipeout), and `0.21` (`extraFallGravity` 30 -> 35, **judged good in play the same day**; the
+crossed zero), `0.13` (**the camera now hands the player the stick while downed**, judged good; the handback was closed on play evidence), `0.18` (**the speed threshold was never the defect**: the arming clock reset to zero instead of decaying, which cost 0.78s on a wipeout), and `0.21` (`extraFallGravity` 30 -> 35, **judged good in play the same day**; the
 hard-landing framing this milestone carried was the wrong headline, and the real cost is the
 barrel-roll landing margin). See `TODO.md` > Retired numbers.
 

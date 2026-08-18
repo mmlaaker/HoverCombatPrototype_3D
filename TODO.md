@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.13 · 0.19 · 0.25 |
+| **0** | 0.12 · 0.19 · 0.25 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -84,8 +84,8 @@ tuning and features.** Struck items are done.
 7. ~~**0.21**~~ shipped and **judged good 2026-08-17** at `extraFallGravity` 35, outcome in
    `TuningLog.md` > Fall gravity and airtime. The owner drove it and supplied the acceptance test:
    two barrel rolls still land
-8. **0.13** shape chosen and half-built 2026-08-17; the orbit is **judged good**. What remains is
-   the handback. **Next**
+8. ~~**0.13**~~ shipped and **judged good 2026-08-17**. The player swings the camera around a downed
+   craft; the handback was closed by the owner on play evidence against the assistant's measurements
 9. ~~**0.18**~~ shipped 2026-08-17. **The threshold was never the defect** -- the arming clock now
    decays instead of resetting, and the threshold stayed at 2. Outcome in `TuningLog.md` > The
    downed window > Closed as 0.18
@@ -210,75 +210,6 @@ rather than the frame the solver intended.
 **Test discipline, and it cost three bad conclusions:** the first runs let the craft accelerate from
 wherever the previous test left it, so no two were comparable and one apparent regression was pure
 starting-state noise. **Pin position, rotation and velocity before any camera framing test.**
-
-### 0.13 The camera has no answer while the craft is flipped and helpless
-
-**NARROWED 2026-08-16 after the owner tested the original scope.** The craft flips, you have no agency
-until it rights itself, and the camera simply settles to the side. Nothing useful happens in a window
-where the player is doing nothing and wants to be looking at where they will end up.
-
-**The trick half is CLOSED and must not be re-proposed.** The original item paired this with "right
-stick moves the camera during heavy air, so a long trick sequence can set up the landing". The owner
-built a session around it and rejected it: **with trick control already on one stick, camera control on
-the other is too much to do at once.** That is a decision from play, not a guess. Air control keeps the
-camera behaviour it has.
-
-**What remains open is only the flipped case. THE SHAPE IS NOW DECIDED AND HALF-BUILT.** The owner
-chose "hand the player the stick" on 2026-08-17 and it shipped the same day: Right Stick X swings the
-camera around the craft while downed, Right Stick Y keeps doing camera pitch. `downedYawSensitivity`
-1.5, `downedYawRange` 180, `downedYawRecenterSpeed` 1.5, `downedCameraHold` 0.5. See `TuningLog.md` >
-Camera control while downed for the verification, and > The downed window for the measurement that
-justified it.
-
-**The window is 2 to 5 seconds, measured, which is far longer than this item had assumed.** 1.96s for
-a craft that comes to rest inverted, 4.84s for a wipeout carrying 25 m/s.
-
-**JUDGED GOOD 2026-08-17** after the owner tuned it: *"I tuned the values. it feels good."* The two
-that moved are scene overrides on `Prototype_Scene`, not prefab values: `downedYawRange` 180 -> **90**
-and `downedCameraHold` 0.5 -> **0.2**. Sensitivity and recentre stayed at 1.5, so the axis still
-matches camera pitch exactly.
-
-**ONE CONCERN ON `downedCameraHold` 0.2, raised rather than overruled because it was never put to the
-owner.** The hold exists to bridge the gaps where `IsDowned` flickers off during a wipeout, and **the
-longest gap measured was 0.25s** — longer than the 0.2 now shipped. A wipeout that chatters like the
-measured one will drop camera control for a few frames mid-crash. **The at-rest flip cannot show
-this**, because it never chatters at all, so a clean test of the feature does not exercise it. If
-camera control ever stutters at the start of a crash, this is the number, and 0.3 clears the measured
-worst case. Left as tuned: it may simply not be noticeable, which is a play question rather than a
-measurement one.
-
-**What is left:**
-
-- **The handback, which is the real remaining design problem.** Control returns at 33 degrees of tilt
-  with the craft already moving, and in a sliding wipeout being flung at 19 m/s. The camera can be a
-  long way off-axis at exactly the moment the player needs to drive. It currently springs back at
-  `downedYawRecenterSpeed`, which is the pitch axis's answer borrowed wholesale rather than a
-  considered one. **Suspect this first if recovery feels disorienting rather than the orbit itself.**
-- **Whether a downed FRAMING is still wanted on top.** The second shape below was not rejected, just
-  not chosen first; pulling back or reframing toward where the craft needs to get to would compose
-  with the stick rather than compete with it.
-
-**The two shapes not taken**, kept because neither was rejected on merit:
-
-- **A specific framing for the downed state.** Pull back, or swing to a readable angle, or frame the
-  craft against where it needs to get back to. Costs no input and cannot be fumbled.
-- **Something else entirely.** The requirement is that the window stops feeling dead, not that a
-  particular mechanism is used.
-
-**Do not conclude that camera panning during recovery is a bug.** A separate report of the camera
-swinging out on a standing charge jump was root-caused and fixed (it was the travel-heading bound, see
-`CLAUDE.md`). What is left from that report is a wart worth knowing: **air control makes the left stick
-PITCH the moment the craft clears the clearance gate, and a charged jump always clears it**, so holding
-any throttle through a charge jump reliably starts a tumble from standing. Propulsion documents that
-hazard for hops and solves it with the height floor, which by design does not protect the charged case.
-**That is currently the most reliable way to reach the state this item is about.**
-
-**One latent issue, separate and not the cause of anything observed.** `UpdateHeadingProxy` scales by
-`Time.deltaTime` with no clamp, so a 194ms GC frame permits ~35 degrees of heading movement in a single
-frame and the converge term reaches 90% of chassis yaw at once. Both terms are designed to prevent
-snaps at 3.7ms and both stop protecting at 194ms. A `Mathf.Min(Time.deltaTime, ~0.05f)` would make the
-camera hitch-proof. **Not applied:** it was never demonstrated to cause a felt artifact, and the
-editor's idle allocation means the hitch may not exist in a build at all.
 
 ### 0.19 No camera preview state can reproduce a mid-flip pose
 
@@ -1258,6 +1189,7 @@ reused.
 | **0.26** | `TuningLog.md` > The boost gate was a step against reversing. Shipped and **judged good 2026-08-17** by playing exactly the manoeuvre that produced it. Opened and closed inside one session. **Its engage cost was accepted rather than merely tolerated** — see `CLAUDE.md` > Judged good — so do not "restore" the sharper ramp |
 | **0.16** | **2.15**, which carries the shipped mechanism and the tuning history forward. **Retired without ever being judged**, 2026-08-17. It had been held open by one question — whether the denied-jump channel was disabled along with EMP and weapon recoil by accident, being a movement cue rather than a weapon one. **The owner confirmed it is intentional** and that it will not be evaluated before the pre-alpha 1 playtest, which makes the gate energy-and-ability scoping rather than anything about movement, so the tier changed with it |
 | **0.24** | **2.14**, which carries the measurements forward. **Retired without anything being built**, 2026-08-17: the thrusters it targets are placeholder and are being replaced, so both the tier and the timing changed. Retired rather than moved because numbers encode their tier and are never reused |
+| **0.13** | `TuningLog.md` > Camera control while downed, and > The downed window for the measurement that sized it. Shipped and judged good 2026-08-17. **Two of this item's three shapes were never built and were not rejected** -- a downed framing and "something else" both remain available if a play report ever asks for them. **The handback was closed on the owner's play evidence over the assistant's measurements:** the 19 m/s "fling" was vertical, the craft returning to ride height, and being downed is rare on this chassis |
 | **0.18** | `TuningLog.md` > The downed window > Closed as 0.18. Shipped 2026-08-17. **The title of this item was the wrong diagnosis:** `flipRecoverySpeedThreshold` was never the defect and stayed at 2. The arming clock was RESETTING to zero on any excursion past it, pricing a one-frame blip and a 229ms one identically, and the craft is pushed out of the gate by its own settling tumble -- so recovery interrupted its own clock. `flipRecoveryProgressDecay` 1 makes the cost symmetric. Worth 0.78s on a 25 m/s wipeout and 2ms at rest |
 | **0.21** | `TuningLog.md` > Fall gravity and airtime, in the 2026-08-17 continuation rather than a new entry. Shipped `extraFallGravity` 30 -> 35. **Closed without a sweep**, because the closed-form model reproduced the 2026-08-14 table to within measurement slop on three independent quantities, so a sweep would have re-measured arithmetic. **The hard-landing framing this file carried was the wrong headline:** both of the owner's rules survive the whole usable range and the real cost is the barrel-roll landing margin, which has no ceiling to trip — it degrades continuously, ~25ms per 5 units. **Judged good in play the same day**, against a test the owner supplied: two barrel rolls still land |
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |
