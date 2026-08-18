@@ -2768,15 +2768,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.17067231
+      value: 0.17067234
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0.000000042146848
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: 0.000000015805067
       objectReference: {fileID: 0}
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar

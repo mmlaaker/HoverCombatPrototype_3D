@@ -1404,7 +1404,20 @@ public class HoverController_Foundation : MonoBehaviour
         }
         else
         {
-            flipTimer = 0f;
+            // DECAY, not reset. The defect in the reset was that its cost did not
+            // depend on the length of the interruption: a 229ms excursion and a
+            // one-frame blip both threw away everything banked. Measured on a 25 m/s
+            // wipeout, that discarded a clock sitting at 0.98 of 1.00.
+            //
+            // What pushes the craft out of the gate is its OWN settling tumble, so the
+            // recovery was interrupting its own clock. See TuningLog.md > The downed
+            // window.
+            //
+            // At decay 1 this is symmetric: an interruption costs exactly its own
+            // duration, and a craft alternating in and out of the gate makes no net
+            // progress. It therefore cannot arm anything the reset would not have
+            // armed eventually; it only stops throwing away work already done.
+            flipTimer = Mathf.Max(0f, flipTimer - Time.fixedDeltaTime * F.flipRecoveryProgressDecay);
         }
     }
 

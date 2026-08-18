@@ -824,6 +824,12 @@ rediscovery of the thing that prompted it.
   `(liftDamping x v + gravityShare) / liftStrength` metres above ride height, so a slow fall is caught
   ~2.2m up and a fast one over 6.5m up. A tap jump spends roughly three quarters of its descent already
   cushioned. **That is the hovercraft's character rather than a defect.**
+- **The flip arming clock DECAYS, it does not reset. Do not "simplify" it back to `flipTimer = 0f`.**
+  The reset priced every interruption identically -- a one-frame blip and a 229ms excursion both threw
+  away everything banked, and what pushes the craft out of the gate is its own settling tumble, so
+  recovery was interrupting its own clock. `flipRecoveryProgressDecay` 1 is symmetric, so an
+  interruption costs exactly its own duration and this can arm nothing the reset would not have armed
+  eventually. Worth 0.78s on a 25 m/s wipeout and 2ms at rest.
 - **The downed lockout and the righting torque run on DIFFERENT gates, and conflating them is the
   standard mistake.** Control is lost on contact plus `flipRecoveryAngleThreshold` (80) with no delay
   and no speed gate; it is returned at `flipRecoveryReleaseAngle` (35), mid-swing, with the craft
@@ -909,6 +915,11 @@ Added 2026-08-17, judged the same day they were built:
 - **The speed look-ahead rate limit**, `speedLookAheadSlew` 8, which closed 0.20. Chosen to be a
   provable no-op on flooring it from rest, so that case remains the reference the number is set
   against: if the accepted case ever changes, this bound has to be re-derived rather than kept.
+- **Camera control while downed**, `downedYawSensitivity` 1.5, `downedYawRange` 90,
+  `downedYawRecenterSpeed` 1.5, `downedCameraHold` 0.2 (the last two pairs are scene overrides).
+  Owner: *"I tuned the values. it feels good."* **The sensitivity and recentre deliberately equal
+  their camera-pitch twins and run the same arithmetic** -- that is what makes the two axes feel like
+  one control, so moving one without the other is a regression in feel even if each reads fine alone.
 - **`extraFallGravity` 35**, which closed 0.21. Owner: *"I can still hit two barrel rolls so as long
   as that and the ability to do one flip persists and air time went down by a little bit, that's
   good enough for me."* **This is the only entry in this section that ships with its own test.**

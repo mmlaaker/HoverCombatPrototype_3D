@@ -235,14 +235,50 @@ the righting torque, and it additionally needs tilt >= `flipRecoveryArmAngle` (7
    directly. **Anything that hands the player something while downed must latch**, which is why
    `downedCameraHold` exists rather than the camera reading `IsDowned` straight.
 2. **The arming clock resets to zero, not partially.** It reached **0.98 of the required 1.00s** and
-   was discarded because speed ticked to 2.12 m/s; it had already lost a 0.30s attempt. The craft is
-   pushed over the threshold by its own settling tumble at 161 degrees of tilt — **the recovery
-   interrupts its own clock.** This is `TODO.md` 0.18 and it is no longer a hypothetical.
+   was discarded; it had already lost a 0.30s attempt. The craft is pushed out of the gate by its own
+   settling tumble at 161 degrees of tilt — **the recovery interrupts its own clock.** **Fixed the
+   same day, see below.** Note the excursions were 352ms and 229ms rather than single frames, which
+   this entry originally implied; the reset's defect is that it charged the same price either way.
 3. **The handback is abrupt.** Control returns mid-swing at ~33 degrees with the craft still rotating
    at 4.6 rad/s, and in the sliding case being flung at 19 m/s as the hover springs re-acquire.
 
 **The at-rest case cannot see finding 2 at all** — it never resets once. Flat ground at rest is not a
 sufficient test here, exactly as it was not for the release-angle equilibrium.
+
+---
+
+#### Closed as 0.18: the arming clock now decays instead of resetting
+
+*Shipped 2026-08-17. `flipRecoveryProgressDecay` added at 1, `flipRecoverySpeedThreshold` left at 2.*
+
+**The threshold was never the defect, which is why 0.18's framing as "an unconfirmed guess" was the
+wrong headline.** The defect was in what an excursion past it COST: `flipTimer = 0f` threw away
+everything banked, and **that cost did not scale with the interruption.** A one-frame blip and a
+229ms excursion were priced identically, at everything.
+
+**A correction to the first write-up of this, which said a single frame was throwing away the
+second.** Measuring the excursions directly rather than inferring them from the resets, the two that
+mattered were **352ms and 229ms** — genuinely long, not single frames. The mechanism is unchanged and
+so is the fix; the vivid version was simply not what the data said.
+
+Same scripted 25 m/s wipeout, before and after:
+
+| | Reset (was) | Decay 1 (shipped) |
+|---|---|---|
+| Cost of the 229ms excursion | **0.98s**, everything banked | **0.23s**, exactly its own length |
+| Righting authorizes | 3.77s | **3.03s** |
+| **Control returns** | **4.84s** | **4.06s** |
+| At rest, control returns | 1.960s | **1.962s** |
+
+**0.78s off the wipeout, and a provable no-op on the case that was already fine** — 2ms apart at
+rest, which is one physics step. That was the property worth buying: the at-rest case never resets
+once, so it had nothing to gain and everything to lose from a change here.
+
+**Decay 1 is symmetric and that is what makes it safe.** An interruption costs exactly its own
+duration, so a craft alternating in and out of the gate makes no net progress. It cannot arm anything
+the reset would not have armed eventually; it only stops discarding work already done. **Raising the
+speed threshold instead would have been a real behaviour change**, because the same number is what
+stops a craft sliding at speed from arming mid-slide.
 
 ---
 

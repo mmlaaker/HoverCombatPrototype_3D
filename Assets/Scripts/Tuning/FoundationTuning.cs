@@ -289,11 +289,28 @@ public class FoundationTuning
     [Tooltip("How still the craft has to be before righting is allowed to start. Stops recovery " +
              "firing mid-tumble.\n\n" +
              "Set it by how still a STUCK craft actually is, not by how still you imagine it is. " +
-             "The timer resets the instant this is exceeded, so a hull resting on a curved face and " +
-             "micro-rocking will keep resetting and never recover, which looks exactly like " +
-             "recovery being broken. Try 1 to 3.")]
+             "A craft settling from a flip generates speed of its own as it rocks, so setting this " +
+             "tight enough to exclude that also excludes the craft you are trying to rescue, and a " +
+             "hull micro-rocking on a curved face takes far longer to recover than it looks like it " +
+             "should. Try 1 to 3.\n\n" +
+             "Moves with: Flip Recovery Progress Decay, which decides what an excursion past this " +
+             "actually costs. Tightening this is usually a reason to lower that.")]
     [Min(0f)]
     public float flipRecoverySpeedThreshold = 2f;
+
+    [Tooltip("How fast banked recovery progress drains away while the craft is breaking one of the " +
+             "conditions above, as a multiple of real time.\n\n" +
+             "1 is symmetric: an interruption costs exactly as long as it lasted, and a craft that " +
+             "spends half its time out of the gate makes no net progress. Raise it to punish " +
+             "interruptions harder, up to a full reset in a fraction of the delay. Lower it to " +
+             "forgive them. 0 never forgives anything, which lets a craft bank the whole delay " +
+             "across arbitrarily long interruptions and can start righting something still " +
+             "bouncing along.\n\n" +
+             "Moves with: Flip Recovery Speed Threshold, which decides what counts as an " +
+             "interruption in the first place. The two together set how a settling craft is " +
+             "treated, and tightening one is usually a reason to loosen the other.")]
+    [Range(0f, 5f)]
+    public float flipRecoveryProgressDecay = 1f;
 
     // -------------------------------------------------------------------------
     // 🌎 Gravity
@@ -320,20 +337,17 @@ public class FoundationTuning
              "the rise generous, which is where tricks live, while the landing still reads as " +
              "decisive. Rise time goes up, fall time comes down, total airtime barely moves.\n\n" +
              "DO NOT REACH FOR THIS TO SHORTEN HANG TIME. It is a weak lever on airtime and a " +
-             "strong one on descent weight: 30 to 40 is 14% heavier on the way down but only ~3% " +
-             "less time in the air, because the rise runs on separate gravity and the fall " +
-             "shortens by a square root. If the complaint is 'too long in the air', this knob " +
+             "strong one on descent weight, because the rise runs on separate gravity and the fall " +
+             "shortens only by a square root. If the complaint is 'too long in the air', this knob " +
              "will disappoint you at every value.\n\n" +
-             "TWO CEILINGS, both measured rather than guessed:\n" +
-             "- 43 is where a flat-ground charge jump starts tripping Hard Landing Min Speed. A " +
-             "charge jump must never hard-land (Standing Decision), so that is a hard cap. The " +
-             "slider stops at 40 to keep a margin.\n" +
-             "- Every +5 here costs about 25ms of the window between finishing two barrel rolls " +
-             "and touching down. At the shipped 35 that window is ~0.09s.\n\n" +
-             "The catch: a jump now lands FASTER than it launched. Recheck Hard Landing Min Speed " +
-             "whenever you move this. Shipped 35 and JUDGED GOOD on the condition that two barrel " +
-             "rolls still land, so test that before accepting any new value. History in " +
-             "TuningLog.md.")]
+             "Quote the TOTAL when you reason about it, not this number: Extra Gravity Multiplier " +
+             "already supplies most of the descent and this only adds on top, so a large-looking " +
+             "change here is a small change in what the craft actually does.\n\n" +
+             "Moves with: Hard Landing Min Speed, since a jump now lands faster than it launched, " +
+             "and a flat-ground charge jump is never supposed to hard-land. Also spends the window " +
+             "between finishing two barrel rolls and touching down, which is what actually limits " +
+             "this knob long before the hard landing does. Test two rolls after any change here; " +
+             "the readouts below show both.")]
     [Range(0f, 40f)]
     public float extraFallGravity = 13f;
 
