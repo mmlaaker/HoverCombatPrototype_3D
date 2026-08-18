@@ -127,8 +127,10 @@ acceptance criteria.
 
 ### 0.12 A sliver of bumper still clips on the pitch-up
 
-**LARGELY RESOLVED 2026-08-17 by raising `minFrameMargin` to 5**, which is a scene-instance override
-on `Prototype_Scene` rather than a prefab change. The severe form is gone: what was measured at
+**LARGELY RESOLVED 2026-08-17 by raising `minFrameMargin` to 5**, which is a PREFAB-VARIANT override
+stored in `HoverCar_Prototype.prefab` (committed at `137b6c7`), not a scene override and not a change
+to the base `HoverCar_PlayerController.prefab`, which still reads 2. Checked 2026-08-17 after this
+file described it as a scene override and a scene-wide search found nothing: the live value is 5. The severe form is gone: what was measured at
 -0.0404 and -0.1090 of viewport (craft fully off screen) is now, in the owner's words, "the bumper
 just barely" for "like a fraction of a second". **Owner has accepted it as-is: "no big deal right
 now."** Left open only because it still technically violates the hard requirement.
@@ -218,13 +220,32 @@ built a session around it and rejected it: **with trick control already on one s
 the other is too much to do at once.** That is a decision from play, not a guess. Air control keeps the
 camera behaviour it has.
 
-**What remains open is only the flipped case, and the answer is not necessarily control.** Three shapes,
-and it should be a deliberate choice between them:
+**What remains open is only the flipped case. THE SHAPE IS NOW DECIDED AND HALF-BUILT.** The owner
+chose "hand the player the stick" on 2026-08-17 and it shipped the same day: Right Stick X swings the
+camera around the craft while downed, Right Stick Y keeps doing camera pitch. `downedYawSensitivity`
+1.5, `downedYawRange` 180, `downedYawRecenterSpeed` 1.5, `downedCameraHold` 0.5. See `TuningLog.md` >
+Camera control while downed for the verification, and > The downed window for the measurement that
+justified it.
 
-- **Hand the player the stick.** Cheapest, and the input really is free: Propulsion suppresses commanded
-  yaw entirely while `IsDowned`, so the right stick has nothing to do and there is no mode conflict to
-  resolve. Note this is a different situation from the rejected one, because the player is not also
-  flying a trick.
+**The window is 2 to 5 seconds, measured, which is far longer than this item had assumed.** 1.96s for
+a craft that comes to rest inverted, 4.84s for a wipeout carrying 25 m/s.
+
+**What is left:**
+
+- **Judge it in play.** Nobody has driven it. The two things to feel for are whether 1.5 is the right
+  sensitivity when the craft is the thing rotating rather than the camera, and whether 180 degrees of
+  range is useful or just disorienting.
+- **The handback, which is the real remaining design problem.** Control returns at 33 degrees of tilt
+  with the craft already moving, and in a sliding wipeout being flung at 19 m/s. The camera can be a
+  long way off-axis at exactly the moment the player needs to drive. It currently springs back at
+  `downedYawRecenterSpeed`, which is the pitch axis's answer borrowed wholesale rather than a
+  considered one. **Suspect this first if recovery feels disorienting rather than the orbit itself.**
+- **Whether a downed FRAMING is still wanted on top.** The second shape below was not rejected, just
+  not chosen first; pulling back or reframing toward where the craft needs to get to would compose
+  with the stick rather than compete with it.
+
+**The two shapes not taken**, kept because neither was rejected on merit:
+
 - **A specific framing for the downed state.** Pull back, or swing to a readable angle, or frame the
   craft against where it needs to get back to. Costs no input and cannot be fumbled.
 - **Something else entirely.** The requirement is that the window stops feeling dead, not that a
@@ -251,6 +272,30 @@ Currently 2. The tooltip says so explicitly: 0.5 was too tight for this chassis 
 
 **The failure mode is subtle:** a hull that comes to rest on a curved face and micro-rocks keeps
 resetting the arming timer and never recovers, **which looks identical to recovery being broken.**
+
+**MEASURED 2026-08-17, and it is not hypothetical — it happens on flat ground in an ordinary
+wipeout.** A scripted wipeout at 25 m/s, craft inverted, on the flat: the arming clock reached
+**0.98s of the required 1.00s and was thrown away** because speed ticked to 2.12 m/s. It had already
+lost a 0.30s attempt the same way. Total time from wipeout to regaining control was **4.84s**,
+against **1.96s** for the same craft placed inverted at rest. See `TuningLog.md` > The downed window.
+
+**The mechanism is the pair, not the threshold alone.** `flipTimer = 0f` is a TOTAL reset, so one
+frame over the threshold costs the entire second and starts again from zero. And the thing pushing
+the craft over 2 m/s is its own settling tumble at 161 degrees of tilt — **the recovery keeps
+interrupting its own clock.** Either half would be fine alone.
+
+**Two candidate fixes, and they are not equivalent:**
+
+- **Raise the threshold.** Cheapest. But it is the same number that stops a craft sliding at speed
+  from arming mid-slide, so raising it far enough to cover the settling tumble starts letting
+  recovery fire on a craft that is still genuinely moving.
+- **Make the timer decay rather than reset.** Costs one line and leaves the threshold meaning what
+  it says. A brief blip no longer erases a nearly-complete second, which is the actual complaint.
+  **This is the assistant's recommendation**, and the threshold can then stay at 2.
+
+**Do not tune this without re-running the sliding case.** The at-rest case cannot see the defect at
+all: it never resets once. Flat ground at rest is not a sufficient test here, the same way it was
+not for the release-angle equilibrium (`HoverController_Foundation.cs`, HandleRecovery).
 
 Worth settling in the same session as 0.13, since both are about the flipped state.
 

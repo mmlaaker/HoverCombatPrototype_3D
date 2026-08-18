@@ -1424,8 +1424,11 @@ public class HoverController_Foundation : MonoBehaviour
     ///   springs re-acquire and fling it clear of the ground, and without this
     ///   term the lockout released mid-flip at 137 degrees of tilt and handed
     ///   back both air control and the air jump. Authority is only revoked when
-    ///   tilt falls under flipRecoveryAngleThreshold, so this releases on being
-    ///   upright, which is the intended contract.
+    ///   tilt falls under flipRecoveryReleaseAngle (35), NOT flipRecoveryAngleThreshold
+    ///   (80), which is only what ARMS the lockout. The two are deliberately
+    ///   different and the gap is large. Measured 2026-08-17: control returns
+    ///   mid-swing at 32-35 degrees of tilt with the craft still rotating at
+    ///   4.6 rad/s, not once it has settled upright.
     ///
     /// Why contact and not IsHoverGrounded: a craft hovering a wall or a loop is
     /// tilted past the threshold but never TOUCHES it, so contact stays false and

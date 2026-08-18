@@ -440,6 +440,12 @@ public class HoverCameraController : MonoBehaviour
         // IntegrateLookAheadDistance.
         public float lookAheadDistance;
 
+        // Degrees the camera has swung around the craft while downed, ALREADY
+        // integrated and latched. Carried solved for the same reason as the two
+        // above: it has memory, and a contributor must stay pure.
+        // See IntegrateDownedYaw.
+        public float downedYaw;
+
         // Boost arrives as TWO numbers rather than as Propulsion.BoostLerp, because
         // BoostLerp only ever says "how far into boost am I right now" and two of
         // the four boost effects need memory. See IntegrateBoostEnvelope.
@@ -575,6 +581,17 @@ public class HoverCameraController : MonoBehaviour
 
     // Slew-limited forward gate, 0..1. See IntegrateForwardGate.
     private float _forwardGate;
+
+    // Downed camera orbit, degrees either side of directly behind the craft.
+    // Positive swings the camera to the craft's right. See IntegrateDownedYaw.
+    private float _downedYaw;
+
+    // Latched copy of Foundation.IsDowned. IsDowned itself chatters during a
+    // wipeout, so it is not safe to hand the stick over on. See IntegrateDownedYaw.
+    private bool  _downedLatched;
+
+    // Seconds since IsDowned last read true, for the latch above.
+    private float _downedClearTimer;
 
     // Tracks previous strafe state for transition detection
     private bool _wasStrafingLastFrame;
@@ -806,6 +823,7 @@ public class HoverCameraController : MonoBehaviour
         // was just committed.
         _currentElevation = inp.elevation;
         _shoulderOffset   = inp.shoulderOffset;
+        _downedYaw        = inp.downedYaw;
 
         CommitDrive(SolveDriveFraming(inp));
         CommitStrafe(SolveStrafeFraming(inp));
@@ -998,6 +1016,11 @@ public class HoverCameraController : MonoBehaviour
         IntegrateLookAheadDistance();
         IntegrateForwardGate();
 
+        // Outside the strafe branch for a third reason: the latch must keep
+        // counting while the crosshair is up, or raising it mid-wipeout would
+        // freeze the hold timer and leave the camera stuck on the stick.
+        IntegrateDownedYaw();
+
         // ── Solve and commit ──────────────────────────────────────────────
         FramingInputs inputs = GatherLiveInputs(strafing);
 
@@ -1037,6 +1060,7 @@ public class HoverCameraController : MonoBehaviour
             // already been advanced for this frame.
             lookAheadDistance = _lookAheadDistance,
             forwardGate       = _forwardGate,
+            downedYaw         = _downedYaw,
 
             driftLerp        = propulsion != null ? propulsion.DriftLerp        : 0f,
 
@@ -1183,6 +1207,13 @@ public class HoverCameraController : MonoBehaviour
         // and assigning outside the switch is what stops it happening again.
         inp.forwardGate = ForwardGateTarget(inp.travelSpeed);
 
+        // Settled at ZERO, and that is a known gap rather than an oversight: no
+        // preview state is downed, so none of them can show what the camera does
+        // while the player is swinging it around a flipped craft. That is exactly
+        // the class of pose `TODO.md` 0.19 exists to add. Assigned out here so a
+        // future downed state only has to override it.
+        inp.downedYaw = 0f;
+
         return inp;
     }
 
@@ -1208,6 +1239,12 @@ public class HoverCameraController : MonoBehaviour
         ContributeShoulderShift(ref s, inp);
         ContributeBoostLens(ref s, inp);
         ContributeBoostPullback(ref s, inp);
+
+        // AFTER the two boost terms and the shoulder shift, because it rotates the
+        // finished rig rather than contributing to it: everything that offsets the
+        // camera should swing around with it. Still BEFORE the guard, which has to
+        // measure the pose that actually ships.
+        ContributeDownedYawOrbit(ref s, inp);
 
         // LAST, and it has to be. It measures the finished frame, so it needs
         // the final camera position from the orbit and the final FOV from boost.
@@ -1391,6 +1428,38 @@ public class HoverCameraController : MonoBehaviour
     {
         s.followOffset.x += inp.shoulderOffset;
         s.targetOffset.z += framing.shoulderLookAheadAmount * inp.driftLerp;
+    }
+
+    /// <summary>
+    /// Swings the whole finished rig around the craft while it is downed.
+    ///
+    /// A rotation of the follow offset, not an addition to it. Everything the
+    /// other contributors put into that offset -- the pitch orbit's radius and
+    /// height, the shoulder shift, the boost pull-back -- rides around with the
+    /// camera, which is what "orbit" has to mean for the pose to stay coherent
+    /// at 90 degrees off-axis.
+    ///
+    /// Rotating about world up rather than the craft's own up is deliberate and
+    /// is the whole reason this reads at all when the craft is upside down. The
+    /// drive rig is bound LockToTargetWithWorldUp, so the offset lives in a frame
+    /// that yaws with the chassis but never pitches or rolls with it. Rotating
+    /// about Vector3.up in that frame keeps the camera level with the horizon
+    /// while it circles, so the player sees the world the right way up while
+    /// looking at an inverted wreck. Using the craft's up would roll the horizon
+    /// upside down at exactly the moment the player is trying to read it.
+    ///
+    /// The LOOK point is untouched on purpose. The craft stays centred and the
+    /// camera moves around it, which is what makes this a look-around rather
+    /// than a pan off into space. Speed look-ahead has already faded itself out
+    /// by this point (ContributeLookAhead fades on uprightness, and a downed
+    /// craft has none), so there is nothing left pushing the aim off the wreck.
+    /// </summary>
+    private void ContributeDownedYawOrbit(ref FramingSolution s, in FramingInputs inp)
+    {
+        if (Mathf.Abs(inp.downedYaw) < 0.01f)
+            return;
+
+        s.followOffset = Quaternion.AngleAxis(inp.downedYaw, Vector3.up) * s.followOffset;
     }
 
     /// <summary>
@@ -1614,6 +1683,73 @@ public class HoverCameraController : MonoBehaviour
             _currentElevation,
             neutral - framing.pitchDownRange,
             neutral + framing.pitchUpRange);
+    }
+
+    /// <summary>
+    /// Right Stick X swings the camera AROUND the craft while it is downed and
+    /// the player has nothing else to do with that thumb. Released, or once
+    /// control comes back, it springs back to directly behind.
+    ///
+    /// Deliberately the same arithmetic as IntegrateElevation: accumulate while
+    /// the stick is past the shared deadzone, Lerp home when it is not, clamp to
+    /// a range. Matching downedYawSensitivity to pitchSensitivity therefore gives
+    /// the two axes the same feel, which is the point.
+    ///
+    /// THE LATCH IS NOT OPTIONAL, and this is the part that is easy to get wrong.
+    /// IsDowned is not a clean interval: measured 2026-08-17 on a scripted 25 m/s
+    /// wipeout it dropped and re-engaged THREE TIMES inside the first 0.9 seconds,
+    /// because a bouncing craft keeps breaking ground contact and the lockout
+    /// reads contact directly. Wiring the stick to IsDowned hands the camera over
+    /// and snatches it back twice before the craft has even settled. The latch
+    /// engages instantly and releases only after downedCameraHold seconds of
+    /// continuous recovery, which costs nothing on the way in and hides the gaps.
+    ///
+    /// Only the drive rig reads the result. The strafe rig is left alone on
+    /// purpose -- its composer is the player's aim, and you cannot aim while
+    /// downed anyway.
+    /// </summary>
+    private void IntegrateDownedYaw()
+    {
+        // Advance the latch first, so the stick and the release agree this frame.
+        bool downedNow = _vehicleFoundation != null && _vehicleFoundation.IsDowned;
+
+        if (downedNow)
+        {
+            _downedLatched    = true;
+            _downedClearTimer = 0f;
+        }
+        else if (_downedLatched)
+        {
+            _downedClearTimer += Time.deltaTime;
+
+            if (_downedClearTimer >= framing.downedCameraHold)
+                _downedLatched = false;
+        }
+
+        // Disabled outright, or not downed: unwind. Unwinding rather than holding
+        // matters more here than it does for pitch, because control returns at 35
+        // degrees of tilt with the craft already moving, so the camera can be a
+        // long way off-axis at the exact moment the player needs to drive.
+        if (framing.downedYawSensitivity <= 0f || !_downedLatched)
+        {
+            _downedYaw = Mathf.Lerp(_downedYaw, 0f,
+                                    framing.downedYawRecenterSpeed * Time.deltaTime);
+            return;
+        }
+
+        float lookX = _input.TurnInput;
+
+        if (Mathf.Abs(lookX) > framing.lookDeadzone)
+        {
+            _downedYaw += lookX * framing.downedYawSensitivity * Time.deltaTime * 60f;
+        }
+        else
+        {
+            _downedYaw = Mathf.Lerp(_downedYaw, 0f,
+                                    framing.downedYawRecenterSpeed * Time.deltaTime);
+        }
+
+        _downedYaw = Mathf.Clamp(_downedYaw, -framing.downedYawRange, framing.downedYawRange);
     }
 
     /// <summary>

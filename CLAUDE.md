@@ -430,8 +430,25 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
   three-run measurement are in `TuningLog.md` > The boost jolt at a standstill.
 - **Preview and live feed the SAME solver**, through `GatherLiveInputs` and `BuildPreviewInputs`. A
   preview that recomputes the framing starts lying the first time a contributor changes.
+- **The downed camera orbit rotates about `Vector3.up`, NEVER the craft up, and this is load-bearing.**
+  The drive rig is bound `LockToTargetWithWorldUp`, so the follow offset lives in a frame that yaws
+  with the chassis but never pitches or rolls with it. Rotating about world up therefore keeps the
+  horizon level all the way around the orbit -- verified at 0.000 degrees of camera roll at 122
+  degrees off-axis with the craft at 54 degrees of tilt. Using the craft up would roll the horizon
+  upside down at exactly the moment the player is trying to read it.
+- **`IntegrateDownedYaw` latches `IsDowned`; do not "simplify" it to read the flag directly.**
+  `IsDowned` chatters -- measured dropping and re-engaging three times inside 0.9s of a 25 m/s
+  wipeout, because bounces break the ground contact the lockout reads. Without `downedCameraHold` the
+  camera is handed to the player and snatched back twice before the craft settles. `TuningLog.md` >
+  The downed window.
+- **`ContributeDownedYawOrbit` runs AFTER the boost terms and the shoulder shift, and BEFORE the
+  guard.** It rotates the finished offset rather than adding to it, so everything else that displaced
+  the camera orbits with it; and the guard still has to measure the pose that ships. It leaves
+  `targetOffset` alone on purpose, which is what makes it a look-around rather than a pan off the craft.
 - **`BuildPreviewInputs` assigns `travelSpeed = forwardSpeed`, `lookAheadDistance` and `forwardGate`
-  once after its switch, not per case**, so a state added later cannot forget any of them. A per-case assignment is how one preview state sat silently
+  once after its switch, not per case**, so a state added later cannot forget any of them. `downedYaw` is assigned there too, at zero:
+  **no preview state is downed**, which is a known gap and precisely the class of pose `TODO.md` 0.19
+  exists to add. A per-case assignment is how one preview state sat silently
   wrong for five versions. Note a preview state that omits an input a GATE reads will silently show the
   ungated case, and it looks like a correct row rather than a missing one.
 - **Every seed is live-editable and everything derived from it is recomputed per frame, not cached**,
@@ -807,6 +824,13 @@ rediscovery of the thing that prompted it.
   `(liftDamping x v + gravityShare) / liftStrength` metres above ride height, so a slow fall is caught
   ~2.2m up and a fast one over 6.5m up. A tap jump spends roughly three quarters of its descent already
   cushioned. **That is the hovercraft's character rather than a defect.**
+- **The downed lockout and the righting torque run on DIFFERENT gates, and conflating them is the
+  standard mistake.** Control is lost on contact plus `flipRecoveryAngleThreshold` (80) with no delay
+  and no speed gate; it is returned at `flipRecoveryReleaseAngle` (35), mid-swing, with the craft
+  still rotating. `flipRecoveryDelay` gates NEITHER -- it gates only the righting torque, and needs
+  `flipRecoveryArmAngle` (70) and speed under `flipRecoverySpeedThreshold` (2) held continuously.
+  Measured window from wipeout to control: **1.96s at rest, 4.84s carrying 25 m/s** (`TuningLog.md` >
+  The downed window).
 - **A flat-ground charge jump must never trigger a hard landing. A charge jump plus an air jump is
   allowed to.** Owner's rule, 2026-08-16, and it is a constraint on tuning rather than a description:
   it caps `extraFallGravity` at **43** against `hardLandingMinSpeed` 58, and the slider stops at 40 to

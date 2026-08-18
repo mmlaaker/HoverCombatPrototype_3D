@@ -208,6 +208,88 @@ adds a mechanic to solve a tuning problem the owner has not yet reported feeling
 
 ---
 
+### The downed window
+
+*Measured 2026-08-17 to size `TODO.md` 0.13 before building anything. Two scripted runs, flat ground,
+craft placed inverted with the rigidbody pose (setting `transform` alone is overwritten by physics).*
+
+**Two different gates, and conflating them is the mistake to avoid.** Control cuts out on
+`IsContactingGround && tilt >= flipRecoveryAngleThreshold` (80) — no delay, no speed gate, so you are
+downed the instant an inverted hull touches anything, even at 10 m/s. Control comes back at
+`flipRecoveryReleaseAngle` (35), **not** at 80. `flipRecoveryDelay` (1s) gates neither: it gates only
+the righting torque, and it additionally needs tilt >= `flipRecoveryArmAngle` (70) and speed <
+`flipRecoverySpeedThreshold` (2), held continuously.
+
+| | At rest, inverted | Wipeout at 25 m/s |
+|---|---|---|
+| Lockout engages | immediately | immediately, then **chatters 3x** |
+| Righting authorizes | 1.02s | 3.77s |
+| **Control returns** | **1.96s** | **4.84s** |
+| Tilt at handback | 34.8 deg | 32.6 deg |
+| Speed at handback | — | **19.0 m/s** |
+
+**Three findings, each of which changed a decision:**
+
+1. **`IsDowned` chatters.** In the 25 m/s run it dropped and re-engaged three times inside the first
+   0.9s, longest gap 0.25s, because bounces break ground contact and the lockout reads contact
+   directly. **Anything that hands the player something while downed must latch**, which is why
+   `downedCameraHold` exists rather than the camera reading `IsDowned` straight.
+2. **The arming clock resets to zero, not partially.** It reached **0.98 of the required 1.00s** and
+   was discarded because speed ticked to 2.12 m/s; it had already lost a 0.30s attempt. The craft is
+   pushed over the threshold by its own settling tumble at 161 degrees of tilt — **the recovery
+   interrupts its own clock.** This is `TODO.md` 0.18 and it is no longer a hypothetical.
+3. **The handback is abrupt.** Control returns mid-swing at ~33 degrees with the craft still rotating
+   at 4.6 rad/s, and in the sliding case being flung at 19 m/s as the hover springs re-acquire.
+
+**The at-rest case cannot see finding 2 at all** — it never resets once. Flat ground at rest is not a
+sufficient test here, exactly as it was not for the release-angle equilibrium.
+
+---
+
+### Camera control while downed
+
+*Shipped 2026-08-17 as the first half of `TODO.md` 0.13, on the owner's instruction. Not yet judged
+in play.*
+
+The measurement above is what justified building it: **2 to 5 seconds of looking at nothing**, which
+is far longer than the item had assumed. Right Stick X swings the camera around the craft while
+downed; Right Stick Y keeps doing camera pitch as normal.
+
+**The axis is free rather than shared.** Propulsion suppresses commanded yaw entirely while
+`IsDowned`, so there is no mode conflict to resolve — and this is a different situation from the
+rejected trick-camera proposal, where the objection was that trick control on one stick plus camera
+on the other is too much at once. Downed, the player is flying nothing.
+
+`downedYawSensitivity` 1.5, `downedYawRange` 180, `downedYawRecenterSpeed` 1.5, `downedCameraHold`
+0.5. The first three deliberately match the shipped pitch values (`pitchSensitivity` 1.5,
+`pitchRecenterSpeed` 1.5) and run the same arithmetic, so the two axes feel identical by
+construction rather than by tuning.
+
+Verified in play mode against the live `Camera.main` pose, not a reconstructed one:
+
+| | |
+|---|---|
+| Orbit rate at full stick | **90.0 deg/s**, against 90.0 predicted (1.5 x 60) |
+| Horizon roll across the whole orbit | **0.000 deg**, at up to 122 deg off-axis and 54 deg of craft tilt |
+| Latch behaviour | held 0.50s past `IsDowned` clearing, then released |
+| Recentre | unwound 128 deg to under 6 deg with no discontinuity |
+
+**Horizon roll being exactly zero is the load-bearing result.** The orbit rotates the follow offset
+about `Vector3.up`, and the drive rig is bound `LockToTargetWithWorldUp`, so the offset lives in a
+frame that yaws with the chassis but never pitches or rolls with it. Rotating about the CRAFT's up
+would have rolled the horizon upside down at precisely the moment the player is trying to read it.
+
+**Two things this does not do**, both deliberate. It leaves the look point alone, so the craft stays
+centred and this is a look-around rather than a pan into space. And it leaves the strafe rig alone,
+whose composer is the player's aim.
+
+**Left open:** the handback. Control returns at 33 degrees of tilt with the craft already moving, so
+the camera can be far off-axis at the moment the player needs to drive. It currently unwinds at
+`downedYawRecenterSpeed`, the same spring the pitch axis uses, which is a starting point rather than
+a considered answer.
+
+---
+
 ### The drift hop was being suppressed, not weak
 *Closed as 0.23, shipped 2026-08-17. Owner after driving it: "this already feels a good degree better."*
 

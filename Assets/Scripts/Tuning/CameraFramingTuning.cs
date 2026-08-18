@@ -77,6 +77,48 @@ public class CameraFramingTuning
     public float turnBleedSuppression = 0.8f;
 
     // -------------------------------------------------------------------------
+    // 🔄 Downed Camera Yaw
+    // -------------------------------------------------------------------------
+    [Header("🔄 Downed Camera Yaw")]
+    [Tooltip("Degrees per second the camera swings AROUND the craft at full right-stick X, while " +
+             "the craft is downed. Same shape as Pitch Sensitivity, and the same arithmetic, so " +
+             "matching the two numbers gives the two axes the same feel.\n\n" +
+             "This only exists while you are flipped and helpless. Right stick X normally steers, " +
+             "and Propulsion suppresses commanded yaw entirely while downed, so the axis is free " +
+             "rather than shared -- there is no mode conflict to resolve.\n\n" +
+             "It is a long window to be looking at nothing: measured 2026-08-17 at 1.96s for a " +
+             "craft that comes to rest inverted and 4.84s for a wipeout carrying 25 m/s.\n\n" +
+             "0 disables the whole feature and restores the fixed downed camera.")]
+    [Range(0f, 5f)]
+    public float downedYawSensitivity = 1.5f;
+
+    [Tooltip("How far either side of directly behind the craft the camera may swing, in degrees. " +
+             "180 lets you come all the way round to look back over the nose, which is the point " +
+             "of the feature: seeing where you are about to end up, not admiring the wreck.")]
+    [Range(0f, 180f)]
+    public float downedYawRange = 180f;
+
+    [Tooltip("How fast the camera swings back behind the craft once you release the stick, or " +
+             "once recovery hands control back. Match it to Pitch Recenter Speed unless you " +
+             "want the return to read differently from the pitch return.\n\n" +
+             "This one is doing more work than the pitch equivalent: control returns at 35 " +
+             "degrees of tilt with the craft already moving, so the camera can be a long way " +
+             "off-axis at the exact moment you need to drive again.")]
+    [Range(0.5f, 10f)]
+    public float downedYawRecenterSpeed = 1.5f;
+
+    [Tooltip("How long the downed camera keeps the stick AFTER the craft stops reading as downed, " +
+             "in seconds.\n\n" +
+             "Not a feel knob, a defect guard, and it is why this feature is not simply wired to " +
+             "IsDowned. Measured 2026-08-17: in a real wipeout the downed flag CHATTERS -- it " +
+             "dropped and re-engaged three times inside the first 0.9 seconds as bounces broke " +
+             "ground contact, the longest gap being 0.25s. Wired directly, camera control would " +
+             "be handed to the player and snatched back twice before the craft even settled.\n\n" +
+             "0.5 covers the measured worst gap with margin. Set it to 0 to see the chatter.")]
+    [Range(0f, 2f)]
+    public float downedCameraHold = 0.5f;
+
+    // -------------------------------------------------------------------------
     // 🖼 Framing Guard
     // -------------------------------------------------------------------------
     [Header("🖼 Framing Guard")]
