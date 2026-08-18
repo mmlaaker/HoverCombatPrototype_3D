@@ -10932,6 +10932,10 @@ MonoBehaviour:
     pitchRecenterSpeed: 1.5
     lookDeadzone: 0.05
     turnBleedSuppression: 0.8
+    downedYawSensitivity: 1.5
+    downedYawRange: 180
+    downedYawRecenterSpeed: 1.5
+    downedCameraHold: 0.5
     minFrameMargin: 2
     pitchUpDistanceGain: 2
     shoulderShiftAmount: 1.8
