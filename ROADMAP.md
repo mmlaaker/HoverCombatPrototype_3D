@@ -34,7 +34,10 @@ camera in the top tier. Every row below is a Tier 0 item.
 | | |
 |---|---|
 | **0.12** | a sliver of bumper still clips on the pitch-up. **Largely resolved** by `minFrameMargin` 5 and accepted by the owner, but **confirmed still present 2026-08-17** after four separate drive-camera changes |
-| **0.25** | the charge jump has no wind-up and the charge is invisible. **Last in tier** by owner decision; hooks already exist |
+
+**Tier 0 is down to that one row, and it is an accepted residual rather than a blocker.** Everything
+else on this milestone's list is closed. The charge squat was the last item that changed how movement
+reads, and it is built but **not yet judged in play** — that judgement is now the gate, not more work.
 
 **Closed since this list was written**, all 2026-08-17 unless noted: `0.15` (never a defect, a
 deliberate playtest scoping decision), `0.17` (boost drive mode judged good; residual became `0.20`),
@@ -45,7 +48,9 @@ was wrong**; the cause was the look-ahead, not the speed gate), `0.24` (**retire
 built**, deferred behind the thruster replacement as `2.14`), and `0.16` (**retired without being
 judged**; the scoping that hides it is intentional and confirmed, successor `2.15`), and `0.26`
 (**opened and closed the same session**: the boost camera stepped on and off whenever travel speed
-crossed zero), `0.19` (**three preview states that break the nose-follows-travel assumption**, so the class of bug that cost two playtests is now visible in the inspector), `0.13` (**the camera now hands the player the stick while downed**, judged good; the handback was closed on play evidence), `0.18` (**the speed threshold was never the defect**: the arming clock reset to zero instead of decaying, which cost 0.78s on a wipeout), and `0.21` (`extraFallGravity` 30 -> 35, **judged good in play the same day**; the
+crossed zero), `0.19` (**three preview states that break the nose-follows-travel assumption**, so the class of bug that cost two playtests is now visible in the inspector), `0.13` (**the camera now hands the player the stick while downed**, judged good; the handback was closed on play evidence), `0.18` (**the speed threshold was never the defect**: the arming clock reset to zero instead of decaying, which cost 0.78s on a wipeout), `0.25` (**the ride height is now the charge meter**; the owner ruled the squat expresses the charge
+rather than storing it, which the measurements showed was the difference between a jump that keeps
+its tuned arc and one silently 4.9% taller), and `0.21` (`extraFallGravity` 30 -> 35, **judged good in play the same day**; the
 hard-landing framing this milestone carried was the wrong headline, and the real cost is the
 barrel-roll landing margin). See `TODO.md` > Retired numbers.
 
@@ -85,7 +90,7 @@ The step is **weapon physics** and **a target worth hitting**. The AI punching b
 | **2.4**, **2.5** | hard landings have no dust, missile detonations have no explosion. This milestone's "placeholder VFX" |
 | **2.11** | boost presentation FX: vignette, speed lines, duration-based rumble. Deferred here 2026-08-14, and **confirmed as the remaining boost gap** by the owner 2026-08-16 |
 | **2.12** | drift has no VFX. Now the whole of what remains from the drift report: `0.23` closed as a suppression bug and no cue was built |
-| **2.13** | charge jump wind-up VFX, energy gathering under the craft. The movement half is `0.25` and is not blocked |
+| **2.13** | charge jump wind-up VFX, energy gathering under the craft. **The movement half shipped as `0.25`**, and hands this a hard constraint: the squat must not add impulse, so the discharge has to read as release without pushing |
 | **2.14** | thruster VFX and the boost camera fall out of step on release, measured at 2.2x. Deferred here 2026-08-17 because the thrusters it targets are placeholder; succeeds `0.24` |
 | **5.11** | whether players camp in strafe. Unanswerable until `1.3` gives combat something to pressure with |
 | **5.12** | revisit the aim framing once there is something to aim at. Succeeds `0.14`, same reasoning as `5.11` |

@@ -430,6 +430,12 @@ public class HoverController_Propulsion : MonoBehaviour
         foundation.SetAimPitch(0f, 0f);
         foundation.SetAirControl(0f, 0f, 0f);
 
+        // Same reason, and load-bearing here because the freeze returns from
+        // FixedUpdate above HandleJump: without this the squat target would be the
+        // last one written before the freeze, held for its whole duration, and
+        // waiting to pull the craft down the moment the springs come back.
+        foundation.SetJumpCharge(0f);
+
         if (meshRoot != null)
             meshRoot.localRotation = Quaternion.identity;
     }
@@ -936,7 +942,10 @@ public class HoverController_Propulsion : MonoBehaviour
     private void HandleJump(bool grounded)
     {
         if (!P.enableJump)
+        {
+            foundation.SetJumpCharge(0f);
             return;
+        }
 
         bool jumpHeld    = input.Jump;
         bool jumpPressed = jumpHeld && !jumpHeldLastFrame;
@@ -965,6 +974,7 @@ public class HoverController_Propulsion : MonoBehaviour
         {
             jumpChargeTimer   = 0f;
             jumpHeldLastFrame = jumpHeld;
+            foundation.SetJumpCharge(0f);
             return;
         }
 
@@ -999,6 +1009,23 @@ public class HoverController_Propulsion : MonoBehaviour
         }
 
         jumpHeldLastFrame = jumpHeld;
+
+        // Hand the charge to Foundation so the springs can show it. Reported ONLY for
+        // a charge that could actually fire from where the craft is standing, which is
+        // the same condition the accumulate branch above uses:
+        //
+        //   Airborne is excluded even though the timer survives going off a ledge with
+        //   the button held. There is nothing to compress against, and a squat target
+        //   set mid-air would be waiting to yank the craft down the instant it lands.
+        //
+        //   The lockout is excluded because a craft that just jumped is not charging
+        //   anything, and squatting through the landing of the jump you already made
+        //   reads as the craft failing to recover rather than as a charge building.
+        //
+        // A tap jump reports whatever fraction one tick of hold produced, which rounds
+        // to nothing: the squat is a hold made visible, and a tap has no hold to show.
+        bool charging = grounded && jumpLockoutTimer <= 0f && P.jumpMaxChargeTime > 0f;
+        foundation.SetJumpCharge(charging ? jumpChargeTimer / P.jumpMaxChargeTime : 0f);
     }
 
     /// <summary>

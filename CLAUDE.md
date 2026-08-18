@@ -177,13 +177,14 @@ Format is **Does** (current responsibility), **Public** (the surface other modul
 **Does.** Spring-damper hover lift with gravity feedforward, so the spring corrects error only instead
 of also holding the craft up. Leveling torque as the single attitude authority. Two-path recovery
 (upright-stuck unstick, and flip righting). Air control torque on behalf of Propulsion. Asymmetric
-gravity (generous on the rise, decisive on the fall). Ceiling duck. Hard-landing spring give. Hover
+gravity (generous on the rise, decisive on the fall). Ceiling duck and charge squat, min-combined into
+one ride-height target. Hard-landing spring give. Hover
 rays read the interpolated smooth surface normal, not the flat triangle normal, and are cast from
 where the sensors would be if the craft were not aiming.
 
 **Public.** `IsHoverGrounded`, `HoverSupport`, `HasAirControlClearance`, `AverageGroundNormal`,
 `IsDowned`, `SetRecoveryEnabled(bool)`, `SetAimPitch(degrees, weight)`,
-`SetAirControl(pitch, roll, weight)`, `OnHardLanding(severity 0..1)`.
+`SetAirControl(pitch, roll, weight)`, `SetJumpCharge(fraction 0..1)`, `OnHardLanding(severity 0..1)`.
 
 **Constraints.**
 
@@ -219,6 +220,15 @@ where the sensors would be if the craft were not aiming.
   leveling and drag scale by support, so the handover is a crossfade with no overlap.
 - **Drive, jump charge and drift entry deliberately keep the generous `IsHoverGrounded` signal.**
   Losing throttle on a bump crest would be worse than the bug.
+- **TWO writers lower the ride height and neither wins by running last.** The ceiling duck is
+  involuntary, the charge squat is the player holding jump; the target is seeded at `hoverHeight`,
+  each contributes, and the LOWEST commits. Both only ever lower, so the minimum is the one
+  combination that cannot violate either.
+- **The duck's result is kept separately, because the two are NOT interchangeable downstream.** The
+  air-control clearance probe reads the duck alone: it measures room ABOVE the height the craft is
+  entitled to, and **a voluntary squat lowers the craft without creating any room.** Feeding it the
+  combined value reports squat depth as free space and grants attitude authority the craft has not
+  earned.
 - **Air control needs its OWN downward probe.** The hover sensors top out at `sensorRange - hoverHeight`
   of measurable clearance while a tap jump apexes well above that, so the threshold is simply outside
   what they can see. It measures clearance BELOW rather than height gained, so a hop off a ledge arms
@@ -619,6 +629,10 @@ where ordinary jitter lives is invisible to it by construction. Run both togethe
   axis only. **Propulsion never applies pitch torque itself. One attitude authority.**
 - **Propulsion to Foundation (air control).** `SetAirControl(pitch, roll, weight)` every FixedUpdate;
   weight is air-control blend times `(1 - strafe blend)` so strafe aim wins airborne.
+- **Propulsion to Foundation (jump charge).** `SetJumpCharge(fraction)` every FixedUpdate, and `0` on
+  EMP freeze — load-bearing there, because the freeze returns from `FixedUpdate` above `HandleJump`.
+  **One number, no verbs: Propulsion cannot lower the craft, only report a fraction**, so there is no
+  path by which the jump could reach into ride height and change the launch it was tuned for.
 - **Foundation to VFX / Camera (hard landing).** `OnHardLanding(severity)` fires on the
   airborne-to-grounded edge above `hardLandingMinSpeed`.
 - **Propulsion / EMP / Weapons to the impulse router.** The bool on the jump denial separates two
@@ -786,6 +800,24 @@ rediscovery of the thing that prompted it.
 
 ### Physics and handling
 
+- **THE CHARGE SQUAT EXPRESSES THE CHARGE. IT NEVER STORES IT.** Owner's decision 2026-08-17, closing
+  the question `TODO.md` 0.25 was blocked on: the squat exists so ride height can be the charge meter,
+  and it must add nothing to the tuned jump. **The springs will violate this by themselves unless
+  stopped** — snapping the ride target back at release leaves the craft compressed under a target
+  above it, and measured, that added 1.00m to a 20.59m jump (4.9%) at the instant the impulse fires.
+  Hence the asymmetric blend: instant DOWN, because the height has to agree with the charge it
+  reports, and rate-limited UP over `chargeSquatRelease` so the craft is clear of its own springs
+  before the target catches up. **Nothing downstream of this — including the 2.13 discharge FX — may
+  add impulse on release.** The honest cost is 1.30m off the charged apex, because the craft launches
+  from the bottom of its own crouch; the inspector readouts subtract it so it cannot go stale.
+- **SUPPORT IS KEYED TO THE AUTHORED RIDE HEIGHT, NOT THE TARGETED ONE**, and this looks backwards
+  until you see the failure. `HoverSupport`'s height band used to move down with the target, so a
+  craft whose target had just dropped read as being ABOVE its band while sitting closer to the ground
+  than ever. Measured on a one-tick target step: support **exactly 0 for 0.2s**, degraded for 0.38s,
+  which makes a grounded craft behave as airborne across regen, leveling, drag, the drift hop, fall
+  gravity and air control. **The band asks whether there is ground close enough to be holding the
+  craft up, and that answer cannot get worse by moving closer to the ground.** This was a latent
+  ceiling-duck bug before the squat existed; driving into a tunnel at speed is the same step case.
 - **AIMING DOES NOT MOVE THE CRAFT.** Decided 2026-08-17 across two fixes that turned out to be the
   same principle: in strafe mode the chassis pitch exists to aim, and nothing physical may read it
   as an intent to travel. Thrust and drag remove it (Propulsion), and the hover sensors are placed

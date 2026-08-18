@@ -851,6 +851,81 @@ up" is no. Re-centring it so zero speed reads open would remove the engage cost 
 changes what boosting from a standstill into reverse looks like, and that is a design question about
 what the gate means rather than a tuning one, so it wants the owner rather than a measurement.
 
+### The charge squat
+*Shipped 2026-08-17, closing `TODO.md` 0.25. **Not yet judged in play.***
+
+The charge jump had a two-second window with a roughly doubling payoff and nothing anywhere telling
+the player where in it they were. The craft now settles lower on its springs as the charge builds, so
+ride height IS the meter, read off the craft rather than off a corner of the screen.
+
+**The design question the item was blocked on, answered by the owner:** the squat EXPRESSES the
+charge, it does not store it. *"So as not to add anything to the value charge jump is tuned to know
+and as not to add any additional springforce calculations into the equation here."*
+
+**That answer is not free, and the springs will violate it unless stopped.** Lowering the target and
+then snapping it back at release leaves the craft compressed under a target above it, and the springs
+answer with real upward force at the exact instant the jump impulse fires. Measured on a full charge:
+
+| Release | Rise from launch | Peak above resting height |
+|---|---|---|
+| squat off (control) | 20.59m | 20.59m |
+| squat on, `chargeSquatRelease` **0** | 21.59m | 20.18m |
+| squat on, `chargeSquatRelease` **0.25** | 20.70m | 19.29m |
+
+**An instant snap-back adds 1.00m to a 20.59m jump, 4.9%, from a knob nobody would think to look at.**
+Rate-limiting the recovery cuts that to 0.11m, 0.55%, which is inside the model's own error. The
+squat is asymmetric for this reason alone: it follows the charge DOWN instantly, because anything
+slower would make the height disagree with the charge it is reporting, and it comes back UP over
+`chargeSquatRelease` so the craft is metres clear of its own springs before the target catches up.
+
+**What it does cost is real and was accepted rather than hidden: 1.30m off the charged apex**, 6.3%,
+because the craft launches from the bottom of its own crouch. Airtime is untouched. The inspector's
+jump readouts now subtract the squat, so this cannot go stale the way a written figure would, and the
+trick gate moved with it — the air-control floor now costs about 28% of a charge rather than 25%,
+since a partial charge squats by the same partial amount and the two effects pull opposite ways.
+
+#### Trap 1 was real, and the tracker had it in the wrong place
+`TODO.md` predicted that lowering the ride target would drive `HoverSupport` to 0 while the craft
+descended, because the support band was keyed to the target. **On the shipped path that prediction is
+wrong**: the charge ramps over two seconds, the springs track the target within about 0.09m, and the
+old formula bottoms at **0.846** — a steady 15% support sag for the whole hold rather than a collapse.
+
+It collapses when the target STEPS instead of ramping. Measured with a full charge arriving in one
+tick, which is what landing with a charge already held does on its first grounded tick:
+
+| Time after the step | gap | target | support, old formula |
+|---|---|---|---|
+| 0.03s | 6.98 | 5.60 | **0.000** |
+| 0.18s | 6.42 | 5.60 | **0.000** |
+| 0.25s | 6.01 | 5.60 | 0.457 |
+| 0.38s | 5.56 | 5.60 | 1.000 |
+
+**Support reads exactly 0 for 0.2s and is degraded for 0.38s, while the craft is sitting on the
+ground closer to it than it has ever been.** Support gates regen, leveling, drag, the drift hop, and
+inversely fall gravity and air control, so for that window the craft behaves as though airborne.
+
+**The fix is one line and it also closes the latent ceiling-duck version of this**, which the tracker
+had flagged as evidence the trap was real: the band is now keyed to the AUTHORED hover height, not the
+targeted one. The question the band asks is "is there ground close enough under me to be holding me
+up", and the answer to that cannot get worse by moving closer to the ground. A settled duck or squat
+sits below the band and clamps to 1 exactly as before, so nothing that worked changes. Driving into a
+tunnel at speed is the same step case and was failing the same way.
+
+#### Two writers, one ride height
+The duck and the squat both want to lower it, so the target is seeded at `hoverHeight`, each proposes,
+and the lowest commits — the same seed / contribute / commit shape the camera framing uses. Both only
+ever lower, so the minimum is the one combination that cannot violate either.
+
+They are NOT interchangeable downstream, and this is the part worth not re-deriving. The air-control
+clearance probe measures room ABOVE the height the craft is entitled to, and **a voluntary squat
+lowers the craft without creating any room.** It therefore reads the duck's result alone. Feeding it
+the combined value would report the squat depth as free space and hand out attitude authority the
+craft has not earned.
+
+**Depth is a fraction of hover height rather than a distance**, so it stays proportionate when ride
+height is retuned and cannot be authored below the floor. At 0.2 and `hoverHeight` 7 the craft drops
+1.42m measured, against 1.40m predicted.
+
 ---
 
 ## Closed investigations worth not repeating

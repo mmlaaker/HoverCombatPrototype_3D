@@ -479,17 +479,29 @@ public class VehicleTuningProfileEditor : Editor
         float stackedLaunch = StackedLaunchSpeed;
 
         float tapApex     = tapLaunch * tapLaunch / (2f * rise);
-        float plainApex   = plainLaunch * plainLaunch / (2f * rise);
         float stackedApex = stackedLaunch * stackedLaunch / (2f * rise);
+
+        // Charged jumps launch from the bottom of the squat, so their peak above
+        // RESTING ride height is short by the squat depth. Airtime is untouched: the
+        // impulse is the same, and the craft simply has further to fall on the way
+        // back. Tap and stacked figures are unaffected, which is exactly why the
+        // charge multiplier below has to use the corrected number -- it compares a
+        // squatted launch against an unsquatted one.
+        float squatDrop   = ChargeSquatDrop;
+        float plainApex   = plainLaunch * plainLaunch / (2f * rise) - squatDrop;
 
         DerivedBox(
             "Tap jump",         $"{Dist(tapApex)},  {tapLaunch / rise + tapLaunch * LandingRatio / fall:F2} s airborne",
             "Max charge",       $"{Dist(plainApex)},  {plainLaunch / rise + PlainLandingSpeed / fall:F2} s airborne",
             "Stacked air jump", $"{Dist(stackedApex)},  {stackedLaunch / rise + StackedLandingSpeed / fall:F2} s airborne",
+            "Charge squat costs", squatDrop > 0f ? $"{Dist(squatDrop)} off the charged apex" : "nothing (squat off)",
             "Charge buys you",  plainApex > 0f ? $"{plainApex / Mathf.Max(0.01f, tapApex):F1}x the height of a tap" : "nothing",
             "", "An air jump ADDS to whatever rise you have left rather than replacing it, which is "
               + "why the stacked figure is not simply the two heights added together. Time it near "
               + "the top of a jump and you get most of both.\n\n"
+              + "The charged figure is measured from RESTING ride height, so the squat comes "
+              + "straight off it: the craft launches from the bottom of its own crouch. The launch "
+              + "itself is untouched, and so is airtime.\n\n"
               + "More hangtime at the same height: lower Extra Fall Gravity. More height at the "
               + "same hangtime: raise Jump Impulse Max and Extra Fall Gravity together. Make the "
               + "charge feel worth holding: widen the gap between the two impulses.\n\n"
@@ -537,18 +549,37 @@ public class VehicleTuningProfileEditor : Editor
         float minImp    = Get("propulsion.jumpImpulseMin");
         float maxImp    = Get("propulsion.jumpImpulseMax");
 
-        float tapApex = minImp * minImp / (2f * rise);
-        float maxApex = maxImp * maxImp / (2f * rise);
-        float reqImp  = Mathf.Sqrt(2f * rise * clearance);
+        // Peak a jump reaches above RESTING ride height at charge fraction f. BOTH
+        // terms move with f: the impulse ramps min to max, and the squat the craft
+        // launches out of deepens on the same fraction. They pull opposite ways, so
+        // the gate can no longer be solved by inverting the impulse alone.
+        float squatDrop = ChargeSquatDrop;
+        System.Func<float, float> peakAt = f =>
+        {
+            float imp = Mathf.Lerp(minImp, maxImp, f);
+            return imp * imp / (2f * rise) - squatDrop * f;
+        };
+
+        float tapApex = peakAt(0f);   // a tap has no hold, so no squat: unchanged
+        float maxApex = peakAt(1f);
 
         string cost;
-        if (reqImp <= minImp)
+        if (tapApex >= clearance)
             cost = "an uncharged TAP already clears it, so tricks are always armed";
-        else if (reqImp > maxImp)
+        else if (maxApex < clearance)
             cost = "NO jump can reach it: only ledges and ramps will ever arm tricks";
         else
         {
-            float frac = (reqImp - minImp) / Mathf.Max(0.01f, maxImp - minImp);
+            // Bisection, because the peak is quadratic in the charge fraction once the
+            // squat is in it. The two branches above bracket the answer, so a crossing
+            // inside [0, 1] is guaranteed to exist before this runs.
+            float lo = 0f, hi = 1f;
+            for (int i = 0; i < 40; i++)
+            {
+                float mid = (lo + hi) * 0.5f;
+                if (peakAt(mid) < clearance) lo = mid; else hi = mid;
+            }
+            float frac = hi;
             cost = $"{frac * 100f:F0}% charge   ({frac * Get("propulsion.jumpMaxChargeTime"):F2} s hold)";
         }
 
@@ -556,7 +587,9 @@ public class VehicleTuningProfileEditor : Editor
             "Room needed below", Dist(clearance),
             "Costs you",         cost,
             "Tap jump reaches",  Dist(tapApex),
-            "Full charge reaches", Dist(maxApex),
+            "Full charge reaches", squatDrop > 0f
+                ? $"{Dist(maxApex)}   (after {Dist(squatDrop)} of squat)"
+                : Dist(maxApex),
             "", "This is the price of admission for tricks, and it wants to sit BETWEEN those two "
               + "apexes. Below the tap and every hop arms attitude control, which means holding "
               + "drift through a bump reads your throttle as nose-down and plants you. Above the "
@@ -770,8 +803,10 @@ public class VehicleTuningProfileEditor : Editor
             float clearanceNeeded = Get("foundation.airControlMinClearance");
             float tapApexNow      = Get("propulsion.jumpImpulseMin") * Get("propulsion.jumpImpulseMin")
                                   / (2f * RiseGravity);
+            // Squat subtracted: the clearance probe measures room above the ride
+            // height the craft is entitled to, and a charged jump starts below it.
             float maxApexNow      = Get("propulsion.jumpImpulseMax") * Get("propulsion.jumpImpulseMax")
-                                  / (2f * RiseGravity);
+                                  / (2f * RiseGravity) - ChargeSquatDrop;
 
             if (tapApexNow >= clearanceNeeded)
                 Warn(ref any, $"An uncharged tap jump apexes at {tapApexNow:F1} m, at or above "
@@ -918,6 +953,19 @@ public class VehicleTuningProfileEditor : Editor
     private float RiseGravity   => Physics.gravity.magnitude * (1f + Get("foundation.extraGravityMultiplier"));
     private float FallGravity   => RiseGravity + Get("foundation.extraFallGravity");
     private float LandingRatio  => Mathf.Sqrt(FallGravity / Mathf.Max(0.0001f, RiseGravity));
+
+    /// <summary>
+    /// How far below resting ride height a full charge parks the craft before it
+    /// launches. Every apex reachable by a CHARGED jump is that much lower, because
+    /// the launch happens from the bottom of the squat.
+    ///
+    /// Applies to the charged jump only. A tap has no hold to squat through, and the
+    /// air jump has nothing to compress against.
+    /// </summary>
+    private float ChargeSquatDrop =>
+        GetBool("foundation.enableChargeSquat")
+            ? Get("foundation.hoverHeight") * Get("foundation.chargeSquatDepth")
+            : 0f;
 
     private float PlainLandingSpeed   => Get("propulsion.jumpImpulseMax") * LandingRatio;
     private float StackedLandingSpeed => StackedLaunchSpeed * LandingRatio;

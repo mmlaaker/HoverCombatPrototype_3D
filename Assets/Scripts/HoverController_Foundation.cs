@@ -309,7 +309,10 @@ public class HoverController_Foundation : MonoBehaviour
     private bool    recoveryEnabled = true;
     private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
     private Vector3 unstickForceDir;         // direction cached at trigger time, held for duration
-    private float   _effectiveHoverHeight;   // ride height actually targeted this tick (ceiling duck)
+    private float   _effectiveHoverHeight;   // ride height the springs target this tick (lowest of the two below)
+    private float   _rideHeightConstraint;   // ride height the CEILING allows: the involuntary half
+    private float   _jumpChargeFraction;     // written by Propulsion via SetJumpCharge each FixedUpdate
+    private float   _squatBlend;             // 0..1, follows the charge down, rate-limited on the way up
 
     /// <summary>
     /// Cached triangle and vertex-normal arrays per collision mesh, for
@@ -436,6 +439,24 @@ public class HoverController_Foundation : MonoBehaviour
     {
         aimPitchDegrees = degrees;
         aimPitchWeight  = Mathf.Clamp01(weight);
+    }
+
+    /// <summary>
+    /// Sets how far into a grounded jump charge the craft is, 0..1. Called by
+    /// Propulsion every FixedUpdate, and with 0 whenever no grounded charge is
+    /// building: airborne, locked out, downed, or simply not holding.
+    ///
+    /// Propulsion owns the charge; Foundation owns the springs. This is the whole
+    /// interface between them, and it is deliberately one number with no verbs in
+    /// it. Propulsion cannot lower the craft, only report a fraction, so there is
+    /// no path by which the jump could reach into the ride height and change the
+    /// launch it was tuned for.
+    ///
+    /// EXPRESSES THE CHARGE, NEVER STORES IT. See ComputeEffectiveHoverHeight.
+    /// </summary>
+    public void SetJumpCharge(float chargeFraction)
+    {
+        _jumpChargeFraction = Mathf.Clamp01(chargeFraction);
     }
 
     /// <summary>
@@ -739,8 +760,88 @@ public class HoverController_Foundation : MonoBehaviour
     }
 
     /// <summary>
-    /// Ride height the springs actually target this tick, reduced when something
-    /// overhead would otherwise be crushed into.
+    /// Ride height the springs actually target this tick. TWO writers want to lower
+    /// it and neither may simply win: the ceiling duck, which is involuntary, and the
+    /// charge squat, which is the player holding the jump button.
+    ///
+    /// Seed at hoverHeight, let each contributor propose a height, commit the LOWEST.
+    /// Both only ever lower, so the minimum is the one combination that cannot violate
+    /// either: a craft charging a jump inside a tunnel gets the tunnel's height if the
+    /// tunnel is tighter, and its own squat if the squat is deeper. Whoever ran last
+    /// never decides anything.
+    ///
+    /// The duck's result is kept separately in _rideHeightConstraint, because the two
+    /// answer different questions and not every consumer wants the combined figure.
+    /// The air-control clearance probe measures room ABOVE the height the craft is
+    /// entitled to, and a voluntary squat does not create room; reading the combined
+    /// value there would have reported the squat depth as free space and handed out
+    /// attitude authority the craft has not earned.
+    /// </summary>
+    private float ComputeEffectiveHoverHeight()
+    {
+        _rideHeightConstraint = ComputeCeilingDuckHeight();
+        return Mathf.Min(_rideHeightConstraint, ComputeSquatHoverHeight());
+    }
+
+    /// <summary>
+    /// Advances the squat blend. The one piece of this feature with memory, so it
+    /// runs as an integrator before anything reads it, never inside a getter.
+    ///
+    /// ASYMMETRIC ON PURPOSE, and this asymmetry is what makes the squat EXPRESS the
+    /// charge rather than STORE it.
+    ///
+    ///   Down  tracks the charge exactly. The ride height is meant to BE the charge
+    ///         meter, so anything between the fraction and the height would be a lie
+    ///         about how much jump is banked. The springs supply all the smoothing
+    ///         this needs; they cannot teleport the chassis.
+    ///
+    ///   Up    is rate-limited. Snapping the target back at release leaves the craft
+    ///         compressed against a target above it, and the springs answer that with
+    ///         real upward force at the exact instant the jump impulse fires. That is
+    ///         a launch the arc was never tuned for, arriving from a knob nobody would
+    ///         think to look at. Taking chargeSquatRelease seconds to recover means the
+    ///         craft is metres clear of its own springs before the target catches up,
+    ///         so the squat returns exactly nothing.
+    ///
+    /// The cost of that honesty is that the craft launches from wherever the squat put
+    /// it, so a charged jump peaks lower by the squat depth. That is a real change to
+    /// the arc and it is the price of the readout; it is bounded, it is visible, and
+    /// it scales with a single fraction the owner sets.
+    /// </summary>
+    private void IntegrateChargeSquat()
+    {
+        float target = F.enableChargeSquat ? _jumpChargeFraction : 0f;
+
+        if (target >= _squatBlend || F.chargeSquatRelease <= 0f)
+        {
+            _squatBlend = target;
+            return;
+        }
+
+        _squatBlend = Mathf.MoveTowards(_squatBlend, target,
+                                        Time.fixedDeltaTime / F.chargeSquatRelease);
+    }
+
+    /// <summary>
+    /// Ride height the charge squat is asking for. Depth is a FRACTION of hoverHeight
+    /// rather than a distance, so it stays proportionate when ride height is retuned
+    /// and can never be authored below the floor.
+    ///
+    /// Linear in the charge fraction, deliberately. Any easing would make the craft's
+    /// height disagree with the charge it is reporting, and the whole point is that
+    /// the two are the same number.
+    /// </summary>
+    private float ComputeSquatHoverHeight()
+    {
+        if (_squatBlend <= 0f)
+            return F.hoverHeight;
+
+        return F.hoverHeight * (1f - F.chargeSquatDepth * _squatBlend);
+    }
+
+    /// <summary>
+    /// Ride height the CEILING allows, reduced when something overhead would otherwise
+    /// be crushed into.
     ///
     /// The springs have no force ceiling, so a ceiling below ride height is a
     /// SOFT-LOCK rather than a nuisance: net upward push is 64 m/s^2 per metre of
@@ -759,7 +860,7 @@ public class HoverController_Foundation : MonoBehaviour
     /// under a sloped ceiling would drive the four points to different targets and
     /// tilt the chassis.
     /// </summary>
-    private float ComputeEffectiveHoverHeight()
+    private float ComputeCeilingDuckHeight()
     {
         if (!F.enableCeilingDuck || hoverPoints.Length == 0)
             return F.hoverHeight;
@@ -812,8 +913,10 @@ public class HoverController_Foundation : MonoBehaviour
         // out of the loop; every point feeds forward an equal share of it.
         float gravityMagnitude = Physics.gravity.magnitude * (1f + F.extraGravityMultiplier);
 
-        // Reduced when something overhead would otherwise be crushed into. Applied
-        // uniformly to all four points so a sloped ceiling cannot tilt the chassis.
+        // Reduced when something overhead would otherwise be crushed into, or when the
+        // player is holding a jump charge. Applied uniformly to all four points so
+        // neither a sloped ceiling nor the squat can tilt the chassis.
+        IntegrateChargeSquat();
         _effectiveHoverHeight = ComputeEffectiveHoverHeight();
 
         Vector3 normalSum     = Vector3.zero;
@@ -951,11 +1054,24 @@ public class HoverController_Foundation : MonoBehaviour
             AverageGroundNormal = (normalSum / groundedCount).normalized;
 
             // See the HoverSupport docstring. Height term fades across supportMargin
-            // above the ride height actually being targeted this tick; count term is
-            // the fraction of springs with ground under them.
+            // above the AUTHORED ride height; count term is the fraction of springs
+            // with ground under them.
+            //
+            // Keyed to F.hoverHeight and NOT to _effectiveHoverHeight, which is the
+            // opposite of what it looks like it should be. Lowering the target moves
+            // the band down with it, so a craft that has not sunk yet reads as being
+            // above its band and support collapses to 0 -- while it is closer to the
+            // ground than it has ever been. Support gates regen, leveling, drag, air
+            // control, fall gravity and the drift hop, so the craft would behave as
+            // though airborne while sitting on the floor, for the whole descent.
+            //
+            // The authored height is the correct reference because the band asks "is
+            // there ground close enough under me to be holding me up", and the answer
+            // to that cannot get WORSE by moving closer to the ground. A settled duck
+            // or squat is below the band and clamps to 1, exactly as before.
             float avgDistance  = distanceSum / groundedCount;
-            float heightFactor = Mathf.InverseLerp(_effectiveHoverHeight + F.supportMargin,
-                                                   _effectiveHoverHeight,
+            float heightFactor = Mathf.InverseLerp(F.hoverHeight + F.supportMargin,
+                                                   F.hoverHeight,
                                                    avgDistance);
 
             HoverSupport = heightFactor * ((float)groundedCount / hoverPoints.Length);
@@ -1007,7 +1123,10 @@ public class HoverController_Foundation : MonoBehaviour
             centroid += point.position;
         centroid /= hoverPoints.Length;
 
-        float probeRange = _effectiveHoverHeight + F.airControlMinClearance;
+        // _rideHeightConstraint, not _effectiveHoverHeight: see ComputeEffectiveHoverHeight.
+        // A voluntary squat lowers the craft but creates no room, so measuring against it
+        // would report the squat depth as clearance.
+        float probeRange = _rideHeightConstraint + F.airControlMinClearance;
 
         if (!RaycastIgnoringSelf(centroid, Vector3.down, probeRange, out RaycastHit hit))
         {
@@ -1016,7 +1135,7 @@ public class HoverController_Foundation : MonoBehaviour
             return;
         }
 
-        AirControlClearance = hit.distance - _effectiveHoverHeight;
+        AirControlClearance = hit.distance - _rideHeightConstraint;
 
         // Predictive, not present-tense, and this is the whole point of the probe.
         //
@@ -1515,20 +1634,33 @@ public class HoverController_Foundation : MonoBehaviour
             }
         }
 
-        // --- Ceiling duck (blue). Only drawn while actually ducking, so seeing it
-        //     at all means low geometry is squatting the craft. If a craft is
-        //     pinned and this is NOT showing, the duck is not engaging and the
-        //     ceiling probe is the thing to look at. ---
+        // --- Lowered ride height (blue). Only drawn while actually lowered, and it
+        //     NAMES WHICH WRITER WON, because the two look identical from outside
+        //     and have opposite fixes: a duck means low geometry, a squat means the
+        //     player is holding jump. If a craft is pinned and this is NOT showing,
+        //     the duck is not engaging and the ceiling probe is the thing to look
+        //     at. The ceiling ray is only meaningful for the duck, so it is only
+        //     drawn when the ceiling is the binding constraint. ---
         if (profile != null && _effectiveHoverHeight < F.hoverHeight - 0.01f)
         {
+            bool ducking = _rideHeightConstraint < F.hoverHeight - 0.01f;
+
             Gizmos.color = new Color(0.3f, 0.6f, 1f);
-            Gizmos.DrawRay(transform.position, transform.up * F.ceilingClearance);
-            Gizmos.DrawWireSphere(transform.position + transform.up * F.ceilingClearance, 0.2f);
+
+            if (ducking)
+            {
+                Gizmos.DrawRay(transform.position, transform.up * F.ceilingClearance);
+                Gizmos.DrawWireSphere(transform.position + transform.up * F.ceilingClearance, 0.2f);
+            }
+
+            string cause = ducking
+                ? (_squatBlend > 0.01f ? "DUCKING + SQUAT" : "DUCKING")
+                : $"SQUAT {_squatBlend * 100f:F0}%";
 
             UnityEditor.Handles.color = Gizmos.color;
             UnityEditor.Handles.Label(
                 transform.position + Vector3.up * 3.2f,
-                $"DUCKING  ride {_effectiveHoverHeight:F2} / {F.hoverHeight:F2}m"
+                $"{cause}  ride {_effectiveHoverHeight:F2} / {F.hoverHeight:F2}m"
             );
         }
 

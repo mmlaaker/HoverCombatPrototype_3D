@@ -106,6 +106,39 @@ public class FoundationTuning
              "shows where bouncing stops entirely. Retune this whenever Lift Strength moves.")]
     public float liftDamping = 2.2f;
 
+    // -------------------------------------------------------------------------
+    // 🔽 Charge Squat
+    // -------------------------------------------------------------------------
+    [Header("🔽 Charge Squat")]
+    [Tooltip("Lets the craft settle lower on its springs while a grounded jump is being charged.\n\n" +
+             "This is a readout, not a mechanic. The charge window is long and the payoff roughly " +
+             "doubles across it, and nothing else on screen says where in that window you are. Ride " +
+             "height does, and the player is already looking at the craft.\n\n" +
+             "Turn it off and the charge becomes invisible again. It never affects launch strength " +
+             "either way.")]
+    public bool enableChargeSquat = true;
+
+    [Tooltip("How far the craft sinks at a full charge, as a fraction of Hover Height.\n\n" +
+             "This is the resolution of the readout: too shallow and a half charge is " +
+             "indistinguishable from a full one, too deep and the belly starts finding bumps while " +
+             "you hold. Around a fifth is readable without spending much clearance.\n\n" +
+             "Moves with: Hover Height, since it is measured against it, and the launch arc. The " +
+             "craft leaves from wherever the squat put it, so a deeper squat starts every charged " +
+             "jump lower and takes that straight off the peak.")]
+    [Range(0f, 0.6f)]
+    public float chargeSquatDepth = 0.2f;
+
+    [Tooltip("How long the craft takes to rise back to full ride height after the charge ends.\n\n" +
+             "The squat follows the charge down instantly, so this only governs the way back up, " +
+             "and it exists to keep the squat honest: let the springs snap back and they hand the " +
+             "craft a shove the jump was never tuned for. Long enough that the craft is already " +
+             "clear of its own springs costs nothing, because the launch is what you see anyway.\n\n" +
+             "Lower it toward zero and the release starts adding height that Jump Impulse Max does " +
+             "not account for. Raise it and a charge you abandon on the ground takes visibly longer " +
+             "to stand back up.")]
+    [Range(0f, 1f)]
+    public float chargeSquatRelease = 0.25f;
+
     // Slope lift compensation used to live here. Removed: the gravity feedforward in
     // ApplyHoverForces is scaled by the ground normal, so it already supports exactly the
     // slope-adjusted share of the weight (G*cos0) and holds ride height on any incline

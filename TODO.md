@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.25 |
+| **0** | 0.12 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -95,8 +95,9 @@ tuning and features.** Struck items are done.
     assumption; the two defects that hid in that gap are now judgeable with the game stopped
 12. ~~**0.26**~~ fixed and **judged good 2026-08-17**, outcome in `TuningLog.md` > The boost gate was
     a step against reversing. The engage cost it carried was played and accepted
-13. **0.25** charge jump squat. **Placed last by the owner**: it touches only the charge jump and the
-    hooks already exist, so it is the least urgent thing here rather than the least valuable
+13. ~~**0.25**~~ shipped 2026-08-17. The ride height is now the charge meter. **The design question
+    this item carried was answered by the owner: the squat EXPRESSES the charge, it never stores
+    it.** Outcome in `TuningLog.md` > The charge squat
 
 ### Before the next playtest build
 
@@ -216,63 +217,6 @@ rather than the frame the solver intended.
 **Test discipline, and it cost three bad conclusions:** the first runs let the craft accelerate from
 wherever the previous test left it, so no two were comparable and one apparent regression was pure
 starting-state noise. **Pin position, rotation and velocity before any camera framing test.**
-
-### 0.25 The charge jump has no wind-up, and the charge itself is invisible
-
-**LAST IN THIS TIER by owner decision 2026-08-17**, on the grounds that it touches only the charge
-jump and the hooks are already in place. Not speculative and not blocked; simply the least urgent
-thing here.
-
-Owner idea, with the reference: **Jak 3's hoverboard high jump**, where holding the button crouches
-the board and plays VFX gathering energy underneath it, released on the jump. The craft would do the
-same: settle lower while charging, gather, and launch.
-
-**The strongest argument for it is not feel, it is readability.** `jumpMaxChargeTime` is 2 and the
-impulse runs `jumpImpulseMin` 20 to `jumpImpulseMax` 40 across it. That is a two-second window with a
-doubling payoff, and **nothing anywhere tells the player where they are in it** -- no HUD element, no
-vehicle state. A squat makes the ride height itself the charge meter, read off the craft rather than
-off a corner of the screen, which is better placed than a bar would be because the player is already
-looking there.
-
-**Scope, decided with the owner:** charge jumps only.
-
-- **No squat on a tap jump.** There is no hold, so any wind-up is pure added latency decorating a
-  charge that does not exist. A charge jump is already a hold, so **the charge time IS the squat time
-  and it costs no responsiveness at all.**
-- **No squat on the air jump.** Nothing to compress against.
-
-**What already exists, and this is why it is cheap.**
-
-- **`ComputeEffectiveHoverHeight()` is the mechanism, already shipped and proven.** The ceiling duck
-  uses it to lower the craft smoothly on its springs from `hoverHeight` 7 down to
-  `minDuckHoverHeight` 1.5. The squat is a second consumer of it, not new physics.
-- **The charge fraction already exists.** `jumpChargeTimer` against `jumpMaxChargeTime`, and the jump
-  code already computes the normalised value to lerp the impulse with.
-- **`SetAimPitch(degrees, weight)` is the pattern to copy** for handing intent from Propulsion to
-  Foundation without Propulsion touching the Rigidbody itself.
-
-**Three traps, and the first one will bite immediately.**
-
-1. **A SQUAT DRIVES `HoverSupport` TO ZERO WHILE IT DESCENDS.** `heightFactor` is keyed to
-   `_effectiveHoverHeight`, so dropping the target to 5 while the craft is still at 7 puts
-   `avgDistance` outside the band and support reads **0**. Support gates energy regen, leveling
-   strength, drag, air control, fall gravity and the drift hop impulse, so mid-squat the craft would
-   look exactly like it was airborne. **The ceiling duck has this same latent problem today and
-   nobody has hit it**, which is evidence the trap is real rather than theoretical. Settle this
-   before anything else.
-2. **Effective hover height gains a second writer.** Both the duck and the squat want to lower it, so
-   use the seed / contribute / commit pattern the camera framing uses rather than letting whoever
-   ran last win. Both lower, so the safe combination is the lowest of the two.
-3. **A squat spends belly clearance**, which rests at about 4.7m. On uneven ground a deep squat
-   scrapes while charging. Keep it shallow or clamp its depth against measured clearance.
-
-**The design question that blocks building it: does the squat STORE energy or only express it?**
-Lowering the springs and releasing them genuinely pushes, which would be honest and satisfying, but
-it stacks on `jumpImpulseMax` and would overshoot the arc already tuned in `TuningLog.md`. Decide
-before writing code, because it changes what gets written.
-
-**The VFX half is Tier 2** with the rest of the blocked FX work, same split used for the drift cue.
-The squat is Tier 0 because the movement half is not blocked on anything.
 
 ---
 
@@ -537,12 +481,18 @@ The visual half of 0.25. Owner's reference is **Jak 3's hoverboard high jump**, 
 button gathers visible energy under the board and releases it on the launch. Here it would build
 under the craft while the charge squat settles it lower, and discharge on the jump.
 
-**The movement half is NOT blocked and lives in 0.25**, which is where the mechanism, the traps and
-the open design question are recorded. Same split as 0.23 and 2.12.
+**The movement half SHIPPED as 0.25 on 2026-08-17** and is no longer a dependency. The squat exists,
+the ride height reads the charge, and the mechanism is recorded in `TuningLog.md` > The charge squat.
+Same split as 0.23 and 2.12.
 
-**Sequencing note that matters here:** the squat makes the charge readable through ride height
-alone, so 0.25 is worth judging on its own before this lands. If the squat already communicates the
-charge, this becomes polish. If it does not, this is the thing that was actually missing.
+**The constraint 0.25 hands this item, and it is a hard one:** the squat deliberately does NOT store
+energy. Releasing the springs would stack on `jumpImpulseMax`, and it was measured doing exactly
+that -- an instant snap-back added 1.0m to a 20.6m jump. So a discharge effect here must read as
+release without any actual push, and nothing in the FX may be wired to add impulse.
+
+**Sequencing note that matters here:** the squat now makes the charge readable through ride height
+alone, so judge it in play before authoring this. If the squat already communicates the charge, this
+is polish. If it does not, this is the thing that was actually missing.
 
 ### 2.14 Thruster VFX and the boost camera fall out of step on release
 
@@ -1185,6 +1135,7 @@ reused.
 | **0.19** | `CLAUDE.md` > `HoverCameraController.cs`. Shipped 2026-08-17. Added `ReverseBoost`, `NoseAcrossTravel` and `Downed`, and replaced the hard-pinned `travelSpeed = forwardSpeed` with a null-defaulted override so disagreement must be stated rather than being impossible. **The gap was never that a state was missing, it was that the data model could not express one:** every field existed, but the preview pinned the two speeds equal, so `0.20` and `0.26` were both invisible in the inspector and each cost a driven playtest |
 | **0.18** | `TuningLog.md` > The downed window > Closed as 0.18. Shipped 2026-08-17. **The title of this item was the wrong diagnosis:** `flipRecoverySpeedThreshold` was never the defect and stayed at 2. The arming clock was RESETTING to zero on any excursion past it, pricing a one-frame blip and a 229ms one identically, and the craft is pushed out of the gate by its own settling tumble -- so recovery interrupted its own clock. `flipRecoveryProgressDecay` 1 makes the cost symmetric. Worth 0.78s on a 25 m/s wipeout and 2ms at rest |
 | **0.21** | `TuningLog.md` > Fall gravity and airtime, in the 2026-08-17 continuation rather than a new entry. Shipped `extraFallGravity` 30 -> 35. **Closed without a sweep**, because the closed-form model reproduced the 2026-08-14 table to within measurement slop on three independent quantities, so a sweep would have re-measured arithmetic. **The hard-landing framing this file carried was the wrong headline:** both of the owner's rules survive the whole usable range and the real cost is the barrel-roll landing margin, which has no ceiling to trip — it degrades continuously, ~25ms per 5 units. **Judged good in play the same day**, against a test the owner supplied: two barrel rolls still land |
+| **0.25** | `TuningLog.md` > The charge squat. Shipped 2026-08-17. Ride height is now the charge meter, `chargeSquatDepth` 0.2 of hover height. **The owner answered this item's blocking design question: the squat EXPRESSES the charge and never stores it**, so nothing here stacks on `jumpImpulseMax` and the tuned arc keeps its meaning. Two of the three traps this file recorded were real and one was overstated. **Trap 1 was real and this file understated WHERE it bites:** support does not collapse on the slow charge ramp (worst 0.85, a steady 15% sag), it collapses to exactly 0 for 0.2s when the target STEPS -- landing with a charge already held, or ducking into a tunnel at speed. **The latent ceiling-duck bug this file predicted was therefore confirmed and is fixed as part of this**, by keying support to the authored ride height instead of the targeted one. Trap 2 handled by min-combining two ride-height writers; trap 3 is why depth is a fraction rather than a distance |
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |
 
 **The old Tier 4 was a deletion list and is fully executed**, which is why the number was free to reuse for
