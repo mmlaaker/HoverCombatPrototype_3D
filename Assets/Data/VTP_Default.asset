@@ -82,7 +82,7 @@ MonoBehaviour:
     airJumpFallCancel: 0.6
     lateralDamp: 1
     forwardDamp: 1
-    driftLateralDamp: 45.9
+    driftLateralDamp: 0.3
     driftForwardDamp: 0.3
     driftYawMultiplier: 2.5
     driftSustainSeconds: 1.5
