@@ -39981,6 +39981,10 @@ PrefabInstance:
       propertyPath: meshRoot
       value: 
       objectReference: {fileID: 6623305761902114149}
+    - target: {fileID: 4978544463994653959, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: far clip plane
+      value: 5000
+      objectReference: {fileID: 0}
     - target: {fileID: 5148731502581588017, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: profile
       value: 
@@ -40054,8 +40058,16 @@ PrefabInstance:
       value: -8
       objectReference: {fileID: 0}
     - target: {fileID: 8117794995601602338, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: framing.downedYawRange
+      value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 8117794995601602338, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: framing.minFrameMargin
       value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 8117794995601602338, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
+      propertyPath: framing.downedCameraHold
+      value: 0.25
       objectReference: {fileID: 0}
     - target: {fileID: 8655408817913202911, guid: 8c7ab8be5487725459c34d0a48be449f, type: 3}
       propertyPath: ShapeModule.angle

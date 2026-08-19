@@ -100,23 +100,30 @@ Human-origin vehicles tend toward physical weapons: bullets, explosions, kinetic
 ---
 
 ## 6. Control Scheme (Prototype)
-| Action | Key / Binding | Notes |
+**`Assets/Scripts/HoverControls.inputactions` is the source of truth for this table, exactly as
+`Assets/Data/*.asset` is for tuning values.** Corrected against it 2026-08-18, when the two had
+drifted: the table had claimed yaw was on the left stick. **The prototype is gamepad-only. The asset
+binds no keyboard controls at all**, and the keyboard column this table used to carry described
+bindings that do not exist.
+
+| Action | Binding | Notes |
 |--------|----------------|-------|
-| Thrust Forward | `W` / Left Stick Up | Standard acceleration |
-| Reverse / Brake | `S` / Left Stick Down | Reduces forward momentum |
-| Turn Left / Right | `A` / `D` / Left Stick X | Yaw rotation |
-| Strafe Left / Right | Left Stick X, while Strafe Mode is held | Lateral movement. Same stick as throttle: the `Hover/Throttle` action is read as a full Vector2 (Y = throttle, X = strafe) |
-| Strafe / Aim Mode | `Hover/Strafe` — L2 / Left Trigger | Held, not toggled. Blends in lateral authority and free-aim pitch |
-| Jump | `Hover/Jump` — Spacebar / Cross | Hold to charge, fires on release. One air jump per landing. Consumes energy |
-| Boost | `Hover/Boost` — Left Shift / L3 | Continuous drain while held. In Strafe Mode without forward throttle it fires a dodge burst instead |
-| Drift / Air Control | `Hover/Drift` — L1 | Grounded: drift. Airborne: 3-axis air control (left stick = pitch/roll) |
-| Fire | `Hover/Fire` — Left Mouse / R2 | One fire action for all weapons. Weapon behaviour is per-slot, not per-button |
-| Cycle Weapon | `Hover/CycleWeaponNext` / `Prev` — E / Q, D-Pad Right / Left | There is no separate primary/secondary fire; the roster is a cycled slot list |
-| Activate Shield | `Hover/Shield` — F / Face Button | Energy cost, brief invulnerability |
-| Fire EMP | `Hover/EMP` | Tap; ~70% energy cost. The action is required — `PlayerHoverInput` disables itself if it is missing from the asset |
+| Thrust / Reverse | Left Stick Y | `Hover/Throttle` is read as a full Vector2 (Y = throttle, X = strafe). Reverse doubles as the brake |
+| Strafe Left / Right | Left Stick X, while Strafe Mode is held | Lateral movement, on the same stick as throttle |
+| **Turn Left / Right** | **Right Stick X** | Yaw rotation. **Deliberately not the left stick**, whose X axis is already strafe |
 | Camera Pitch | Right Stick Y | Drive Mode: camera pitch. Strafe Mode: vehicle nose pitch |
+| Strafe / Aim Mode | `Hover/Strafe` — L2 / Left Trigger | Held, not toggled. Blends in lateral authority and free-aim pitch |
+| Jump | `Hover/Jump` — Cross | Hold to charge, fires on release. One air jump per landing. Consumes energy |
+| Boost | `Hover/Boost` — L3 | Continuous drain while held. In Strafe Mode without forward throttle it fires a dodge burst instead |
+| Drift / Air Control | `Hover/Drift` — **L1 or R1** | Either bumper. Grounded: drift. Airborne: 3-axis air control (left stick = pitch/roll) |
+| Fire | `Hover/Fire` — R2 | One fire action for all weapons. Weapon behaviour is per-slot, not per-button |
+| Cycle Weapon | `Hover/CycleWeaponNext` / `Prev` — D-Pad Right / Left | There is no separate primary/secondary fire; the roster is a cycled slot list |
+| Activate Shield | `Hover/Shield` — D-Pad Down | Energy cost, brief invulnerability |
+| Fire EMP | `Hover/EMP` — D-Pad Up | Tap; ~70% energy cost. The action is required — `PlayerHoverInput` disables itself if it is missing from the asset |
 
 There is no reset-orientation input. Righting a flipped craft is automatic and deliberately not player-cancellable — see Flip Recovery.
+
+Two debug controls exist outside the asset, read straight off the device so they never require editing it: **hold Share** for the playtest reset, and **Options** for the session splash and controls overlay. See `CLAUDE.md` > Instrumentation.
 
 ---
 

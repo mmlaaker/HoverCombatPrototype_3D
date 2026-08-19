@@ -105,6 +105,12 @@ Cheap things that make a long session worth more, or that stop it producing an u
 
 - **4.4** press `M` once in the first thirty seconds and confirm the marker landed in `Player.log`
   before continuing. Eight sessions have already been lost to a marker key that silently never arrived.
+- **`PlaytestSession` has never been driven by a physical button.** Every behaviour was verified
+  through reflection in the editor, which proves the state machine and proves nothing about the
+  input read. **Press Options on the pad, in a build, before anyone arrives.** If it does not
+  register the tester sits on the splash screen and the session is over before it starts. Same
+  failure shape as 4.4 and trap 30: the logic is fine and the instrument never fires. While there,
+  hold `P` (session restart) and hold Share (un-stick, and confirm energy refills).
 - **Watch:** the speed look-ahead is now rate-limited to 8 m/s of look-point travel (`TuningLog.md` >
   The boost jolt at a standstill). If the framing feels like it lags behind hard acceleration, that
   is the first number to suspect. It also changes how the aim point retracts after a collision at
@@ -249,7 +255,10 @@ manager, round system or spawn controller.
 selection, and a `Respawn` that resets the full vehicle state including AI FSM state and HUD.
 
 **`PlaytestReset` does NOT advance this despite looking adjacent.** It is a held-button escape hatch that
-restores pose and velocity and nothing else, on purpose, so runs after one stay readable. It does settle
+restores pose, velocity and energy, and deliberately nothing else: health, shield, ammo and weapon slot
+are all left alone, which is exactly what keeps it short of being a respawn. (Energy joined the list
+2026-08-18 as an owner call for the playtest, behind a `restoreEnergy` tickbox; the reasoning is in
+`CLAUDE.md` > Instrumentation.) It does settle
 one design question by demonstration: **the position-and-velocity half of a real respawn needs
 `HoverCameraController.NotifyVehicleWarped` or the camera flies across the level**, and the same is true
 for every future spawn point, checkpoint or teleport.
@@ -774,6 +783,12 @@ disabling the preview**, which is the feature that makes the framing judgeable w
 Same family as 3.16 (scene overrides shadowing a prefab) but a different cause: 3.16 is authored work
 that never got applied, this is machine-written output that should never have been saved.
 
+The vcam's `m_LocalPosition` moves around in scene diffs for the same reason, that one being
+Cinemachine writing the transform rather than the framing solver. **Owner 2026-08-18: not
+noteworthy.** It is inert (overwritten on the first frame, and `FollowOffset` is the real authored
+input) and it is covered by a **bake-down pass over prefab and scene state scheduled for the
+pre-alpha 1 approval**, which is where this whole item gets settled.
+
 ---
 
 ## Tier 4 — Verification debt and instrumentation
@@ -1121,6 +1136,7 @@ reused.
 | M.1, M.2, M.4, M.14, 2.3, 2.8, 5.9, and all of the old Tier 4 | `CLAUDE.md` (standing decisions, module constraints) |
 | M.5, M.6, M.7, M.8, M.9, M.10, 0.8, 0.10, 2.10 | `TuningLog.md` (measured tables and rejected attempts) |
 | 0.1, 0.2, 3.4 | Done, nothing worth keeping |
+| **3.18** | `GameDesignDocument.md` section 6. **Opened and closed the same day, 2026-08-18.** The GDD's control table and `HoverControls.inputactions` disagreed about steering, the table claiming yaw sat on the left stick. Raised as an owner question because the two readings pointed opposite ways: a rotted doc, or a real control-scheme regression that fifteen judged-good movement behaviours had been judged against. **Owner: the doc is wrong and the in-engine scheme is right, simple as that.** The table was corrected against the asset, which also fixed drift (L1 *or* R1), shield and EMP (both d-pad), and removed a keyboard column describing bindings that do not exist. The table now names the asset as its source of truth, the way tuning values already name `Assets/Data` |
 | 0.9 | Merged into 0.17, which owned the whole boost judgement until it closed |
 | **0.15** | `CLAUDE.md` > `HoverCameraImpulseRouter`. **Never a defect:** the three nulled channels are a deliberate playtest scoping decision, corrected by the owner 2026-08-16 |
 | **0.17** | `CLAUDE.md` > Judged good in the 2026-08-16 playtest. Boost drive mode judged good; its one residual became **0.20** |

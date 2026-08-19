@@ -40,6 +40,12 @@ pre-existing and benign (two assigned-but-unused fields, one obsolete `FindObjec
   `%USERPROFILE%\AppData\LocalLow\Meade Laaker\Hover Combat Prototype\Player.log` and receives every
   `Debug.Log`, including `[MotionTrace] MARKER n`, `[PlaytestReset] RESET n`, all the SESSION
   summaries, and a `BUFFER FILLED` warning if one happens.
+- **`[PlaytestSession]` lines delimit one tester from the next in that same file.** `SESSION n START`,
+  `CONTROLS UNLOCKED`, `OVERLAY ON/OFF`, `CONTROLS REQUESTED BEFORE UNLOCK` and `SESSION n END` are all
+  stamped with `Time.unscaledTime`, the same clock `MotionTrace` writes into its `t` column, so a
+  multi-tester log can be cut back into per-tester spans and lined up against the motion rows.
+  **This is why the facilitator restart is a hotkey rather than relaunching the player:** Unity keeps
+  only `Player.log` and `Player-prev.log`, so four relaunches would destroy the first two testers.
 - **Quit with Alt+F4 or by closing the window. Killing the process discards the entire session.**
   `MotionTrace` and `FrameSpikeWatch` both write their CSV from `OnDisable`, which only runs on a
   clean shutdown. Nothing partial is on disk before then: the rows live in memory by design, because

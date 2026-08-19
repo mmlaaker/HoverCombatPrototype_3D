@@ -17,10 +17,23 @@ using GamepadButton = UnityEngine.InputSystem.LowLevel.GamepadButton;
 ///   This is NOT the respawn system, and finishing it does not advance TODO 1.1.
 ///   That item covers spawn point selection, post-respawn invulnerability, AI
 ///   state reset and the ownership question. This is a playtest escape hatch for
-///   a soft-lock or a fall outside the test environment, and it deliberately
-///   does not touch health, energy, shield, ammo or weapon slot: a reset that
-///   silently topped those up would make every run after it unreadable, and
-///   would quietly become a half-built respawn that nobody trusts.
+///   a soft-lock or a fall outside the test environment, and it still does not
+///   touch health, shield, ammo or weapon slot: a reset that silently topped
+///   those up would quietly become a half-built respawn that nobody trusts.
+///
+/// ENERGY IS THE ONE EXCEPTION, AND IT IS OPT-OUT
+///
+///   Originally this restored nothing, on the reasoning that topping a resource
+///   up makes every run after a reset unreadable. That reasoning holds for a
+///   MEASUREMENT session and was the right default while this file only ever
+///   served one. It is the wrong default for a playtest: the player reaching
+///   for the escape hatch has usually just fallen off the map, and handing them
+///   the craft back with a drained meter means the next thirty seconds have no
+///   boost and no jump, which is the whole of what they are there to try.
+///
+///   Owner's call, and `restoreEnergy` exists so the original behaviour is one
+///   tickbox away. UNTICK IT BEFORE ANY RUN WHOSE ENERGY TRACE MATTERS, because
+///   a reset then shows up as a step change in the pool that no spend explains.
 ///
 ///   It also cannot reuse VehicleHealth.Respawn(). Per TODO 1.1 that stub does
 ///   not reset position or velocity, which is the entire job here.
@@ -85,10 +98,19 @@ public class PlaytestReset : MonoBehaviour
              "moment the button is released.")]
     [SerializeField, Range(0.1f, 3f)] private float holdSeconds = 0.6f;
 
+    [Header("Restore")]
+    [Tooltip("Refill the energy pool as part of the reset. ON for playtests: a player who just " +
+             "fell off the map gets the craft back with boost and jump available, instead of " +
+             "spending their next thirty seconds waiting on grounded regen. OFF for measurement, " +
+             "where it puts a step change in the energy trace that no spend accounts for. " +
+             "Health, shield, ammo and weapon slot are still deliberately untouched.")]
+    [SerializeField] private bool restoreEnergy = true;
+
     // ── Private ──────────────────────────────────────────────────────────
 
-    private Rigidbody             _rb;
-    private HoverCameraController _camera;
+    private Rigidbody              _rb;
+    private HoverCameraController  _camera;
+    private HoverController_Energy _energy;
 
     private Vector3    _spawnPosition;
     private Quaternion _spawnRotation;
@@ -131,6 +153,16 @@ public class PlaytestReset : MonoBehaviour
                              "work, but the camera will visibly fly to catch up.", this);
         }
 
+        // Taken off the vehicle rather than found by type, so a scene with an AI
+        // craft in it can never refill the wrong pool.
+        _energy = vehicle.GetComponent<HoverController_Energy>();
+        if (_energy == null && restoreEnergy)
+        {
+            Debug.LogWarning($"[PlaytestReset] restoreEnergy is on but '{vehicle.name}' has no " +
+                             "HoverController_Energy. The pose reset still works; the meter will " +
+                             "be left wherever it was.", this);
+        }
+
         _spawnPosition = vehicle.position;
         _spawnRotation = vehicle.rotation;
         _armed         = true;
@@ -154,6 +186,28 @@ public class PlaytestReset : MonoBehaviour
 
         _held = 0f;
         DoReset();
+    }
+
+    // ── Public ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Performs the same reset the held hotkey performs. Exists so
+    /// PlaytestSession can return the craft home between testers without a
+    /// second copy of the warp: the interpolation toggle and the
+    /// NotifyVehicleWarped call below are both load bearing, and a duplicate
+    /// would be a second place for either to be forgotten.
+    ///
+    /// Deliberately ignores <c>enableHotkeys</c>, which governs whether a
+    /// PLAYER can trigger a reset, not whether the capability exists. It does
+    /// honour <c>_armed</c>, since with no vehicle or no Rigidbody there is
+    /// nothing to move.
+    /// </summary>
+    /// <returns>True if the craft was moved.</returns>
+    public bool ResetNow()
+    {
+        if (!_armed) return false;
+        DoReset();
+        return true;
     }
 
     // ── Internals ────────────────────────────────────────────────────────
@@ -195,12 +249,23 @@ public class PlaytestReset : MonoBehaviour
 
         if (_camera != null) _camera.NotifyVehicleWarped(delta);
 
+        // Grant rather than a direct write, so the pool's own clamp and events
+        // stay the only things that decide what "full" means. It refuses while
+        // EMP-frozen, which is correct: a freeze is meant to be waited out, and
+        // the escape hatch is not a way around one.
+        bool energyRestored = false;
+        if (restoreEnergy && _energy != null)
+        {
+            _energy.Grant(999999f);
+            energyRestored = true;
+        }
+
         _resetCount++;
 
         // t is Time.unscaledTime deliberately: it is MotionTrace's clock, so
         // this line locates the corrupted rows in the CSV. See the class notes.
         Debug.Log($"[PlaytestReset] RESET {_resetCount} at t={Time.unscaledTime:F2}s, " +
-                  $"moved {delta.magnitude:F1}m. Motion rows near this time are teleport " +
-                  "artefacts, not physics.", this);
+                  $"moved {delta.magnitude:F1}m{(energyRestored ? ", energy refilled" : "")}. " +
+                  "Motion rows near this time are teleport artefacts, not physics.", this);
     }
 }
