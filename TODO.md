@@ -136,6 +136,55 @@ turning, drift, and the strafe/drive speed ratio. **Read those before changing a
 items below are bounded by something already confirmed to feel right, and those confirmations are the
 acceptance criteria.
 
+### 0.27 SOFT LOCK: the craft parks nose-up against a wall and righting never finishes
+
+**Observed in a build 2026-08-18, the first soft lock in months.** The owner was stuck for **70
+seconds** and quit rather than escaping. This is the only item in this tier that can end a playtest
+session, and there are four strangers on the pad tomorrow.
+
+**What the instruments recorded.** Stuck window t=1135.96 to t=1206.5 (quit), throughout which:
+`tilt 91-92 deg`, `speed 0.0`, `support 1.00`, `downed True`, every input zero. Immediately before,
+at t=1117.94, **speed 231.9 m/s** against a `topSpeed` of 80, and `MotionTrace` logged the session's
+hardest collision at **131,477 Ns against `mountainroad`**. So an enormous impact, a launch, and the
+craft comes to rest vertical.
+
+**It partially righted and then stalled: 107 -> 94 -> 91 degrees, then nothing for 70 seconds.**
+That is the tell. Righting was making progress and stopped.
+
+**Owner's description, which matches the numbers exactly:** on the ground, *"a hover distance away
+from the wall"*, nose straight up. `support 1.00` means all four springs were at full authority, and
+with the craft vertical the sensors point horizontally, so they were loaded against the WALL.
+
+**The mechanism, narrowed but NOT proven.** This looks like the equilibrium `CLAUDE.md` already
+documents under Foundation ("releasing at the arm angle parks the craft in a hover-supported
+equilibrium at ~78 degrees"), except against a wall and at 91 degrees. The hover springs pushing off
+the wall balance the righting torque and the craft sits there.
+
+**Why the player could not self-rescue, and this part IS certain:** unstick arms only against
+surfaces within `unstickMaxSurfaceAngle` of horizontal, so a vertical wall is excluded **by design**
+(the exclusion exists so walls and other vehicles are never pushed off). The one recovery path that
+could have applied is switched off in exactly this geometry.
+
+**The open question, and what would answer it.** Was righting authorized and simply out-torqued, or
+did it never arm? The gate is `IsContactingGround && isFlipped && isSlow`; tilt and speed both
+clearly passed, and `IsContactingGround` counts walls, so contact probably passed too, which points
+at out-torqued. **Not settled, because gizmos were off.** The Foundation overlay already prints the
+discriminator (`authorized`, and `flipTimer` against `flipRecoveryDelay`) so **one repro with the
+Recovery category on decides it.** Do not guess it from this entry.
+
+**Repro recipe:** hit `mountainroad` hard enough to be launched, or place the craft vertical with a
+wall roughly one hover height off the belly, and let it settle.
+
+**Done looks like:** a craft cannot remain downed indefinitely. Options, and they are not exclusive:
+a dead-man timer that force-rights after N seconds downed with no tilt progress; letting unstick fire
+against steep surfaces when the craft is downed AND stationary (narrower than lifting the horizontal
+restriction generally); or having righting torque scale up while tilt refuses to change.
+
+**Mitigation for the pre-alpha 1 playtest, already in place:** `PlaytestReset` (hold Share) is an
+unconditional teleport and escapes this instantly. **It was never fired during the 70 seconds** (no
+`RESET 2` in `Player.log`), so the escape hatch worked and was not reached for. The splash screen now
+names it, which is the cheapest fix available before tomorrow.
+
 ### 0.12 A sliver of bumper still clips on the pitch-up
 
 **CONFIRMED STILL PRESENT 2026-08-17.** Owner, asked to glance at it after four separate changes to
@@ -844,6 +893,23 @@ already lost eight sessions to a marker key that silently never arrived. **Press
 thirty seconds of the next long run and confirm `[MotionTrace] MARKER 1` in `Player.log` before
 continuing.** If it is missing, stop and fix it rather than spending the rest of the session producing an
 unfalsifiable trace. Gamepad input is already proven in a build.
+
+**Still unanswered after the 2026-08-18 build run, and the reason is worth recording.** That session
+reported `0 markers` despite the owner spamming `M` for about a minute during a soft lock, which reads
+exactly like the failure this item is about. **It was not.** The `MotionTrace` buffer had filled at
+t=666.9s and the presses came around t=1200s, nine minutes after the instrument stopped accepting rows.
+So the key remains untested rather than disproved. **Do not close this item on that session, and do not
+open a new one for a broken marker key.**
+
+**The real finding from that run is the buffer, and it changed a shipped value.** `captureSeconds` was
+600 against sessions running 20 minutes, so capture ended at 11.1 minutes and the entire soft lock,
+which is the whole reason anyone wanted the trace, fell outside it. Worse, a chunk of the buffer was
+spent recording a parked craft while the game idled on the `PlaytestSession` splash between testers:
+the instrument does not know the session is not running and bills idle time at the full frame rate.
+**Raised to 3000 on 2026-08-18** (870,000 rows, 144 bytes each, measured 119.5 MB preallocated, about
+55 minutes at the observed 265 rows/sec), which covers a four-tester block in one launch. **The
+general trap: a bounded capture sized against an intended session length silently truncates the
+moment the session runs long, and it fails in the direction that loses the interesting end.**
 
 ### 4.5 `FrameSpikeWatch`'s throttling verdict compares two samples of a noisy signal
 

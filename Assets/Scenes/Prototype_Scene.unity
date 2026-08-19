@@ -1097,43 +1097,43 @@ MonoBehaviour:
   overlayKey: 3
   restartKey: 30
   restartHoldSeconds: 1
-  splashText: "HOVER COMBAT PROTOTYPE\n\nPRE-ALPHA 1: MOVEMENT PLAYTEST\n\nOne craft.
-    One gun. \nNo enemies. No score.\nArt and environment are placeholder.\n\nVoice
+  splashText: "HOVER COMBAT PROTOTYPE\n\nPRE-ALPHA 1: MOVEMENT PLAYTEST\n\nVoice
     your thoughts out loud as they come to you, \nincluding the boring, annoying
     or confusing parts.\n\nHold SHARE to reset your hover craft.\n\nPress OPTIONS
     to begin."
   controlsText: 'CONTROLS
 
 
-    Left stick Y      Throttle and reverse (reverse is
-    also the brake)
+    Left Stick (Y)       Throttle and reverse
 
-    Right stick X     Steer
+    Right
+    Stick (X)     Steer
 
-    Right stick Y     Camera. In
-    aim mode, the nose
-
-
-    L2 (hold)         Aim mode. Adds strafe on left stick
-    X, and free aim
-
-    L1 or R1          On the ground: drift. In the air: pitch
-    and roll
+    Right Stick (Y)     Camera Pitch (Drive) -- Aim (Strafe)
 
 
-    Cross             Jump. Hold to charge. One extra jump in the
-    air
-
-    L3                Boost. In aim mode with no throttle, a dodge
-
-    R2               
-    Fire
+    X                         
+    Jump (Grounded, Tap or Hold to Charge) -- Double Jump (Airborne)
 
 
-    Select (hold)     Reset.
+    L1/R1
+    (Hold)        Drift (Grounded) -- Pitch/Roll (Airborne)
+
+    L2 (Hold)            
+    Aim/Strafe Mode
+
+    R2                        Fire Machine Guns
 
 
-    Press OPTIONS to close.'
+    L3                       
+    Boost -- Side Dodge (Strafing)
+
+
+    SHARE (hold)      Reset
+
+
+    OPTIONS            
+    CLOSE MENU'
   font: {fileID: 0}
 --- !u!1 &675101304
 GameObject:
@@ -1337,7 +1337,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MotionTrace
   vehicle: {fileID: 1910851184}
   view: {fileID: 1285873590}
-  captureSeconds: 600
+  captureSeconds: 3000
   assumedMaxFps: 180
   warmupFrames: 120
   traceFixedSteps: 1

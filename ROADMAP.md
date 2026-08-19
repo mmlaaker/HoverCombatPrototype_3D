@@ -33,11 +33,16 @@ camera in the top tier. Every row below is a Tier 0 item.
 
 | | |
 |---|---|
+| **0.27** | **SOFT LOCK, opened 2026-08-18 and this milestone's only blocker.** The craft parks nose-up against a wall at ~91 degrees, hover-supported, and righting never finishes. Observed in a build, 70 seconds stuck, owner quit rather than escaping. Unstick is switched off against vertical surfaces by design, so the one self-rescue path does not apply |
 | **0.12** | a sliver of bumper still clips on the pitch-up. **Largely resolved** by `minFrameMargin` 5 and accepted by the owner, but **confirmed still present 2026-08-17** after four separate drive-camera changes |
 
-**Tier 0 is down to that one row, and it is an accepted residual rather than a blocker.** Everything
-else on this milestone's list is closed. The charge squat was the last item that changed how movement
-reads, and it is built but **not yet judged in play** — that judgement is now the gate, not more work.
+**Tier 0 had been down to `0.12` alone, an accepted residual rather than a blocker. `0.27` reopened
+it on 2026-08-18** and is a different class of thing: a soft lock that ends a session, found in a
+build during a 20 minute run. It is the first genuine blocker this milestone has carried in weeks.
+
+Everything else on this milestone's list is closed. The charge squat was the last item that changed
+how movement reads, and it is built but **not yet judged in play** — that judgement is still a gate,
+alongside `0.27`.
 
 **Closed since this list was written**, all 2026-08-17 unless noted: `0.15` (never a defect, a
 deliberate playtest scoping decision), `0.17` (boost drive mode judged good; residual became `0.20`),

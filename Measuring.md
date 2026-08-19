@@ -40,6 +40,13 @@ pre-existing and benign (two assigned-but-unused fields, one obsolete `FindObjec
   `%USERPROFILE%\AppData\LocalLow\Meade Laaker\Hover Combat Prototype\Player.log` and receives every
   `Debug.Log`, including `[MotionTrace] MARKER n`, `[PlaytestReset] RESET n`, all the SESSION
   summaries, and a `BUFFER FILLED` warning if one happens.
+- **`MotionTrace` capture is BOUNDED and stops when full; it does not ring.** `captureSeconds` 3000
+  against `assumedMaxFps` 180 with fixed steps traced gives 870,000 rows, 119.5 MB preallocated, and
+  about **55 minutes** at the ~265 rows/sec a real session produces. **Check the session summary for
+  `BUFFER FILLED` before trusting that a quiet trace means a quiet session:** once full, the
+  instrument also stops recording markers, so a full buffer and a dead marker key look identical.
+  That confusion cost a diagnosis on 2026-08-18 (`TODO.md` 4.4). **Idle time counts**: the trace keeps
+  billing frames while the game sits on the `PlaytestSession` splash between testers.
 - **`[PlaytestSession]` lines delimit one tester from the next in that same file.** `SESSION n START`,
   `CONTROLS UNLOCKED`, `OVERLAY ON/OFF`, `CONTROLS REQUESTED BEFORE UNLOCK` and `SESSION n END` are all
   stamped with `Time.unscaledTime`, the same clock `MotionTrace` writes into its `t` column, so a
