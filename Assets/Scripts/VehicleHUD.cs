@@ -231,6 +231,35 @@ public class VehicleHUD : MonoBehaviour
     private bool _isShieldActive;
     private bool _wasRegenerating;
 
+    // Where SyncReticle actually put the crosshair this frame. Exposed for MotionTrace
+    // (TODO 0.29), which needs to tell "the gun moved" apart from "the picture moved".
+    private bool  _reticleValid;
+    private float _reticleCanvasY;
+
+    // =========================================================================
+    // Reticle readout, for instrumentation
+    // =========================================================================
+
+    /// <summary>
+    /// True when a crosshair was placed this frame. False in drive mode, where the
+    /// reticle is hidden, and false on any of SyncReticle's bail-outs.
+    ///
+    /// Read this before ReticleCanvasY. A consumer that ignores it records a stale
+    /// position as a live one, which is the failure v1.3 of MotionTrace was written to
+    /// stop: a column that reads zero for a broken reason gets believed.
+    /// </summary>
+    public bool ReticleVisible => _reticleValid;
+
+    /// <summary>
+    /// Canvas-space Y of the crosshair as placed, including reticleScreenOffset.
+    ///
+    /// **The single source of the reticle's screen position.** Anything that needs it
+    /// reads this rather than reprojecting the aim ray: the crosshair and the guns share
+    /// one ray by design, and a second derivation could disagree with the game while
+    /// looking authoritative.
+    /// </summary>
+    public float ReticleCanvasY => _reticleCanvasY;
+
     // =========================================================================
     // Unity lifecycle
     // =========================================================================
@@ -642,6 +671,10 @@ public class VehicleHUD : MonoBehaviour
 
     private void SyncReticle()
     {
+        // Cleared up front rather than at each bail-out, so a path added later cannot
+        // leave last frame's position standing as if it were live.
+        _reticleValid = false;
+
         if (reticleImage == null || _propulsion == null) return;
 
         float blend = _propulsion.StrafeModeBlend;
@@ -699,6 +732,8 @@ public class VehicleHUD : MonoBehaviour
                 canvasRect, screenPos, null, out Vector2 localPoint))
         {
             reticleRect.localPosition = localPoint + reticleScreenOffset;
+            _reticleCanvasY = reticleRect.localPosition.y;
+            _reticleValid   = true;
         }
     }
 

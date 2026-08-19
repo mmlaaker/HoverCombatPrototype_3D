@@ -579,6 +579,10 @@ public class HoverCameraController : MonoBehaviour
     // Slew-limited speed look-ahead, in metres. See IntegrateLookAheadDistance.
     private float _lookAheadDistance;
 
+    // Slew-limited strafe vertical damping, in seconds of Cinemachine damping.
+    // See IntegrateStrafeDamping. Seeded at 0, which is the grounded value.
+    private float _strafeVerticalDamping;
+
     // Slew-limited forward gate, 0..1. See IntegrateForwardGate.
     private float _forwardGate;
 
@@ -1016,6 +1020,11 @@ public class HoverCameraController : MonoBehaviour
         IntegrateLookAheadDistance();
         IntegrateForwardGate();
 
+        // Outside the strafe branch for the same reason as the two above: a damping
+        // value frozen while driving would arrive as a step when the crosshair came
+        // up, which is exactly the class of thing it exists to prevent.
+        IntegrateStrafeDamping();
+
         // Outside the strafe branch for a third reason: the latch must keep
         // counting while the crosshair is up, or raising it mid-wipeout would
         // freeze the hold timer and leave the camera stuck on the stick.
@@ -1372,10 +1381,20 @@ public class HoverCameraController : MonoBehaviour
     /// distinction, and it crossfades rather than switching, so there is no cliff
     /// to tune around. Cresting a bump dips support to about 0.28 and lets a little
     /// damping in, which is correct: a crest IS a small jump.
+    ///
+    /// THE SUPPORT GATE WAS RIGHT AND STILL LEFT A CASE, fixed 2026-08-19 as 0.30.
+    /// It was validated over undulating ground, where support changes at a mean of
+    /// 0.09 per second. **A landing changes it at roughly 50 per second**, which is
+    /// two hundred times the rate the rejected speed gate managed, so the very
+    /// failure this gate was chosen to avoid was still live at exactly the moment
+    /// the damping exists for. The value is therefore no longer computed here: it
+    /// is integrated with a slew limit in IntegrateStrafeDamping, and this
+    /// contributor just reads it. `inp.hoverSupport` is deliberately unused now;
+    /// the integrator reads support itself because it runs before the solve.
     /// </summary>
     private void ContributeStrafeDamping(ref FramingSolution s, in FramingInputs inp)
     {
-        s.strafeVerticalDamping = strafe.verticalDamping * (1f - Mathf.Clamp01(inp.hoverSupport));
+        s.strafeVerticalDamping = _strafeVerticalDamping;
     }
 
     // ── Framing: contributors ─────────────────────────────────────────────
@@ -1911,6 +1930,55 @@ public class HoverCameraController : MonoBehaviour
 
         _lookAheadDistance = look.speedLookAheadSlew > 0f
             ? Mathf.MoveTowards(_lookAheadDistance, target, look.speedLookAheadSlew * Time.deltaTime)
+            : target;
+    }
+
+    /// <summary>
+    /// Slew-limits the strafe rig's vertical damping coefficient. Shipped and judged good
+    /// 2026-08-19 as TODO 0.30; the full measurement is in `TuningLog.md` > The landing snap
+    /// in strafe was the damping coefficient, not the damping.
+    ///
+    /// THE DAMPING VALUE ITSELF IS THE THING THAT HAS TO BE RATE LIMITED, not the
+    /// camera position it produces. `strafe.verticalDamping * (1 - hoverSupport)`
+    /// is correct about WHAT the damping should be in each state; the defect was
+    /// how fast it travels between them.
+    ///
+    /// MEASURED 2026-08-19, scripted full-charge jump in aim mode onto a flat pad,
+    /// sampled every frame. In free fall support is 0, damping sits at its full
+    /// 0.25, and the rig lags a 40 m/s descent by about two metres. On touchdown
+    /// support goes 0 to 1 in roughly 20ms, the damping collapses to zero, and the
+    /// rig snaps that whole lag out in two frames: camera height above the craft
+    /// went 5.50 to 3.46 with the nose level, and 2.48 to -0.005 and on to -1.08
+    /// while aiming up, with camera pitch swinging 11 degrees in 90ms. **The craft's
+    /// own height, vertical speed and angular velocity are continuous across the
+    /// same window**, which is what says this is the picture and not the physics.
+    ///
+    /// A slew limit rather than a lerp, for the same reason the look-ahead uses one:
+    /// the quantity that separates the good cases from the bad one is a PEAK RATE.
+    /// Support changes at a mean of 0.09 per second over undulating ground, which is
+    /// what ContributeStrafeDamping's gate was validated against, and at roughly 50
+    /// per second on a landing. That is the whole of the difference, and a lerp
+    /// cannot bound a peak rate because its speed scales with the gap.
+    ///
+    /// Holding the damping ON through the touchdown is the point, not a side effect:
+    /// the two metres of lag then close out under the damping itself, exponentially,
+    /// instead of being teleported away.
+    ///
+    /// Symmetric, like the look-ahead. Takeoff steps support the other way just as
+    /// hard, and damping arriving as a step makes the rig start lagging as a step.
+    ///
+    /// Runs outside the strafe branch, same reason as IntegrateLookAheadDistance:
+    /// frozen while driving, the value would arrive as a step the moment the
+    /// crosshair came up, which is the defect this exists to remove. Reads
+    /// Foundation directly because the integrate stage runs before GatherLiveInputs.
+    /// </summary>
+    private void IntegrateStrafeDamping()
+    {
+        float support = _vehicleFoundation != null ? _vehicleFoundation.HoverSupport : 1f;
+        float target  = strafe.verticalDamping * (1f - Mathf.Clamp01(support));
+
+        _strafeVerticalDamping = strafe.verticalDampingSlew > 0f
+            ? Mathf.MoveTowards(_strafeVerticalDamping, target, strafe.verticalDampingSlew * Time.deltaTime)
             : target;
     }
 

@@ -180,7 +180,8 @@ of also holding the craft up. Leveling torque as the single attitude authority. 
 gravity (generous on the rise, decisive on the fall). Ceiling duck and charge squat, min-combined into
 one ride-height target. Hard-landing spring give. Hover
 rays read the interpolated smooth surface normal, not the flat triangle normal, and are cast from
-where the sensors would be if the craft were not aiming.
+where the sensors would be if the craft were not aiming. In aim mode the craft levels to the HORIZON
+rather than to the ground, so terrain does not steer the gun.
 
 **Public.** `IsHoverGrounded`, `HoverSupport`, `HasAirControlClearance`, `AverageGroundNormal`,
 `IsDowned`, `SetRecoveryEnabled(bool)`, `SetAimPitch(degrees, weight)`,
@@ -204,6 +205,23 @@ where the sensors would be if the craft were not aiming.
   torque servo and lags the stick, so anything sized from the command corrects a tilt the craft has
   not reached yet. That shipped once and put ~19 m/s^2 of phantom lift under a fast stick sweep.
   See `Measuring.md` trap 41.
+- **The un-aim is referenced to `_lastGroundNormal`, and the ORDER that makes that possible is
+  load-bearing.** `ApplyHoverForces` resets `AverageGroundNormal` to `Vector3.up` at the top of the
+  method, before the sensor loop refills it, so the previous tick's value has to be captured before
+  that line or the un-aim silently references the world vertical instead of the surface. **That was a
+  real shipped bug and it is invisible on flat ground**, where the two vectors are the same: on a 20
+  degree ramp it tilted the sensor frame 21 degrees, unloaded the rear pair to exactly zero force,
+  and left the craft hanging off the front pair with a +71 nose-up torque the leveling servo spent
+  its whole authority cancelling. Measurements in `TuningLog.md` > Aiming on slopes. The sensors have
+  to be aimed before they have measured anything, so one tick of lag on a normal is the correct price.
+- **In aim mode the attitude reference is the HORIZON, not the ground**, via
+  `foundation.aimLevelsToHorizon` blended by strafe weight. Drive mode is untouched at any value of
+  it, because that weight is zero there. Airborne the two references are the same vector, so this is
+  grounded-only by construction and the inverted and mid-trick cases need no rule of their own.
+- **`aimPitchTrackingStrength` is no longer propping anything up.** Read the current value as a feel
+  choice about how the nose answers the stick, and nothing else. Its old 200 was holding the nose
+  down against the un-aim bug above, which is why it had to be seventeen times leveling strength; with
+  that gone, everything from 12 to 200 holds a 20 degree ramp within 8 degrees at full support.
 - **Un-aiming is PITCH ONLY.** Roll must keep reaching the sensors: bank is real, the drift flip
   lived in the roll axis, and **wall jumping depends on the sensors rotating with a rolled craft**
   (see the wall jump entry below; it is confirmed working, not speculative).
@@ -392,8 +410,9 @@ nothing to the Rigidbody**, which is why Foundation needed no modification.
 
 **Does.** Solves camera framing every `LateUpdate`. Drive cam follows a runtime `CameraHeadingProxy`
 carrying position and a stabilized yaw; strafe cam uses `LockToTargetNoRoll` with vertical-only
-position damping. Contributors cover pitch orbit, shoulder shift, look deadzone, turn-bleed
-suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
+position damping, slew-limited so it cannot collapse at a landing. Contributors cover pitch orbit,
+shoulder shift, look deadzone, turn-bleed suppression, speed look-ahead, boost lens and pull-back,
+and a framing guard.
 
 **Public.** `NotifyVehicleWarped(positionDelta)`, `EvaluateState`, edit-mode preview by
 `CameraPreviewState`.
@@ -438,6 +457,15 @@ suppression, speed look-ahead, boost lens and pull-back, and a framing guard.
   The integrator runs OUTSIDE the strafe branch for the same reason the boost envelope does: freezing
   it while the crosshair is up would let it arrive as a step when drive resumed. Reasoning and the
   three-run measurement are in `TuningLog.md` > The boost jolt at a standstill.
+- **The strafe vertical damping COEFFICIENT is rate-limited too, for the same class of reason, and it
+  also lives in the integrate stage.** `IntegrateStrafeDamping` slews toward
+  `verticalDamping * (1 - hoverSupport)` at `verticalDampingSlew`; `ContributeStrafeDamping` just
+  reads it and `inp.hoverSupport` is deliberately unused there. **The support gate was right about
+  WHAT the damping should be and wrong only about how fast it may travel:** support changes at a mean
+  of 0.09 per second over undulating ground, which is what it was validated against, and at roughly
+  50 per second on a landing, which snapped two metres of accumulated lag out in two frames. Holding
+  the damping on THROUGH the touchdown is the point, so the lag closes out under the damping instead
+  of being teleported away. `TuningLog.md` > The landing snap in strafe.
 - **Preview and live feed the SAME solver**, through `GatherLiveInputs` and `BuildPreviewInputs`. A
   preview that recomputes the framing starts lying the first time a contributor changes.
 - **Three preview states deliberately break the nose-follows-travel assumption**, and they exist
@@ -543,7 +571,13 @@ because they change continuously and have no transition to hang an event on.
   screen by design. **Do not re-derive this by reasoning about the reticle alone; the binding mode is
   the whole explanation.**
 - The aim DIRECTION still comes from the vehicle and is the same ray the guns get, so the crosshair and
-  the shot cannot disagree.
+  the shot cannot disagree. **What keeps terrain out of that ray is upstream, in Foundation's attitude
+  reference**, not anything this file does.
+- **`ReticleVisible` / `ReticleCanvasY` are the single source of the crosshair's screen position.**
+  `MotionTrace` reads them rather than reprojecting the aim ray, because a second derivation could
+  disagree with the game while looking authoritative. Check `ReticleVisible` first: it is false in
+  drive mode and on every one of `SyncReticle`'s bail-outs, and a consumer that ignores it records a
+  stale position as a live one.
 - A missing `HoverController_Tricks` is deliberately not warned about, unlike the other modules, since
   an AI craft has none.
 
@@ -593,7 +627,7 @@ rather than an instrument: it measures nothing and exists to run a person throug
 |---|---|---|
 | `FrameSpikeWatch.cs` | "Did a frame die, and what was happening?" | **Detection is nearly free, capture is expensive, because capture only runs on frames that were already ruined.** Detection is RELATIVE (a multiple of a running baseline AND over an absolute floor) because a fixed threshold cries wolf in one environment and stays silent in the other. **The baseline learns only from non-spike frames**, or a bad patch raises the bar until the tool goes quiet exactly when things are worst. Console logging defaults OFF as a measurement decision: logging once became a plausible source of the allocation it was reporting. **Its throttling verdict is broken, see `TODO.md` 4.5** |
 | `AllocationBisect.cs` | "What allocates?" | Ablation, not theory: disables one MonoBehaviour at a time and ranks by what changed. **Read the FLOOR row first** (every candidate disabled at once); if allocation survives that, no per-component blame means anything. Craft must be PARKED. Reads the profiler's per-frame counter, not total-memory deltas |
-| `MotionTrace.cs` | "Did what I SAW match what the physics did, and was it the craft or the camera?" | **Core metric is the residual**: drawn frame delta projected onto direction of travel, minus real speed. Sampled at `beginContextRendering`, not `LateUpdate`, so the camera is read after the brain has committed it. **Zero allocation in the hot path is load-bearing, not tidiness.** Buffer is bounded and stops when full rather than ringing, because the analysis wants one contiguous timeline. **`M` drops a marker**, and it must stay a plain key off the F row (trap 30) |
+| `MotionTrace.cs` | "Did what I SAW match what the physics did, and was it the craft or the camera?" | **Core metric is the residual**: drawn frame delta projected onto direction of travel, minus real speed. Sampled at `beginContextRendering`, not `LateUpdate`, so the camera is read after the brain has committed it. **Zero allocation in the hot path is load-bearing, not tidiness.** Buffer is bounded and stops when full rather than ringing, because the analysis wants one contiguous timeline. **`M` drops a marker**, and it must stay a plain key off the F row (trap 30). **v1.4 adds the three aim angles** — `nose_elev`, `nose_vs_ground`, `ground_elev` — each measured directly rather than derived from the other two, plus `aim_cmd` and `reticle_y`. They are nose ELEVATIONS, not Euler pitch, because Euler pitch inverts the reader's intuition and is contaminated once the craft is banked. **`reticle_y` is READ from `VehicleHUD`, never recomputed**, and `reticle_valid` is false in drive mode so an empty column is obviously empty |
 | `PlaytestReset.cs` | Escape hatch for a soft-lock or a fall outside the environment | Hold Select (Share) or `R` for 0.6s, read off the device directly so a debug utility never requires editing the shipped input asset. **Restores pose, velocity and ENERGY. Health, shield, ammo and weapon slot are still deliberately untouched**, since topping those up would make it a half-built respawn. **`restoreEnergy` defaults ON, and that is a playtest default, not a measurement one:** a refill is a step change in the pool that no spend explains, so UNTICK IT for any run whose energy trace matters. Owner's call 2026-08-18; the original restore-nothing behaviour is one tickbox away. **The camera must be told** via `NotifyVehicleWarped`. Interpolation is toggled off across the move or the Rigidbody draws the teleport as one streaked frame. Logs `Time.unscaledTime` so the fake speed spike can be discounted in the trace. **`ResetNow()` is the public entry point**, so the warp has exactly one implementation |
 | `PlaytestSession.cs` | Runs one tester through one session: splash, session clock, and a controls overlay gated on elapsed play. **Not an instrument**, and lives on `/PlaytestSession` | **The gate is the point:** the blind period is 90s of PLAY (the clock starts when the splash is dismissed, not on load), so it is identical across testers by construction and the facilitator is out of the loop. **Builds its whole canvas in code**, so nothing can come half-wired; the accepted cost is that layout cannot be authored in the scene and only the two `[TextArea]` copy blocks are editable. **Every alpha is solved from state each frame and nothing else writes one** — an earlier draft set them at the phase transitions, and any path reaching a phase without its transition left an opaque splash over a live session. **Does not pause:** `timeScale` 0 risks a discontinuity in the `Time.unscaledTime` state Foundation and Propulsion carry. **Options both dismisses the splash and toggles the overlay**, because dismissing on any button hands that press to the game and starts the session with a jump. Hold `P` restarts for the next tester: craft home via `ResetNow()`, energy full, slot 0, gate re-locked. **Every phase change is stamped with `Time.unscaledTime`**, so one continuous `Player.log` cuts back into one session per tester, and a pre-unlock Options press is logged as a discoverability reading |
 
@@ -790,6 +824,8 @@ is stable and never reused.**
 | 40 | The memory floor is not a proxy for editor accumulation, and a restart can fix what no counter shows |
 | 41 | A servo-driven quantity read from its COMMAND rather than its ACHIEVED value is wrong exactly during fast input |
 | 42 | A recorded-but-never-run mechanism needs the third arm: the case that is fine AND shares an ingredient with the bad one |
+| 43 | Reconstructing a loop from outside it is not measuring it; when the reconstruction disagrees with observed motion, the reconstruction is wrong |
+| 44 | `ForceMode.Acceleration` on `AddTorque` is a direct angular acceleration and does NOT go through the inertia tensor. Calibrate units before theorising |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
@@ -805,6 +841,17 @@ rediscovery of the thing that prompted it.
 
 ### Physics and handling
 
+- **THE VEHICLE IS ALWAYS THE TURRET, AND AIM MODE STABILISES THE BASE RATHER THAN THE GUN.** Owner's
+  decision 2026-08-19, and it settles a question the code had never answered. The muzzles are on the
+  nose, the nose is where the shot comes from, in drive and in aim alike, and there is no roll. What
+  aim mode is meant to feel like is a turret on a stable hovering base, the Warthog gunner. **So the
+  hull levels to the horizon while aiming and nothing is decoupled from it.** Three things follow and
+  each is a reason not to "improve" this later: there is no gimbal and no separate aim frame to keep
+  in sync, the vfxMount versus muzzle-transform split stops mattering so all six weapons behave
+  identically, and the strafe camera can keep inheriting hull pitch, which is what holds the reticle
+  still on screen. **In drive mode the ground steers the gun and that is intended**, so a craft on a
+  ramp shooting at a craft on the same ramp hits it. Implemented as
+  `foundation.aimLevelsToHorizon`, weighted by strafe blend; `TuningLog.md` > Aiming on slopes.
 - **THE CHARGE SQUAT EXPRESSES THE CHARGE. IT NEVER STORES IT.** Owner's decision 2026-08-17, closing
   the question `TODO.md` 0.25 was blocked on: the squat exists so ride height can be the charge meter,
   and it must add nothing to the tuned jump. **The springs will violate this by themselves unless
@@ -930,6 +977,26 @@ rediscovery of the thing that prompted it.
   rotates the axis yaw acts about.** Rolled 90 degrees, yaw input pitches you in world terms. That is why
   steering feels absent during a trick while measuring as fully live, and it is why the right stick is a
   good candidate for camera control in that state (`TODO.md` 0.13).
+
+### Consciously accepted limitations
+
+**These are known, measured, and left alone on purpose.** Each was reported, chased to a mechanism and
+then accepted by the owner rather than fixed. **Reopening one needs a new play report, not a
+rediscovery of the mechanism**, which is written down here precisely so it does not get rediscovered.
+
+- **The strafe camera dips on a landing from a high, aimed jump, and that is accepted.** After the
+  rate limit closed the two-frame snap (`TuningLog.md` > The landing snap in strafe), the camera still
+  travels to roughly 2.1m below the craft before recovering. **The remaining motion is not the
+  damping.** The strafe rig binds `LockToTargetNoRoll` and therefore inherits hull pitch by design,
+  which is exactly what keeps the reticle still on screen, so a nose-up hull swings the authored
+  `(0, 3.5, -6)` offset downward and backward. Measured at rest, aiming up 23.4 degrees, **the camera
+  sits 0.03m above the craft rather than 3.5m.** Any pitch overshoot therefore moves the camera
+  bodily, and the nose runs about ten degrees past its commanded aim across a landing. Owner,
+  2026-08-19: *"it feels like a natural consequence to doing a higher altitude jump while aiming, like
+  I'm coming down harder so it makes sense I can't hold my aim."*
+  **If this is ever reopened, the thing to fix is the pitch overshoot, not the camera.** It is
+  upstream of the camera motion and it is unexplained; tuning `verticalDampingSlew` against it would
+  be tuning against a symptom.
 
 ### Judged good in the 2026-08-16 playtest
 

@@ -543,6 +543,98 @@ the interesting part: **20 now puts the reticle higher than 36 did before.** Con
 springs having been eating the aim angle, since the old front-compressed/rear-unloaded state
 generated a nose-up torque the aim servo had to overpower every frame. Hypothesis, not measured.
 
+> **MEASURED AND CONFIRMED 2026-08-19, hypothesis closed.** It was right, mechanism included: the
+> front pair carried 19.29 each while the rear pair carried exactly 0.00, and the resulting nose-up
+> torque was +71.38 against a servo of -71.66. The cause was `UnaimRotation` reading a
+> `AverageGroundNormal` that had just been reset to `Vector3.up`, so the un-aim was referenced to the
+> world vertical instead of the surface. **Invisible on flat ground, which is where this whole entry
+> was measured.** See the next entry.
+
+---
+
+### Aiming on slopes: the un-aim reference, and the horizon
+*Closed as 0.29, shipped and judged good 2026-08-19. Owner: "This genuinely feels much better."*
+
+Reported as: aiming feels better than ever on flat ground, and on any slope the reticle strays and a
+target cannot be held. **Two separate things, one design decision and one bug, and the bug was the
+larger half.**
+
+**THIS CLOSES THE HYPOTHESIS LEFT OPEN AT THE END OF THE PREVIOUS ENTRY.** That entry noted that
+`strafePitchLimit` 20 put the reticle higher than 36 had, and guessed: *"Consistent with the springs
+having been eating the aim angle, since the old front-compressed/rear-unloaded state generated a
+nose-up torque the aim servo had to overpower every frame. Hypothesis, not measured."* **Measured
+2026-08-19. The hypothesis was right, including the mechanism.**
+
+**The bug.** `ApplyHoverForces` resets `AverageGroundNormal = Vector3.up` at the top of the method,
+before the sensor loop refills it at the bottom. `UnaimRotation()` is called after that reset, so it
+read the `Vector3.up` that had just been written instead of the surface the craft was over. **The
+un-aim was therefore removing the hull's deviation from the WORLD VERTICAL, not from the SURFACE.**
+
+**On flat ground those are the same vector, so the bug is exactly zero, which is why the previous
+pass never saw it: every measurement in it was taken on flat ground.**
+
+On a slope it tilts the sensor frame by the slope angle. From inside the loop, 20 degree ramp, hull
+sitting 1 degree off square to it, commanded aim 0:
+
+```
+unaim = 21 deg                      (should have been ~1)
+FL d=6.78  comp= 0.626  f=19.29   arm z=+1.82
+FR d=6.78  comp= 0.626  f=19.29
+RL d=8.28  comp=-0.777  f=0.00    arm z=-2.01
+RR d=8.28  comp=-0.777  f=0.00
+```
+
+Front pair 6.78m, rear pair 8.28m; 1.5m across a 3.83m span IS the 21 degrees. **The rear springs sat
+past ride height and a spring only pushes, so they delivered exactly zero.** The craft hung off the
+front pair, 1.8m ahead of the centre of mass, and that lifted the nose. Spring net torque **+71.38**
+against a leveling servo of **-71.66** with angular velocity **-0.03**: two enormous torques
+cancelling, the craft parked at a 21 degree error.
+
+**Fix: `_lastGroundNormal`, captured at the top of `ApplyHoverForces` before the reset.** One tick of
+lag on a surface normal is nothing. Airborne it is `Vector3.up`, which is correct.
+
+**The design decision, made by the owner the same day.** The vehicle is ALWAYS the turret, in both
+modes: muzzles on the nose, the nose is where the shot comes from, no roll. Aim mode is meant to feel
+like a turret on a STABLE BASE, the Warthog gunner. So the base is stabilised and nothing is
+decoupled from the hull. **No gimbal, no separate aim frame, and all six weapons behave identically
+whether they fire from the vfxMount or a muzzle transform.** Shipped as
+`foundation.aimLevelsToHorizon`, 0 to 1, default 1, blended by strafe weight so drive mode is
+untouched at any value.
+
+**Both verified on a synthetic ramp, commanded aim 0 in every row**, which makes every degree of nose
+elevation past the slope unasked for:
+
+| ramp | nose, `levels`=0 before | after | nose, `levels`=1 before | after | support before | after |
+|---|---|---|---|---|---|---|
+| 5 | 12.60 | **5.17** | 6.88 | **-0.44** | 0.995 | **1.000** |
+| 10 | 24.94 | **10.17** | 13.40 | **-0.98** | 0.978 | **1.000** |
+| 15 | 36.98 | **15.16** | 19.59 | **-1.46** | 0.950 | **1.000** |
+| 20 | 42.68 | **20.16** | 21.27 | **-1.88** | 0.797 | **1.000** |
+| 25 | 46.72 | **25.15** | 21.50 | **-2.25** | 0.626 | **1.000** |
+| 30 | 51.80 | **30.14** | 20.36 | **-2.56** | 0.500 | **1.000** |
+
+At `levels`=0 the hull is now square to the ramp within 0.17 degrees at every angle, which is what
+"the vehicle is the turret" always meant. At `levels`=1 the nose holds the horizon within 2.6 degrees
+across a 30 degree range. **Support is 1.000 everywhere in both**, against a collapse to 0.500 before.
+
+**`aimPitchTrackingStrength` 200 WAS NEVER A FEEL VALUE AND MUST NOT BE READ AS ONE.** It was the
+number holding the nose down against a suspension that had stopped working, which is the real reason
+aim tracking ever needed to be seventeen times leveling strength. With the bug gone it barely affects
+attitude at all: 200, 100, 50, 25 and 12 all hold a 20 degree ramp within 8 degrees at support 1.000.
+It is now free to be tuned for what its tooltip claims, which is how the nose answers the stick.
+
+**Method note, and it cost two rounds.** A reconstruction of the hover loop written from OUTSIDE it
+computed a net spring torque of -0.92 against a servo torque of +71.66 with the craft static, which
+cannot all be true, and it under-computed total lift by 45 percent. **What broke the problem open was
+a temporary probe INSIDE `ApplyHoverForces` and `ApplyLevelingTorque` printing the real per-point
+forces, arms and applied torques.** The cause was obvious within one reading. Reconstructing a loop
+from outside is not measuring it.
+
+**Unit trap, recorded so it is not re-derived.** `AddTorque` with `ForceMode.Acceleration` IS a direct
+angular acceleration, verified as exactly 1 rad/s from a unit `VelocityChange`, and
+`AddForceAtPosition` in the same mode contributes `r x a` on the same scale. Do not divide either by
+the inertia tensor when comparing them.
+
 ---
 
 ### Drift
@@ -925,6 +1017,55 @@ craft has not earned.
 **Depth is a fraction of hover height rather than a distance**, so it stays proportionate when ride
 height is retuned and cannot be authored below the floor. At 0.2 and `hoverHeight` 7 the craft drops
 1.42m measured, against 1.40m predicted.
+
+---
+
+### The landing snap in strafe was the damping coefficient, not the damping
+*Closed as 0.30, shipped and judged good 2026-08-19. Owner: "it feels good."*
+
+Reported as a stutter when a charge jump in aim mode touches down, with the owner's own guess that it
+was the angle the craft came down on its springs. **It was not the springs and it was not the craft.**
+Measured with a scripted full-charge jump onto a flat pad, sampled every frame, so slope is excluded
+by construction and the landing is the only variable. The craft's height, vertical speed and angular
+velocity are all continuous across touchdown; only the picture moves.
+
+**Mechanism.** `strafeVerticalDamping = verticalDamping * (1 - hoverSupport)` is correct about WHAT
+the damping should be in each state. The defect was how fast it travelled between them. In free fall
+support is 0, damping sits at its full 0.25, and the rig lags a 40 m/s descent by about two metres.
+**On touchdown support goes 0 to 1 in roughly 20ms**, the damping collapses to zero, and the rig
+snaps the whole accumulated lag out in two frames.
+
+**This is the failure `ContributeStrafeDamping` already documented, in the one case it was not tested
+against.** The rejected first version gated on vertical SPEED and was thrown out because "a damping
+coefficient that moves that fast generates motion of its own." The hover-support gate that replaced it
+was validated over undulating ground, where support changes at a mean of **0.09 per second**. A
+landing changes it at roughly **50 per second**, two hundred times the rate the rejected gate managed.
+
+**Shipped: `strafe.verticalDampingSlew`, default 0.6 units per second**, integrated in
+`IntegrateStrafeDamping` next to the speed look-ahead's limiter. A slew limit rather than a lerp, for
+the same reason the look-ahead uses one: the quantity separating the good cases from the bad one is a
+PEAK RATE, and a lerp cannot bound a peak rate because its speed scales with the gap. Symmetric,
+because takeoff steps support just as hard the other way. **Holding the damping ON through touchdown
+is the point, not a side effect:** the two metres then close out under the damping itself,
+exponentially, instead of being teleported away.
+
+| | camera height above craft, at touchdown | over |
+|---|---|---|
+| before | 2.29 to -0.01 | **14ms** |
+| after | 2.37 to -0.07 | **92ms** |
+
+Peak vertical rate of the camera against the craft falls from about **163 m/s to about 26 m/s**, and
+the move is monotonic across every sampled frame instead of a two-frame step.
+
+**WHAT REMAINS IS NOT THE DAMPING, AND THE OWNER ACCEPTED IT.** After touchdown the camera still
+travels to about 2.1m below the craft before recovering. The strafe rig binds `LockToTargetNoRoll` and
+therefore inherits hull pitch by design, which is what keeps the reticle still on screen; a nose-up
+hull swings the authored `(0, 3.5, -6)` offset downward and backward. **Measured at rest, aiming up
+23.4 degrees, the camera sits 0.03m above the craft rather than 3.5m.** So any pitch overshoot moves
+the camera bodily, and the nose runs about ten degrees past its commanded aim on a landing. Owner,
+judging it: *"it feels like a natural consequence to doing a higher altitude jump while aiming, like
+I'm coming down harder so it makes sense I can't hold my aim."* Accepted; see `CLAUDE.md` >
+Consciously accepted limitations.
 
 ---
 

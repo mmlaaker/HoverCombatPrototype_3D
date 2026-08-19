@@ -4,7 +4,32 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// MotionTrace v1.3
+/// MotionTrace v1.4
+///
+/// v1.4: six columns for the aim-on-slopes question (TODO 0.29). The owner reported that
+///       aiming feels good on flat ground and unusable on a slope, and NOTHING in this
+///       trace could tell the two candidate causes apart, because the only attitude
+///       column was `tilt_deg` and tilt cannot distinguish a nose-up craft from a
+///       banked one, let alone say what the nose is up RELATIVE TO.
+///
+///       `nose_elev`, `nose_vs_ground` and `ground_elev` are the three angles the
+///       question needs, and each is measured directly rather than derived from the
+///       other two, for the reason v1.3 records: reconstructing a world-frame quantity
+///       from body-frame parts is a different measurement, not a shortcut. They very
+///       nearly sum, and where they do not is itself the signal.
+///
+///       All three are ELEVATIONS OF THE NOSE, not Euler pitch. Euler pitch has a sign
+///       convention that inverts the reader's intuition (positive X is nose DOWN) and it
+///       is contaminated by the decomposition once the craft is banked. The elevation of
+///       the forward vector above a reference plane has neither problem, and it is the
+///       quantity the player is actually complaining about: where the gun points.
+///
+///       `reticle_y` is READ FROM `VehicleHUD`, never recomputed here. The reticle's
+///       screen position is already derived in exactly one place and the guns share that
+///       ray by design; a second derivation in the instrument could disagree with the
+///       game and would be believed. `reticle_valid` is false in drive mode, where the
+///       reticle is hidden, so an empty column is obviously empty rather than silently
+///       zero (the v1.3 lesson).
 ///
 /// v1.3: `horiz_speed` added, and the camera/attitude columns moved into `FillShared`.
 ///
@@ -286,6 +311,18 @@ public class MotionTrace : MonoBehaviour
         public float travelDiv;     // signed proxyYaw - horizontal velocity heading
         public float horizSpeed;    // WORLD horizontal speed, v1.3
 
+        // Added v1.4 for TODO 0.29. Three elevations, positive nose UP, each measured
+        // directly. `noseElev` is where the gun points against the horizon and is the
+        // one the acceptance test is written in. `noseVsGround` is the deviation the
+        // hover sensors already remove. `groundElev` is the slope itself along the
+        // direction the craft faces.
+        public float noseElev;      // forward above WORLD horizontal, deg
+        public float noseVsGround;  // forward above the GROUND plane, deg
+        public float groundElev;    // the ground plane's own slope along forward, deg
+        public float aimCmd;        // commanded aim pitch, deg, before the servo
+        public float reticleY;      // canvas Y of the reticle, from VehicleHUD
+        public bool  reticleValid;  // false in drive mode, where there is no reticle
+
         // Hit rows
         public float hitImpulse;
         public float hitNormalY;    // 1 is a floor, 0 is a wall; separates landings from catches
@@ -327,6 +364,7 @@ public class MotionTrace : MonoBehaviour
     private HoverController_Foundation _foundation;
     private HoverController_Propulsion _propulsion;
     private PlayerHoverInput           _input;
+    private VehicleHUD                 _hud;
 
     private int     _frames;
     private int     _fixedSteps;
@@ -403,6 +441,10 @@ public class MotionTrace : MonoBehaviour
         }
 
         if (view == null) view = Camera.main;
+
+        // The HUD lives on the Canvas, not on the craft, so it cannot come off `vehicle`
+        // like the four above. Read rather than recomputed: see the v1.4 note.
+        _hud = FindFirstObjectByType<VehicleHUD>();
 
         // Found by name rather than by reflecting a private field: the controller creates
         // it as a real GameObject, and a name is stable across refactors in a way that
@@ -628,12 +670,38 @@ public class MotionTrace : MonoBehaviour
             s.support  = _foundation.HoverSupport;
         }
 
+        // Attitude, v1.4. Outside the _rb block because none of it needs the rigidbody,
+        // and outside the _foundation block because nose elevation against the WORLD is
+        // still meaningful with no ground under the craft. AverageGroundNormal falls back
+        // to world up airborne, which is Foundation's own convention, so `nose_vs_ground`
+        // and `nose_elev` agreeing in mid-air is correct rather than a bug.
+        if (vehicle != null)
+        {
+            Vector3 fwd = vehicle.forward;
+            Vector3 n   = _foundation != null ? _foundation.AverageGroundNormal : Vector3.up;
+
+            s.noseElev     = Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f))              * Mathf.Rad2Deg;
+            s.noseVsGround = Mathf.Asin(Mathf.Clamp(Vector3.Dot(fwd, n), -1f, 1f)) * Mathf.Rad2Deg;
+
+            Vector3 alongSlope = Vector3.ProjectOnPlane(fwd, n);
+            s.groundElev = alongSlope.sqrMagnitude > 1e-6f
+                ? Mathf.Asin(Mathf.Clamp(alongSlope.normalized.y, -1f, 1f)) * Mathf.Rad2Deg
+                : 0f;
+        }
+
+        if (_hud != null)
+        {
+            s.reticleValid = _hud.ReticleVisible;
+            s.reticleY     = _hud.ReticleCanvasY;
+        }
+
         if (_propulsion != null)
         {
             s.boost  = _propulsion.BoostLerp;
             s.drift  = _propulsion.DriftLerp;
             s.strafe = _propulsion.StrafeModeBlend;
             s.air    = _propulsion.AirControlWeight;
+            s.aimCmd = _propulsion.CommandedAimPitch;
         }
 
         if (_input != null)
@@ -758,6 +826,7 @@ public class MotionTrace : MonoBehaviour
         _sb.Append("time_s,kind,dt_ms,fixed_steps,vis_along,phys_speed,resid_ms,resid_m,resid_valid,")
            .Append("vis_speed,cam_speed,rel_along,rel_lat,")
            .Append("cam_yaw_rate,proxy_yaw,veh_yaw,yaw_diverge,tilt_deg,travel_div,horiz_speed,")
+           .Append("nose_elev,nose_vs_ground,ground_elev,aim_cmd,reticle_y,reticle_valid,")
            .Append("hit_what,hit_impulse,hit_normal_y,")
            .Append("phys_fwd,phys_lat,phys_vert,yaw_rate,support,grounded,throttle,turn,")
            .Append("boost,drift,strafe,air,gc0\n");
@@ -787,6 +856,12 @@ public class MotionTrace : MonoBehaviour
                .Append(s.tilt.ToString("F1")).Append(',')
                .Append(s.travelDiv.ToString("F2")).Append(',')
                .Append(s.horizSpeed.ToString("F2")).Append(',')
+               .Append(s.noseElev.ToString("F2")).Append(',')
+               .Append(s.noseVsGround.ToString("F2")).Append(',')
+               .Append(s.groundElev.ToString("F2")).Append(',')
+               .Append(s.aimCmd.ToString("F2")).Append(',')
+               .Append(s.reticleValid ? s.reticleY.ToString("F1") : "").Append(',')
+               .Append(s.reticleValid ? "1" : "0").Append(',')
                .Append(s.kind == Kind.Hit && s.hitIndex >= 0 && s.hitIndex < _hitNames.Count
                          ? _hitNames[s.hitIndex] : "").Append(',')
                .Append(s.hitImpulse.ToString("F1")).Append(',')

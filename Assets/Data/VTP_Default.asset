@@ -22,9 +22,13 @@ MonoBehaviour:
     minDuckHoverHeight: 1.5
     liftStrength: 16
     liftDamping: 2.2
+    enableChargeSquat: 1
+    chargeSquatDepth: 0.2
+    chargeSquatRelease: 0.25
     levelingTorqueStrength: 12
     pitchRollDamping: 8
     aimPitchTrackingStrength: 200
+    aimLevelsToHorizon: 1
     aimPitchDamping: 10
     airPitchTorque: 36.5
     airRollTorque: 68.5
@@ -40,6 +44,7 @@ MonoBehaviour:
     flipRecoveryDelay: 1
     flipRecoveryTorque: 60
     flipRecoverySpeedThreshold: 2
+    flipRecoveryProgressDecay: 1
     extraGravityMultiplier: 3
     extraFallGravity: 35
     enableHardLanding: 1
@@ -77,7 +82,7 @@ MonoBehaviour:
     airJumpFallCancel: 0.6
     lateralDamp: 1
     forwardDamp: 1
-    driftLateralDamp: 0.3
+    driftLateralDamp: 45.9
     driftForwardDamp: 0.3
     driftYawMultiplier: 2.5
     driftSustainSeconds: 1.5
@@ -96,7 +101,7 @@ MonoBehaviour:
     strafeTopSpeed: 53
     strafeAccel: 47
     strafePitchLimit: 20
-    strafePitchSensitivity: 150
+    strafePitchSensitivity: 100
     strafeModeBlendSeconds: 0.2
     strafeLateralCapStrength: 3
   energy:

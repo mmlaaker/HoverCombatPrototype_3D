@@ -47,4 +47,18 @@ public class CameraStrafeTuning
              "Keep small: 0.2 to 0.4. 0 restores fully locked behaviour and costs you soft jumps.")]
     [Range(0f, 1f)]
     public float verticalDamping = 0.25f;
+
+    [Tooltip("How fast Vertical Damping is allowed to change, in units per second. Landing is what " +
+             "this is for.\n\n" +
+             "Hover support goes from 0 to 1 in about 20ms when a jump touches down, so without a " +
+             "limit the damping collapses in two frames and the rig snaps out the ~2m of lag it " +
+             "built up during the fall. That snap IS the landing stutter; the craft itself lands " +
+             "smoothly.\n\n" +
+             "Lower is a softer landing and a camera that stays slightly loose for longer after " +
+             "you touch down. Higher approaches the old snap. Below about 0.3 the looseness starts " +
+             "being noticeable while driving away from a landing.\n\n" +
+             "0 freezes the damping wherever it happens to be, which is not what you want; use a " +
+             "large value, not zero, to disable the limit.")]
+    [Range(0f, 20f)]
+    public float verticalDampingSlew = 0.6f;
 }

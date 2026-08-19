@@ -288,6 +288,18 @@ public class HoverController_Propulsion : MonoBehaviour
     /// </summary>
     public float AirControlWeight => _airControlWeight;
 
+    /// <summary>
+    /// The aim pitch the player has ASKED for, in degrees, clamped to strafePitchLimit
+    /// and NOT weighted by strafe blend. Instrumentation only.
+    ///
+    /// This is the command, not the achieved angle. The chassis is a torque servo and
+    /// lags it, so the two are supposed to differ; the gap between this and the nose's
+    /// measured elevation is exactly what says whether the servo is tracking or whether
+    /// something else is moving the nose. Do not use it to size a force: reading the
+    /// command instead of the achieved attitude is the mistake `UnaimRotation` documents.
+    /// </summary>
+    public float CommandedAimPitch => _strafePitchAccum;
+
     // -------------------------------------------------------------------------
     // 📢 Events
     // -------------------------------------------------------------------------

@@ -11,11 +11,24 @@ using UnityEngine;
 ///   Yaw:   the vehicle's actual world Y. Weapons aim with heading.
 ///   Pitch: the vehicle's actual world X. The physics pitch driven by
 ///          Propulsion.ApplyStrafePitch and Foundation leveling. No independent
-///          accumulation; the vehicle IS the turret.
+///          accumulation; the vehicle IS the turret, in both modes.
+///
+/// TERRAIN PITCH IS NOT REMOVED HERE, AND THIS HEADER USED TO CLAIM OTHERWISE.
+/// It said the module deliberately ignored vehicle pitch from terrain reaction. It
+/// never did and, reading the hull's total pitch, never could: it keeps no commanded
+/// aim of its own to subtract. Corrected 2026-08-19 with TODO 0.29.
+///
+/// What actually happens is mode-dependent, and it is decided upstream in
+/// HoverController_Foundation.ApplyLevelingTorque rather than here:
+///   Drive mode: the hull follows the ground, so the guns follow the ground. Point
+///          the nose at the target. This is intended, and it is why a craft on a
+///          ramp shooting at a craft on the same ramp hits it.
+///   Aim mode:  the hull levels to the horizon instead, so the terrain drops out of
+///          the shot direction without this module doing anything about it.
+/// Reading the hull's achieved pitch is therefore still correct. It is correct
+/// BECAUSE the hull is the single definition of where the craft is pointing.
 ///
 /// What it deliberately ignores:
-///   Vehicle pitch from terrain reaction. Foundation's leveling corrections must
-///   not affect bullet direction.
 ///   Vehicle roll. Never intentional, never communicated to weapons.
 ///
 /// Contracts:

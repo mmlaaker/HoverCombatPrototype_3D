@@ -171,12 +171,27 @@ public class FoundationTuning
     [Header("🎯 Aim Pitch Tracking")]
     [Tooltip("How hard the nose is driven toward your aim angle in strafe mode.\n\n" +
              "Higher is snappy and shooter-like, lower is heavy and deliberate.\n\n" +
-             "Pitch axis ONLY, which is the point of having it: cranking this for snappy aim does " +
-             "not stiffen the ride over bumps, because ground following stays on Leveling Torque " +
-             "Strength.\n\n" +
+             "PITCH AXIS ONLY. Roll and yaw alignment stay on Leveling Torque Strength, so this " +
+             "cannot make the craft fight a banked surface. It DOES speed up pitch-axis ground " +
+             "following as well as aim, because both arrive through this one gain, which is why " +
+             "Aim Levels To Horizon exists: you cannot separate them by strength, only by changing " +
+             "what the nose is being pointed at.\n\n" +
              "If the nose overshoots and wobbles, raise Aim Pitch Damping rather than lowering this.")]
     [Range(0f, 300f)]
     public float aimPitchTrackingStrength = 150f;
+
+    [Tooltip("In aim mode, how much the craft levels to the WORLD instead of to the ground it is " +
+             "over. Your aim angle is then measured from there.\n\n" +
+             "1 is a turret on a stable base: slopes stop moving your gun, and your aim range is " +
+             "measured from the horizon. 0 is the old behaviour, the nose square to the surface " +
+             "with your aim added on top, so a ramp steers your shot.\n\n" +
+             "Drive mode is never affected at any value; this fades in with strafe blend.\n\n" +
+             "Lower it if the craft reads as floaty or disconnected from ground it is clearly close " +
+             "to. Expect to trade a little aim drift back for that.\n\n" +
+             "Raising this makes Strafe Pitch Limit your entire vertical arc, since a ramp no longer " +
+             "adds to your reach. If you cannot point at something uphill, that limit is why.")]
+    [Range(0f, 1f)]
+    public float aimLevelsToHorizon = 1f;
 
     [Tooltip("Extra settling on the nose while aiming, on top of Pitch Roll Damping.\n\n" +
              "Lets aim feel be tuned without changing ride stiffness. Raise it if a flick lands and " +

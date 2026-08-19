@@ -386,6 +386,18 @@ public class HoverController_Foundation : MonoBehaviour
     public Vector3 AverageGroundNormal { get; private set; }
 
     /// <summary>
+    /// Last tick's <see cref="AverageGroundNormal"/>, captured at the top of
+    /// ApplyHoverForces before that property is reset for the new pass.
+    ///
+    /// Exists because the sensors have to be aimed BEFORE they have measured anything,
+    /// so "which way is the ground" is only answerable from the previous tick. One
+    /// tick of lag on a normal is nothing; reading the just-reset value instead was a
+    /// slope-only bug that unloaded the rear springs. Vector3.up airborne, which is
+    /// correct: with nothing under the craft there is no surface to be square to.
+    /// </summary>
+    private Vector3 _lastGroundNormal = Vector3.up;
+
+    /// <summary>
     /// True while the craft is flipped AND resting against the ground: the state
     /// flip recovery exists to undo. Propulsion reads this to lock out the jump
     /// and all commanded torque, so a flip costs the player the full recovery
@@ -489,13 +501,23 @@ public class HoverController_Foundation : MonoBehaviour
     /// of phantom lift under a fast stick sweep. Reading the achieved attitude has no
     /// such failure mode, because there is nothing being predicted.
     ///
-    /// The reference is AverageGroundNormal rather than world up, and that is not a
-    /// choice made here: ApplyLevelingTorque already defines the craft's attitude
-    /// target as AverageGroundNormal rotated by the aim angle. So "square on the
-    /// surface" is the existing definition of unaimed, and reading the deviation from
-    /// it recovers the aim the servo has actually achieved, plus whatever error it is
-    /// still carrying. Both should come out, which is why this is not clamped to
-    /// strafePitchLimit.
+    /// THE REFERENCE IS AverageGroundNormal AND MUST STAY THAT WAY, but the reason
+    /// changed with 0.29 and the old one no longer holds. This used to be justified by
+    /// pointing at ApplyLevelingTorque, which defined the attitude target as the ground
+    /// normal rotated by the aim angle, so "square on the surface" was simply the
+    /// existing definition of unaimed. That target is now the horizon in aim mode, so
+    /// the two references have come apart and this one is a standalone decision.
+    ///
+    /// It stands on its own terms: the springs must measure a PERPENDICULAR distance to
+    /// the surface, whatever the hull happens to be doing above it. That was true when
+    /// the only thing tilting the hull was the aim, and it is the same requirement now
+    /// that the hull also refuses to follow the slope. Nothing here needs changing for
+    /// 0.29, and that is not luck: it is because this removes the FULL hull-to-surface
+    /// deviation and never knew what caused it.
+    ///
+    /// Which is also why it is not clamped to strafePitchLimit. The deviation it takes
+    /// out is now the slope plus the aim plus whatever error the servo is still
+    /// carrying, and all of it has to come out.
     ///
     /// PITCH ONLY, about the chassis right axis. Roll must survive untouched: bank is
     /// real, the drift flip lived in the roll axis, and the wall-hover case in TODO
@@ -513,8 +535,8 @@ public class HoverController_Foundation : MonoBehaviour
 
         // Both flattened into the plane the pitch axis turns in, so roll and yaw
         // cannot leak into the angle.
-        Vector3 hullUp   = Vector3.ProjectOnPlane(transform.up,     axis);
-        Vector3 squareUp = Vector3.ProjectOnPlane(AverageGroundNormal, axis);
+        Vector3 hullUp   = Vector3.ProjectOnPlane(transform.up,      axis);
+        Vector3 squareUp = Vector3.ProjectOnPlane(_lastGroundNormal, axis);
 
         if (hullUp.sqrMagnitude < 1e-6f || squareUp.sqrMagnitude < 1e-6f)
             return Quaternion.identity;
@@ -891,6 +913,16 @@ public class HoverController_Foundation : MonoBehaviour
     {
         bool wasHoverGrounded = IsHoverGrounded;
 
+        // CAPTURED BEFORE THE RESET BELOW, AND THAT ORDER IS THE WHOLE POINT.
+        // UnaimRotation needs the surface the craft is actually over, and the only
+        // copy of it is last tick's, because this tick's is not computed until the
+        // sensor loop has run. Reading AverageGroundNormal directly meant reading the
+        // Vector3.up that the next line had just written, so the un-aim removed the
+        // hull's deviation from the WORLD VERTICAL instead of from the SURFACE. See
+        // UnaimRotation for what that did on a slope; it is invisible on flat ground,
+        // where the two references are the same vector, which is why it survived 0.22.
+        _lastGroundNormal = AverageGroundNormal;
+
         IsHoverGrounded     = false;
         AverageGroundNormal = Vector3.up;
         HoverSupport        = 0f;
@@ -1246,18 +1278,43 @@ public class HoverController_Foundation : MonoBehaviour
     ///               unchanged behavior when no aim target is set).
     ///
     ///   Aim pitch:  while Propulsion sets a target via SetAimPitch (strafe mode),
-    ///               the target up is the ground normal rotated by the aim pitch.
+    ///               the target up is the AIM REFERENCE rotated by the aim pitch.
     ///               Axis split: the pitch-axis torque component runs at
     ///               aimPitchTrackingStrength, everything else (roll, bump
-    ///               following) stays at base leveling strength, so FPS-snappy aim
-    ///               tuning (150 vs 12) never stiffens the ride over bumps.
+    ///               following) stays at base leveling strength.
     ///               Replaces the old design where Propulsion torqued the nose
     ///               *against* this leveling (competing forces cause jitter).
     ///               pitchRollDamping is the oscillation killer.
     ///
+    /// THE AIM REFERENCE IS THE WHOLE OF TODO 0.29 AND IT USED TO BE THE GROUND NORMAL.
+    /// Shipped and judged good 2026-08-19; measurements and the owner's design decision are in
+    /// `TuningLog.md` > Aiming on slopes: the un-aim reference, and the horizon.
+    /// With the ground as the reference, a commanded aim of 20 degrees means 20 degrees
+    /// up FROM THE RAMP, so the player's entire aim window rides every slope crossed.
+    /// The owner's report on 2026-08-19 was that aiming felt good on flat ground and
+    /// unusable on a hill, and that is the mechanism: on flat ground the reference does
+    /// not move, and on a slope it moves constantly.
+    ///
+    /// **It could not be fixed by tuning, and that is worth knowing before anyone tries.**
+    /// The terrain and the stick both reach the chassis through aimPitchTrackingStrength,
+    /// so lowering it makes the terrain-following lazier and the aim lazier by exactly the
+    /// same amount. Only the reference can separate them.
+    ///
+    /// The owner's design position, same day: the vehicle is ALWAYS the turret, in both
+    /// modes, with the muzzles on the nose and no roll. What aim mode is supposed to feel
+    /// like is a turret on a STABLE BASE, so the fix stabilises the base rather than
+    /// decoupling the gun. Nothing is gimballed, and all six weapons stay identical.
+    ///
+    /// foundation.aimLevelsToHorizon picks the reference, weighted by strafe blend so it
+    /// crossfades with aim mode and drive mode is untouched at any value. Slerp rather
+    /// than Lerp: the reference must stay a unit direction through the blend.
+    ///
     /// Airborne with an aim target, the pitch axis still tracks (aiming mid-jump
-    /// matters in combat); AverageGroundNormal is Vector3.up there, and the align
-    /// component gets zero strength, preserving free airborne attitude.
+    /// matters in combat), and the align component gets zero strength, preserving free
+    /// airborne attitude. AverageGroundNormal is Vector3.up airborne, so BOTH references
+    /// agree there and this change is grounded-only by construction. Which also means
+    /// grounded aim now behaves the way airborne aim already did, and the inverted and
+    /// mid-trick cases need no new rule.
     /// </summary>
     private void ApplyLevelingTorque()
     {
@@ -1279,7 +1336,7 @@ public class HoverController_Foundation : MonoBehaviour
             return;
 
         Vector3 targetUp = aiming
-            ? Quaternion.AngleAxis(aimPitchDegrees, transform.right) * AverageGroundNormal
+            ? Quaternion.AngleAxis(aimPitchDegrees, transform.right) * AimReference()
             : AverageGroundNormal;
 
         Vector3 torqueAxis = Vector3.Cross(transform.up, targetUp);
@@ -1296,6 +1353,40 @@ public class HoverController_Foundation : MonoBehaviour
         {
             rb.AddTorque(torqueAxis * baseStrength, ForceMode.Acceleration);
         }
+    }
+
+    /// <summary>
+    /// What the commanded aim angle is measured FROM. See ApplyLevelingTorque for why
+    /// this exists at all; this method is only the blend.
+    ///
+    /// Weighted by aimPitchWeight as well as the tuning value, so the reference walks
+    /// from the surface to the horizon as strafe blend comes up and back again on exit.
+    /// A hard switch here would snap the craft's attitude on every aim tap.
+    ///
+    /// Slerp, not Lerp. Halfway between two directions 90 degrees apart, a linear blend
+    /// is 0.71 long and off-axis; the torque axis is built from a cross product with
+    /// this, so a shortened reference would quietly scale the leveling torque by how far
+    /// the blend happens to be from either end.
+    ///
+    /// Airborne this is a no-op: AverageGroundNormal is Vector3.up there, so both ends
+    /// of the blend are the same direction and every value returns world up.
+    ///
+    /// KNOWN RESIDUAL, accepted rather than missed. UnaimRotation also scales by
+    /// aimPitchWeight, so mid-blend the sensors are un-aimed by w times the deviation
+    /// while the hull is w times the slope off square: the weight lands twice and the
+    /// sensors sit slightly short of perpendicular. Worst case is the middle of a 0.2s
+    /// strafe transition, and it is a fraction of the slope angle. Do NOT fix it by
+    /// dropping the weight from UnaimRotation: that would fully un-aim in DRIVE mode
+    /// too, making the springs blind to transient hull tilt, which is a different
+    /// vehicle. Watch it in the trace before deciding it matters.
+    /// </summary>
+    private Vector3 AimReference()
+    {
+        float toHorizon = Mathf.Clamp01(F.aimLevelsToHorizon) * aimPitchWeight;
+
+        return toHorizon <= 0.001f
+            ? AverageGroundNormal
+            : Vector3.Slerp(AverageGroundNormal, Vector3.up, toHorizon);
     }
 
     // -------------------------------------------------------------------------
