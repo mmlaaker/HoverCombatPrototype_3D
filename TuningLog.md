@@ -463,6 +463,118 @@ restores the shipped curve on its last iteration AND the asset file was diffed a
 it never moved. **Both halves are required**, or a rejected row ships silently.
 
 
+---
+
+### Steering that fades with speed, and what the baseline measurement changed about it
+
+*Built for `0.32` 2026-08-20 and NOT yet judged in play. `yawSpeedFade` and `boostYawMultiplier`
+added to `PropulsionTuning`; the asset diff is added lines only, so `yawAccel` 15 and `yawDamping` 8
+did not move. Judged together with `0.33` and `0.36` in one feel pass, by the owner's decision.*
+
+**The baseline confirmed the item and then reframed it.** Yaw rate measured **106.7 deg/s at 20 m/s
+and 106.1 at 40** — identical, as the code implied, since nothing in `ApplyTurning` knew the speed.
+A 180 took 1.69s at any speed and radius simply scaled: 10.8m at 20, 21.5m at 40.
+
+**But a full-lock turn entered at 80 is not the crisp corner that suggests:**
+
+| t | speed | yaw rate | slip angle |
+|---|---|---|---|
+| 0.50s | 80.0 | 105.2 | −35° |
+| 1.00s | 69.5 | 106.7 | −63° |
+| 1.50s | 55.2 | 106.8 | **−74°** |
+| 2.00s | **44.6** | 106.8 | −71° |
+
+**Turning at speed ALREADY cost enormously — 35 m/s in two seconds — but the cost was paid after the
+input, in speed nobody chose to lose, while the stick authority never changed.** That gap is what
+"too tight" describes. The fix is not to add a cost; it is to move the existing one into the
+control where the player can feel it coming.
+
+**Not to be confused with `0.10`** (> The 78-degree slide), which was steering plus FULL BRAKE above
+top speed after a drop. Different route, and that decision stands unchanged.
+
+#### What shipped, and the two departures from accelCurve
+
+**Scales `yawAccel`, not `yawDamping`.** Settled yaw rate is `yawAccel / yawDamping` and response
+time is `1 / yawDamping`, so scaling only the first lowers the rate the nose tops out at while the
+turn stays as crisp to initiate. Scaling both would read as mushy, which is a different complaint
+from the one two testers reported.
+
+**Owner's spec, and it needed no solving.** Full authority to half of top speed, half authority at
+top speed — keys `(0, 1.0) (0.5, 1.0) (1.0, 0.5)`. **Unlike `accelCurve`, the value IS the outcome
+here**, because yaw rate is linear in `yawAccel`. Worth keeping straight: two curves that look
+identical in the inspector, one needing an integral and one not.
+
+| | before | after |
+|---|---|---|
+| yaw rate at 80 | 106.8 °/s | **53.4 °/s** |
+| 180 at 80 | 1.69s | **3.35s** |
+| radius at 80 | ~43m | **~85m** |
+| peak slip angle | −74° | **−53°** |
+| speed at 2.0s into the turn | 44.6 | **70.3** |
+| yaw rate at 20 / 40 | 106.7 / 106.1 | 106.7 / 105.9 |
+
+**Two results nobody designed and both are keepers.** The craft now CARRIES SPEED through a corner —
+70 m/s where it used to be down to 45 — because it is no longer scrubbing sideways. And **authority
+returns by itself as the corner scrubs speed off** (53 → 65 → 73 deg/s through the turn), so a
+corner tightens up as you come down through it. That falls out of reading actual speed and is the
+main argument for keeping this a pure function of speed rather than gating anything on a button.
+
+**Read against ACTUAL HORIZONTAL SPEED over the UNBOOSTED `topSpeed`. Both halves differ from
+`accelCurve` on purpose:**
+
+- **Not the forward axis.** Hard cornering opens a slip angle up to 74 degrees, which collapses the
+  forward axis while the craft is still travelling just as fast. Reading it would relax the fade in
+  the middle of the exact manoeuvre the fade exists to govern. Same class of error as feeding
+  `accelCurve` the drift cap, which is why it was looked for.
+- **Not the boosted cap.** A corner at 100 m/s is harder than one at 80, not equally hard, so
+  dividing by the boosted cap would hand authority back precisely when the craft is fastest.
+
+#### The boost band was flat, and the owner caught it
+
+Clamping at `topSpeed` meant the whole band boost opens up had no steering consequence: **measured
+53.3 deg/s at 104 m/s against 53.4 at 80.** The clamp bought the weaker guarantee that boost can
+never BUY steering, and delivered nothing on boost COSTING any. The "it barely matters" defence also
+failed on measurement — a boosted turn held 98–104 m/s for the whole run rather than bleeding back
+under 80, so the flat band is genuinely occupied.
+
+`boostYawMultiplier` **0.85** extends the fade across exactly the band `boostSpeedMultiplier` adds:
+
+| speed | yaw rate | 180 | radius |
+|---|---|---|---|
+| 80 | 53.7 °/s | 3.35s | 85m |
+| 90 | 49.7 °/s | 3.62s | 104m |
+| 100 | 45.7 °/s | 3.94s | 125m |
+
+Measured **45.3 deg/s at 104 m/s** against 53.3 before, with the unboosted case unchanged at 53.0 —
+which was the thing most at risk, since a sloppier implementation would have shifted the whole curve.
+
+**Driven by SPEED, not by `boostLerp`, and that is the design rather than an implementation detail.**
+Gating on the button would tax boosting out of a corner at half top speed, which is when boost is
+supposed to feel good, and would hand the steering back the instant the button released while the
+craft was still doing 95. **Nothing here punishes pressing boost; it prices the speed boost buys.**
+
+#### The exemptions, and the test that nearly passed without proving anything
+
+Drift, strafe and airborne all keep today's full authority. Drift because it only exists above
+`minDriftSpeed` 53, so an unexempted fade bites hardest inside it — **identical to the failure
+`accelCurve` was measured committing**, which is why it was checked first. Strafe because right stick
+X is AIM yaw there. Airborne because it is already scaled and belongs to tricks.
+
+Blended by `Max(driftLerp, strafeBlend)` rather than by multiplying the two, so a strafing drift
+cannot land in a half-faded band where neither exemption is complete.
+
+Drift re-measured **identical to two decimal places** on speed at every sample, shoulder within 0.7°.
+
+**The strafe check is the one worth recording, because the first attempt returned a number and
+proved nothing.** The craft bled from 50 m/s to 23 during the turn before the sample window, and the
+fade does not start until half of top speed — so at 23 m/s the exempted and unexempted hypotheses
+predict the SAME yaw rate. The run completed and wrote a plausible 112.9 deg/s. Redone as a matched
+A/B in the regime where the effect exists: **drive 96.6 deg/s against strafe 105.7 at the same
+50 m/s**, same input, same window. Filed as `Measuring.md` trap 46.
+
+**Trick regression unaffected:** the asset diff has zero deletions, so none of the five inputs to the
+two-roll margin moved, and the fade is grounded-only.
+
 #### Closed as 0.18: the arming clock now decays instead of resetting
 
 *Shipped 2026-08-17. `flipRecoveryProgressDecay` added at 1, `flipRecoverySpeedThreshold` left at 2.*

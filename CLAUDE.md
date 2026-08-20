@@ -330,6 +330,23 @@ intent to Foundation.
   asymptotic: the craft approaches the number in the inspector forever and never arrives, which
   presents as a mysterious cap below the tuning value. There is a 0.01 safety floor in code, but the
   floor that is meant to be tuned is the curve's own.
+- **`yawSpeedFade` reads the value straight out, unlike `accelCurve`.** Settled yaw rate is
+  `yawAccel / yawDamping`, which is linear, so 0.5 on the curve IS half the turn rate — no integral
+  between the number and the feel. **It scales `yawAccel` and must not scale `yawDamping`:** the
+  first lowers the rate the nose tops out at, the second would make the turn mushy to initiate,
+  which is a different complaint from the one that was reported.
+- **The yaw fade reads ACTUAL horizontal speed over the UNBOOSTED `topSpeed`.** Both halves are
+  deliberate and both differ from `accelCurve`. Not the forward axis, because hard cornering opens a
+  slip angle that collapses it while the craft is still travelling just as fast, which would relax
+  the fade inside the manoeuvre it governs. Not the boosted cap, because a corner at 100 m/s is
+  harder than one at 80, so dividing by it hands authority back exactly when the craft is fastest.
+  **`boostYawMultiplier` extends the fade across the band above `topSpeed`**, which is otherwise
+  flat, and is driven by speed rather than by `boostLerp` so boosting out of a slow corner is free.
+- **The yaw fade is DRIVE MODE, GROUNDED, NON-DRIFT only, and each exemption is load-bearing.**
+  Drift, because it only exists above `minDriftSpeed` so an unexempted fade bites hardest inside it.
+  Strafe, because right stick X is *aim* yaw there and fading it degrades aiming. Airborne, already
+  scaled by `airTurnMultiplier` and belonging to tricks. Blended by `Max` of the two blends, not by
+  multiplying them, so a strafing drift does not land in a half-faded band.
 - **Do not sweep `accelCurve`. Solve it.** Time to top speed is
   `(topSpeed / maxForwardAccel) x integral of 1/curve(f)`, accurate to about 1%, so a target time
   maps to keys arithmetically in one `eval` call with no play mode. **The three complaints map to
@@ -871,6 +888,7 @@ is stable and never reused.**
 | 43 | Reconstructing a loop from outside it is not measuring it; when the reconstruction disagrees with observed motion, the reconstruction is wrong |
 | 44 | `ForceMode.Acceleration` on `AddTorque` is a direct angular acceleration and does NOT go through the inertia tensor. Calibrate units before theorising |
 | 45 | A magnitude that discards direction describes the wrong event. Speed called a flip recovery a "fling" twice; displacement is the honest instrument |
+| 46 | A test whose two outcomes predict the same number proves nothing and still returns one. State what the FAILING case would print before believing a verification |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
@@ -1077,7 +1095,11 @@ regression even if it improves something else.
   - **`topSpeed` 80 STANDS.** Nobody said the craft was too fast, only that it reached top speed too
     quickly and turned too well once there. Treat 80 as fixed and the approach to it as free
     (`TODO.md` 0.33).
-  - **The yaw pair is reopened** for a speed-dependent term that does not exist today (`TODO.md` 0.32).
+  - **The yaw pair is reopened** for a speed-dependent term (`TODO.md` 0.32). **That term now exists,
+    built 2026-08-20 and not yet judged:** `yawSpeedFade` plus `boostYawMultiplier`. `yawAccel` 15 and
+    `yawDamping` 8 themselves did NOT move — the fade multiplies the first and leaves both in the
+    asset untouched, so this entry's original values still stand and only their effect at speed has
+    changed.
   - **`driftYawMultiplier` and the drift behaviour are NOT reopened** and must not be reshaped as a
     side effect. Drift is separately judged good below and has its own equilibrium via `maxDriftAngle`.
   - **`strafeTopSpeed` 53 and the 66.25% ratio STAND**, and now do double duty as the ceiling

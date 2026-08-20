@@ -102,6 +102,36 @@ public class PropulsionTuning
     [Range(0f, 20f)]
     public float yawDamping = 6f;
 
+    [Tooltip("How much of your steering you keep as you speed up, read against a fraction of " +
+             "Top Speed.\n\n" +
+             "UNLIKE ACCEL CURVE, THE VALUE IS THE OUTCOME. Turn rate scales straight off this, so " +
+             "0.5 at the right-hand end means exactly half the turn rate: a 180 that takes 1.7s " +
+             "when slow takes 3.4s at top speed, and the corner comes out twice as wide. There is " +
+             "no arithmetic between what you type and what you feel.\n\n" +
+             "Flat at 1.0 is no fade, which is what a playtest called too tight: the nose comes " +
+             "round just as fast at 80 as at 5, and the craft ends up sliding as much as 70 degrees " +
+             "off its own nose before speed bleeds away.\n\n" +
+             "Where the curve LEAVES 1.0 is the speed at which turning starts costing you. Where it " +
+             "ENDS is how much you keep. Add a key between them to bend how it gets there.\n\n" +
+             "Read against ACTUAL speed, not speed relative to boost, so boosting past Top Speed " +
+             "holds the right-hand value rather than earning back authority.\n\n" +
+             "DRIVE MODE ONLY. Drift, strafe aim and airborne turning all keep full authority.")]
+    public AnimationCurve yawSpeedFade = DefaultYawFadeCurve();
+
+    [Tooltip("How much of your remaining steering you keep at the BOOSTED top speed, on top of " +
+             "Yaw Speed Fade.\n\n" +
+             "Yaw Speed Fade only describes speeds up to Top Speed, so without this the whole band " +
+             "boost adds is flat: measured 53 deg/s at 104 m/s, identical to 80 m/s. This keeps the " +
+             "fade falling across that band instead.\n\n" +
+             "It MULTIPLIES the curve's right-hand value, so 0.5 on the curve and 0.85 here means " +
+             "0.425 of your steering flat out. 1.0 disables it and restores the flat band.\n\n" +
+             "DRIVEN BY SPEED, NOT BY THE BUTTON, which is the thing to know. Boosting out of a " +
+             "corner at half top speed costs you nothing, and letting go at 95 m/s does not hand " +
+             "the steering back until you have actually slowed down. Nothing here punishes pressing " +
+             "boost; it prices the speed boost buys.")]
+    [Range(0f, 1f)]
+    public float boostYawMultiplier = 0.85f;
+
     [Tooltip("How much steering you keep in the air. 0 is none, 1 is full ground response.\n\n" +
              "This is ordinary turning, separate from the air control trick system.")]
     [Range(0f, 1f)]
@@ -462,6 +492,32 @@ public class PropulsionTuning
         // downward slope on BOTH sides, and a Hermite segment between two equal values
         // with one sloped end bulges above them: it peaked at 1.013, so the craft
         // briefly accelerated harder than Max Forward Accel claims to be its maximum.
+        var k0 = c[0]; k0.inTangent = 0f; k0.outTangent = 0f; c.MoveKey(0, k0);
+        var k1 = c[1]; k1.inTangent = 0f;                     c.MoveKey(1, k1);
+
+        return c;
+    }
+
+    /// <summary>
+    /// The shipped shape for yawSpeedFade: full steering out to half of top speed, then
+    /// down to half authority at top speed. Owner's spec, and it needs no solving --
+    /// unlike accelCurve, the value here IS the turn rate multiplier.
+    ///
+    /// Only ever reached by a field that has never been serialised; an existing asset
+    /// keeps whatever curve it already holds (Measuring.md trap 21).
+    /// </summary>
+    private static AnimationCurve DefaultYawFadeCurve()
+    {
+        var c = new AnimationCurve(
+            new Keyframe(0f,   1f),
+            new Keyframe(0.5f, 1f),
+            new Keyframe(1f,   0.5f));
+
+        for (int i = 0; i < c.length; i++) c.SmoothTangents(i, 0f);
+
+        // Same entry flattening as DefaultAccelCurve, for the same reason: a Hermite
+        // segment between two equal values with one sloped end bulges above them, which
+        // would hand out MORE steering in the mid-range than the craft has when parked.
         var k0 = c[0]; k0.inTangent = 0f; k0.outTangent = 0f; c.MoveKey(0, k0);
         var k1 = c[1]; k1.inTangent = 0f;                     c.MoveKey(1, k1);
 

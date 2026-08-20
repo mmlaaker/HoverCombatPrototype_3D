@@ -191,10 +191,15 @@ before-and-after in `TuningLog.md` > The acceleration ramp. **This stays open un
 it**, which is what "done" means for this item.
 
 **Owner's first drive, 2026-08-20: "this definitely feels more sluggish now."** Not a rejection.
-**The owner's decision is that `0.33` and `0.32` are judged together in one feel pass after the
-steering fade lands**, because they move the same subsystem and a ramp tuned before the fade exists
-would only be re-tuned after it. **So this item is now gated behind `0.32` for its judgement, though
-not for its build**, which is the reverse of the sequencing reason that put it first.
+**The owner's decision is that `0.33`, `0.32` and `0.36` are all BUILT first and then judged together
+in one feel pass**, because they move the same subsystem and a ramp tuned before the fade exists
+would only be re-tuned after it. **So this item is gated behind `0.32` and `0.36` for its judgement,
+though not for its build**, which is the reverse of the sequencing reason that put it first.
+
+**`0.32` landing may have already moved this complaint**, which is the reason for judging them
+together rather than in turn: the steering fade means a corner now holds 70 m/s where it used to drop
+to 45, so the craft spends materially more time at speed than it did when the ramp was called
+sluggish. **Re-drive before reaching for the curve.**
 
 **That pass does not need a sweep, because the ramp has a closed form** (`TuningLog.md` > Tuning the
 ramp to a target time). **A target time maps to a curve arithmetically**, validated to within 1% on
@@ -266,6 +271,23 @@ changes two accepted things at once and neither can then be judged.
 
 **Done looks like:** the owner drives it and judges the fade good. **The acceptance test to preserve:**
 the strafe-to-drive ratio and the drift behaviour both still read as they did.
+
+**STATUS 2026-08-20: built, measured, NOT yet judged in play.** `yawSpeedFade` and
+`boostYawMultiplier` added; **`yawAccel` 15 and `yawDamping` 8 did not move**, so the reopen took the
+form of a multiplier over the existing pair rather than a re-tune of it. Yaw rate at top speed
+106.8 → 53.4 deg/s, a 180 going 1.69s → 3.35s, with low speed unchanged to the decimal. Drift,
+strafe and airborne are all exempt and all three were verified. Full result in `TuningLog.md` >
+Steering that fades with speed.
+
+**Two things the baseline changed about how to read this item.** First, **turning at speed already
+cost 35 m/s in two seconds** — the cost existed, it was just paid after the input instead of being
+visible in it, which is what "too tight" was describing. Second, the fade **gave speed back**: the
+craft now holds 70 m/s two seconds into a corner where it used to be down to 45, because it is no
+longer sliding up to 74 degrees off its own nose.
+
+**The owner's sequencing, 2026-08-20: `0.32` and `0.36` are both BUILT before any playtest, and then
+speed, acceleration and turning are judged together in ONE pass** covering `0.33`, `0.32` and `0.36`.
+Nothing here is closed until that pass happens.
 
 ### 0.36 Left stick X does nothing in drive mode
 

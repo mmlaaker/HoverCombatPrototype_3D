@@ -1,7 +1,45 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v2.0
+/// HoverController_Propulsion v2.1
+///
+/// v2.1: Steering fades with speed. TODO 0.32, two independent testers asking for less
+///       direct control the faster they go. There was no speed term in ApplyTurning at
+///       all: yaw rate measured 106.7 deg/s at 20 m/s and 106.1 at 40, so a 180 took
+///       1.69s at any speed you liked and turn radius simply scaled with velocity.
+///
+///       WHAT THE MEASUREMENT ACTUALLY SHOWED, and it reframed the fix. Full lock entered
+///       at 80 put the craft up to 74 degrees off its own nose and bled 80 m/s down to 45
+///       in two seconds. Turning at speed ALREADY cost enormously -- but it was paid after
+///       the input, in speed nobody chose to lose, while the stick authority never
+///       changed. "Too tight" is that gap. (This is not TuningLog's 0.10 slide, which was
+///       steering plus full brake above top speed; that decision stands.)
+///
+///       yawSpeedFade scales yawAccel and NOT yawDamping, so the nose tops out slower
+///       while the turn stays just as crisp to initiate. Shipped shape: full authority to
+///       half of top speed, 0.5 at top speed. Measured at 80: yaw 106.8 -> 53.4 deg/s,
+///       slip angle 74 -> 53 degrees, and speed carried through the corner 44.6 -> 70.3
+///       m/s at the two-second mark. Low speed is untouched to the decimal.
+///
+///       Read against ACTUAL horizontal speed over the UNBOOSTED topSpeed, which is two
+///       deliberate departures from accelCurve. Not the forward axis, because a slip angle
+///       collapses it mid-corner and would relax the fade inside the very manoeuvre this
+///       governs. Not the boosted cap, because a corner at 100 is harder than one at 80,
+///       and dividing by the boosted cap hands authority back exactly when the craft is
+///       fastest.
+///
+///       boostYawMultiplier extends the fade across the band boost adds, because the curve
+///       is authored over 0..1 and everything above topSpeed was otherwise FLAT: measured
+///       53.3 deg/s at 104 m/s against 53.4 at 80, so the extra 24 m/s cost nothing. Now
+///       45.3 at 104. Driven by SPEED, not by boostLerp, so boosting out of a slow corner
+///       is free and releasing at 95 does not hand the steering straight back.
+///
+///       THREE EXEMPTIONS, all verified rather than asserted. Drift, because it only
+///       exists above minDriftSpeed and an unexempted fade bites hardest inside it --
+///       identical to the failure accelCurve was measured committing in v2.0. Strafe,
+///       because right stick X is AIM yaw there. Airborne, already scaled by
+///       airTurnMultiplier. Drift re-measured identical to two decimals; strafe confirmed
+///       by a matched A/B, 96.6 deg/s in drive against 105.7 in strafe at the same 50 m/s.
 ///
 /// v2.0: Acceleration gets a shape. TODO 0.33, from a playtester who said top speed
 ///       arrived far too quickly. The reason there was nothing to tune is that there was
@@ -1425,12 +1463,81 @@ public class HoverController_Propulsion : MonoBehaviour
         }
 
         float inertiaY      = Mathf.Max(0.001f, rb.inertiaTensor.y);
-        float desiredYawAcc = turn * P.yawAccel * turnScale * effectiveYawMult;
+        float desiredYawAcc = turn * P.yawAccel * turnScale * effectiveYawMult * YawFadeMultiplier(grounded);
 
         float localYawRate  = transform.InverseTransformDirection(rb.angularVelocity).y;
         float dampingTorque = P.yawDamping > 0f ? -localYawRate * P.yawDamping : 0f;
 
         rb.AddRelativeTorque(Vector3.up * ((desiredYawAcc + dampingTorque) * inertiaY), ForceMode.Force);
+    }
+
+    /// <summary>
+    /// THE ONE PLACE steering authority is faded with speed. Returns the fraction of
+    /// yawAccel available at the craft's current speed.
+    ///
+    /// Scales yawAccel and NOT yawDamping, and the difference is the whole feel. Settled
+    /// yaw rate is yawAccel/yawDamping and the response time is 1/yawDamping, so scaling
+    /// only the first lowers the rate the nose tops out at while leaving the turn just as
+    /// crisp to initiate. Scaling both would make it mushy instead of heavy, which is a
+    /// different complaint from the one two testers actually reported.
+    ///
+    /// READ AGAINST ACTUAL SPEED, and deliberately NOT normalised the way accelCurve is.
+    /// accelCurve divides by whichever cap is in force, so boost gets the same shape over
+    /// its own ceiling -- correct there, because that curve is about approaching a
+    /// ceiling. Turning is not: a corner at 100 m/s under boost is harder than one at 80,
+    /// not equally hard, so dividing by the boosted cap would hand back authority exactly
+    /// when the craft is fastest. Normalised against the UNBOOSTED topSpeed and clamped,
+    /// so boosting past it holds the curve's right-hand value.
+    ///
+    /// Horizontal SPEED, not the forward axis. Hard cornering opens a slip angle of up to
+    /// 70 degrees (measured), which collapses the forward axis while the craft is still
+    /// travelling just as fast. Reading the forward axis would relax the fade in the
+    /// middle of the very manoeuvre it exists to govern.
+    ///
+    /// THREE EXEMPTIONS, and the craft keeps today's full authority in all of them:
+    ///   Drift   -- drift only exists above minDriftSpeed, so an unexempted fade bites
+    ///              hardest inside it. That is the same failure accelCurve was measured
+    ///              committing, and drift is judged good and explicitly fenced off.
+    ///   Strafe  -- right stick X is AIM yaw there, not steering. Fading it degrades
+    ///              aiming, which is a separate deferred item.
+    ///   Air     -- already scaled by airTurnMultiplier, and airborne yaw belongs to
+    ///              tricks and air control rather than to driving.
+    /// Blended by MAX rather than by multiplying the two: either one being engaged should
+    /// hand back full authority on its own, and multiplying would leave a half-faded band
+    /// during a strafing drift where neither exemption is complete.
+    /// </summary>
+    private float YawFadeMultiplier(bool grounded)
+    {
+        AnimationCurve curve = P.yawSpeedFade;
+        if (!grounded || curve == null || curve.length == 0)
+            return 1f;
+
+        Vector3 horizVel = rb.linearVelocity;
+        horizVel.y = 0f;
+
+        float fraction = horizVel.magnitude / Mathf.Max(0.01f, P.topSpeed);
+        float faded    = Mathf.Max(0.01f, curve.Evaluate(Mathf.Clamp01(fraction)));
+
+        // Past topSpeed the curve has nothing left to say -- it is authored over 0..1 --
+        // so without this the entire band boost opens up is FLAT. Measured before it
+        // existed: 53.3 deg/s at 104 m/s against 53.4 at 80, i.e. the extra 24 m/s cost
+        // nothing at all. Keep the fade falling across exactly the band boost adds.
+        //
+        // Driven by SPEED, not by boostLerp, and that is deliberate. Gating on the button
+        // would tax boosting out of a corner at half top speed, which is when boost is
+        // supposed to feel good, and would hand the steering back the instant the button
+        // released while the craft was still doing 95. Everything else about this fade is
+        // a pure function of speed and this stays one, which is also what makes authority
+        // return by itself as a corner scrubs speed off.
+        if (fraction > 1f)
+        {
+            float band = Mathf.Max(0.01f, P.boostSpeedMultiplier - 1f);
+            float over = Mathf.Clamp01((fraction - 1f) / band);
+
+            faded *= Mathf.Lerp(1f, P.boostYawMultiplier, over);
+        }
+
+        return Mathf.Lerp(faded, 1f, Mathf.Max(driftLerp, _strafeModeBlend));
     }
 
     // -------------------------------------------------------------------------
