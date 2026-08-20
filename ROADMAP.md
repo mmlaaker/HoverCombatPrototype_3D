@@ -19,13 +19,16 @@ ready to ship. Nothing on this roadmap reaches final art.
 
 > Movement physics and machine gun. Greybox art. Test environment. No enemies. Bare minimum VFX.
 
-**Status: playtested 2026-08-19, scope re-set 2026-08-20.** The test environment, greybox art and the
-machine gun are all in place; the first build runs at 6.07ms with a 0.39ms spread.
+**Status: playtested 2026-08-19, scope re-set 2026-08-20, first of the five closed the same day.** The
+test environment, greybox art and the machine gun are all in place; the first build runs at 6.07ms
+with a 0.39ms spread. **`0.27` is done and judged good, so four remain: `0.33`, `0.32`, `0.36`,
+`0.12`, in that order.**
 
 **The milestone now has a completion criterion rather than a percentage.** The owner's 2026-08-14
 estimate was movement at ~88% wanting ~95%, which was never going to resolve into a decision.
 **PRE-ALPHA 1 is complete when the five Tier 0 items below are built AND judged good in play by the
-owner.** Owner's decision, 2026-08-20.
+owner.** Owner's decision, 2026-08-20. **One of the five is struck; both halves of the bar were met
+the same day it was taken.**
 
 **The scope was expanded deliberately, and bounded just as deliberately.** The four-tester playtest on
 2026-08-19 produced three new movement items. They are in because **they are directly about how the
@@ -39,7 +42,7 @@ owner's working order:
 
 | | |
 |---|---|
-| **0.27** | **SOFT LOCK, and the only item here that can end a session. Five sightings: one instrumented on 2026-08-18, four observed across the 2026-08-19 playtest.** The playtest separated it into two mechanisms that want different fixes. **A:** against a wall or on its side, the hover springs load horizontally and out-torque the righting, so recovery is authorised and simply loses. **B:** `isSlow` reads world-space velocity, so a craft being carried by anything never reads slow and the arm gate never completes. Seen on the rotating platform, but **do not fix it against that platform** — `6.2` deletes it. The case that survives is a downed craft in contact with a moving craft, which BETA guarantees. A dead-man timer is the one fix that closes both |
+| ~~**0.27**~~ | **DONE. Shipped and judged good in play 2026-08-20**, the owner driving both repro cases and unable to get stuck in either. The soft lock is closed and this milestone no longer has an item that can end a session. Outcome in `TuningLog.md` > Closed as 0.27. **The dead-man timer was the right shape and the obvious implementation of it was not:** forcing the righting on and suppressing the hover push are each necessary and neither is sufficient, which only showed up by building half of it and watching a craft sit at 177 degrees for twelve more seconds |
 | **0.33** | Acceleration is flat and top speed arrives in about 0.92s. There is no curve to tune because there is no curve. **Taken before 0.32 on purpose:** it decides how much time a player spends at the speeds 0.32 is judged at |
 | **0.32** | Steering authority does not fade with speed. **Two independent testers.** No speed term exists in the turning code. Partly reopens a judged-good entry, deliberately |
 | **0.36** | Left stick X does nothing in drive mode. **Two testers asked unprompted.** The axis is already read; the trap is that air control uses it for roll, so the push must be grounded-only |

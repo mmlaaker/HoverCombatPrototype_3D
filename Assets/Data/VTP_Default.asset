@@ -45,6 +45,7 @@ MonoBehaviour:
     flipRecoveryTorque: 60
     flipRecoverySpeedThreshold: 2
     flipRecoveryProgressDecay: 1
+    forcedRecoveryLiftRestore: 0.9
     extraGravityMultiplier: 3
     extraFallGravity: 35
     enableHardLanding: 1

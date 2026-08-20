@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.27 · 0.32 · 0.33 · 0.36 |
+| **0** | 0.12 · 0.32 · 0.33 · 0.36 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 · 2.16 · 2.17 · 2.18 · 2.19 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -106,7 +106,13 @@ is what `0.29`'s fixes uncovered once the craft stopped fighting itself.
 **The pre-alpha 1 movement playtest, four testers, 2026-08-19, re-set this list.** The owner's order,
 approved 2026-08-20, is **`0.27`, then `0.33`, then `0.32`, then `0.36`, with `0.12` last.** Those five
 are the whole of Tier 0 and the whole of what stands between here and PRE-ALPHA 1: **the owner's
-completion criterion is those items built AND judged good in play.**
+completion criterion is those items built AND judged good in play.** **`0.27` cleared that bar on
+2026-08-20 and four remain.**
+
+14. ~~**0.27**~~ shipped and **judged good in play 2026-08-20**, the same day it was taken. The owner
+    drove both repro cases and could not get stuck in either. Outcome in `TuningLog.md` > Closed as
+    0.27; the design rules it leaves behind are in `CLAUDE.md` > Modules > Foundation and > Standing
+    Decisions. **The milestone blocker is closed and `0.33` is next.**
 
 **`0.33` deliberately precedes `0.32` even though `0.32` had two independent votes and `0.33` had one.**
 They are the same subsystem, and the acceleration shape decides how much time a player spends at the
@@ -154,95 +160,6 @@ are recorded in `CLAUDE.md` > Standing Decisions, joined 2026-08-16 by boost dri
 turning, drift, and the strafe/drive speed ratio. **Read those before changing anything here:** most
 items below are bounded by something already confirmed to feel right, and those confirmations are the
 acceptance criteria.
-
-### 0.27 SOFT LOCK: righting never finishes, and there are now two ways in
-
-**FIVE SIGHTINGS. One instrumented, four observed.** The 2026-08-18 build run is the only one with a
-trace; the pre-alpha 1 playtest on 2026-08-19 produced four more across four testers, **all diagnosed
-live by the owner watching the runs** rather than from `Player.log`. No markers were dropped, by
-choice. This is the only item in this tier that can end a session and it is the milestone blocker.
-
-**The 2026-08-18 trace, which is still the best evidence for the wall case.** Stuck window t=1135.96
-to t=1206.5 (quit), throughout which: `tilt 91-92 deg`, `speed 0.0`, `support 1.00`, `downed True`,
-every input zero. Immediately before, at t=1117.94, **speed 231.9 m/s** against a `topSpeed` of 80,
-and `MotionTrace` logged the session's hardest collision at **131,477 Ns against `mountainroad`**.
-**It partially righted and then stalled: 107 -> 94 -> 91 degrees, then nothing for 70 seconds.** That
-is the tell. Righting was making progress and stopped.
-
-**There are two distinct mechanisms and they want different fixes.** The playtest is what separated
-them; before it this item described only the first.
-
----
-
-**MECHANISM A: the springs out-torque the righting, against a wall or on the craft's side.** The
-common case, and three or four of the playtest locks were this shape: the craft comes to rest on its
-side or nose-up with a wall or other vertical surface roughly a hover height off the belly.
-
-**The owner's initial reading was that the hover sensors were blocking recovery from firing. They are
-not, and the distinction decides the fix.** The arm gate is `IsContactingGround && isFlipped && isSlow`
-(`HoverController_Foundation.cs:1599`). **`IsHoverGrounded` is not in it** and never was: `CLAUDE.md`
-records that adding an `|| IsHoverGrounded` term was tried and deliberately rejected, because a craft
-on its flank still lands two rays on the floor and the term revoked authority mid-rotation.
-`IsContactingGround` counts walls, so a wall makes arming MORE likely rather than less.
-
-**What the sensors actually do in that pose is push.** With the craft vertical or on its side the rays
-point horizontally into the wall, all four springs load at full authority (`support 1.00` in the
-trace), and that force fights the righting torque to a standstill. **So righting was authorized and
-out-torqued, not unarmed** — which is the question the previous version of this entry left open and
-said needed a repro to settle. Four independent sightings of the same geometry answer it. **A repro
-with the Recovery category on is still worth one run** to confirm `authorized True` directly, but it
-is no longer the thing blocking a fix.
-
-**Why the player could not self-rescue, and this part was always certain:** unstick arms only against
-surfaces within `unstickMaxSurfaceAngle` (60) of horizontal, so a vertical wall is excluded **by
-design** (the exclusion exists so walls and other vehicles are never pushed off). The one recovery
-path that could have applied is switched off in exactly this geometry.
-
-**MECHANISM B: against anything that moves, the arm gate can never complete.** One playtest lock, on
-the rotating platform, and it is not the wall case at all. `isSlow` reads `rb.linearVelocity` in
-**world space** (line 1508). A craft being carried by something is not stationary in that frame even
-when it is perfectly still relative to what it is resting on.
-
-The numbers make this unforgiving: `flipRecoverySpeedThreshold` is **2** m/s, `flipRecoveryDelay` is a
-full **1.0s** of accumulation, and `flipRecoveryProgressDecay` 1 drains the timer whenever the gate
-breaks. **So above 2 m/s of carried speed the timer never completes. Not slowly. Never.**
-
-**Do NOT build a fix aimed at the rotating platform.** Owner, 2026-08-20: the platform is RVP demo
-city content, `6.2` replaces it, and a real arena may well have no such feature. Sizing anything
-against it means measuring a prop that is being deleted.
-
-**The mechanism outlives the platform, and one case is certain rather than speculative.**
-`IsContactingGround` counts other vehicles. **A downed craft resting against a moving craft, or nudged
-while it waits out its 1.0s, fails in exactly this way** — and BETA puts five AI in one arena, so that
-contact is guaranteed. Anything else dynamic in the eventual arena joins it for free.
-
-**This is why the dead-man timer is the recommended fix rather than one of the narrow ones.** It does
-not care which gate failed, so **it closes B without anyone having to decide which moving things the
-real arena will contain.** A platform-relative or contact-relative velocity for `isSlow` is a real
-improvement and may be worth doing later on its own merits, but it is not what unblocks this item.
-
----
-
-**What both have in common, and it is the argument for one fix over three.** In neither case is the
-player trapped by geometry. They are trapped by a recovery that cannot finish, with nothing on screen
-saying why. **The dead-man timer is the only candidate that does not care which gate broke** — force
-righting after N seconds downed with no tilt progress. The narrower options each solve one of the two:
-letting unstick fire against steep surfaces while downed AND stationary addresses A only; a
-contact-relative velocity for `isSlow` addresses B only. They are not exclusive and the timer does
-not make either wrong, but the timer alone closes the item.
-
-**Repro recipes.** A: place the craft vertical or on its side with a wall roughly one hover height off
-the belly and let it settle, or hit `mountainroad` hard enough to be launched. B: land inverted on the
-rotating platform **while it still exists**. After `6.2` the standing repro for B is a downed craft in
-contact with a moving one, which is also the case that matters.
-
-**Done looks like:** a craft cannot remain downed indefinitely, in either geometry.
-
-**Mitigation, in place and proven.** `PlaytestReset` (hold Share) is an unconditional teleport and
-escapes both instantly, and the splash screen names it. **It was never fired during the 70 seconds on
-2026-08-18** (no `RESET 2` in `Player.log`). Hold Share was confirmed working on the pad during the
-2026-08-19 session, so the escape hatch works and the gap is that players under pressure do not reach
-for it.
 
 ### 0.33 Acceleration is flat, and top speed arrives in about nine tenths of a second
 
@@ -1708,6 +1625,7 @@ reused.
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |
 | **0.28** | **2.16**, which carries the whole analysis forward unchanged. **Retired from Tier 0 on 2026-08-20 without anything being built**, because the owner gated it behind a representative arena and an arena is art, which is the sorting rule's own demotion case. **Two findings travelled with it and both argue for the gate:** no tester raised altitude legibility at all across four players and two runs each, against an item that was explicitly filed on the prediction that they would; and the owner's original complaint named the tiled ground and the propless test environment as the cause, so the cue would have been tuned against conditions that will not exist |
 | **0.31** | **5.13**, which carries the three values and their measurements forward unchanged. **Retired from Tier 0 on 2026-08-20 without being judged.** Owner: the aim feel is good enough for now, defer until weapons are further along. Tier 5 rather than Tier 2 because it was always a feel report rather than code, and it now shares 5.12's gate |
+| **0.27** | `TuningLog.md` > Closed as 0.27, for the ablation and the restore sweep; `CLAUDE.md` > Modules > Foundation and > Standing Decisions for the rules it leaves behind; `CLAUDE.md` > Judged good 2026-08-20 for the acceptance table. Shipped and **judged good in play the same day it was taken**, the owner driving both repro cases: unable to get stuck in either. **This item's own framing was right about the mechanisms and wrong about the fix.** It recommended a dead-man timer on the grounds that it "does not care which gate failed", which is true and is exactly why the obvious implementation fails: forcing authority alone does nothing against a wall, where authority was already held and losing, and suppressing the springs alone does nothing when carried, where righting never armed. **Both halves are required and that was only found by running the half-fix and watching it not work.** Two further corrections worth carrying: the leveling torque is not a contributor and was ablated out, and the craft has never been flung by a recovery, a claim that has now cost two sessions and is filed under `CLAUDE.md` > Disproved by measurement with `Measuring.md` trap 45 |
 | **0.34, 0.35, 0.37** | **2.18, 2.17 and 2.19 respectively.** Issued during the pre-alpha 1 playtest intake on 2026-08-19, never written into this file at Tier 0, and **placed straight into Tier 2 on 2026-08-20** by the same sorting rule: 0.35 is gated on the arena, 0.34 and 0.37 on the control scheme being complete. **Listed here anyway so the three numbers are burned**, because they were discussed by number before they were filed and a number that has ever named a thing is never reused |
 
 **The old Tier 4 was a deletion list and is fully executed**, which is why the number was free to reuse for

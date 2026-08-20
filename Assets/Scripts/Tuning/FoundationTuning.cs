@@ -360,6 +360,20 @@ public class FoundationTuning
     [Range(0f, 5f)]
     public float flipRecoveryProgressDecay = 1f;
 
+    [Tooltip("How long the hover push takes to fade back in after the craft has been force-righted " +
+             "out of a soft lock.\n\n" +
+             "Force-righting switches the hover push off, because the springs are what hold a stuck " +
+             "craft in the pose that trapped it. This decides how they come back. Too short and they " +
+             "return as a step while the craft is still low and still beside whatever it was stuck " +
+             "on, which throws it clear instead of setting it down. Too long and the craft drops for " +
+             "a moment before they catch it. It trades a pop upward against how long the hover " +
+             "feels soft after you have control back, and the craft is already resting on the " +
+             "ground throughout, so a longer value does not drop it. Try 0.6 to 1.2.\n\n" +
+             "Moves with: Lift Strength, which sets how big the step would have been, and Extra " +
+             "Gravity Multiplier, which sets how far the craft falls while the push is still weak.")]
+    [Range(0f, 2f)]
+    public float forcedRecoveryLiftRestore = 0.9f;
+
     // -------------------------------------------------------------------------
     // 🌎 Gravity
     // -------------------------------------------------------------------------

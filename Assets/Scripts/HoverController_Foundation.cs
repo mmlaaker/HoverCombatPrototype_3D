@@ -1,7 +1,36 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Foundation v1.9
+/// HoverController_Foundation v2.0
+///
+/// v2.0: Dead-man righting. A craft that has been downed for flipRecoveryDelay and has
+///       then stopped moving is force-righted, and the HOVER PUSH IS SWITCHED OFF while
+///       it turns. Closes both soft locks with one rule, because the rule does not care
+///       which gate failed. Against a wall the sensors cannot tell that wall from ground,
+///       so the springs hold the craft at hover height off it, belly first, which IS the
+///       pose it is stuck in: righting was armed and simply lost, measured frozen at
+///       111.37 deg for 13s with authority held the whole time. Ablation settled the
+///       cause: with levelling off it still stalls at the identical angle, with the
+///       springs off the SAME righting torque finishes in 0.68s. Carried by anything
+///       moving, isSlow reads world velocity, so the arm clock sat at exactly 0.000 and
+///       righting never started at all. NEITHER HALF OF THE FIX WORKS ALONE and that is
+///       the whole design: forcing authority does nothing against the wall, where it was
+///       already authorised, and suppressing the springs does nothing when carried, where
+///       there is no righting to unblock (measured: timer fired, craft sat at 177 deg for
+///       another 12s). Detection asks whether the craft is MOVING, in either direction,
+///       not whether it is getting closer to upright. A 25 m/s wipeout spends two seconds
+///       rolling FURTHER over (88 -> 177 deg) before it settles, and a progress-based test
+///       reads that as stuck and fires two seconds early. Margin is wide rather than
+///       tuned: a stuck craft moves 0.00 deg per window, the quietest window in that
+///       wipeout still swings 5.76 deg, against a 1 deg band. Neither ordinary recovery
+///       path changes; both were re-run and the timer never fires on either.
+///       The hover push FADES back in over forcedRecoveryLiftRestore rather than
+///       returning in one step, which is not a nicety: the step version threw the craft
+///       13m sideways and 4.63m above ride height, an artifact created wholly by
+///       switching the springs off, and the fade takes that to 4.8m and 2.17m against an
+///       ordinary recovery's 0.15m and 1.54m. Deliberately SILENT, owner's call: it
+///       reuses the ordinary righting motion, so announcing it would only tell the
+///       player a rescue system exists.
 ///
 /// v1.9: Hover rays read the SMOOTH surface normal, not the flat triangle normal.
 ///       A raycast reports the normal of whichever TRIANGLE it hit, while the terrain
@@ -133,6 +162,12 @@ using UnityEngine;
 ///   Flip recovery:   chassis touching ground, flipped, and slow. Righting
 ///                    torque rotates it back upright. Longer delay so a flip
 ///                    reads as a real consequence.
+///
+///   Dead-man:        the safety net under flip recovery, for a craft that is
+///                    down and has stopped moving entirely. Forces authority AND
+///                    suppresses the hover push, then eases the push back in.
+///                    Deliberately silent: it reuses the ordinary righting motion,
+///                    so from the seat it is the recovery taking a beat longer.
 ///
 /// Both paths can be suspended via SetRecoveryEnabled(bool) for EMP, scripted
 /// events, or ability hooks.
@@ -307,6 +342,28 @@ public class HoverController_Foundation : MonoBehaviour
     private bool    firedFlashWasFlip;       // which path set the flash (label only)
     private bool    rightingAuthorized;      // true after flip timer threshold; cleared when craft rights
     private bool    recoveryEnabled = true;
+
+    // Dead-man righting. See UpdateForcedRecovery.
+    private float   downedElapsed;           // continuous time spent downed; reset the moment control returns
+    private float   stallWindowElapsed;      // age of the current tilt-movement window
+    private float   stallTiltMin;            // tilt extremes within that window, in degrees
+    private float   stallTiltMax;
+    private bool    forcedRighting;          // dead-man is driving the righting and the hover push is off
+    private float   liftRestoreTimer;        // counts down while the hover push eases back in
+
+    /// <summary>
+    /// How long the craft must show no rotation before the dead-man calls it stuck,
+    /// and how much movement counts as none.
+    ///
+    /// Deliberately constants rather than tuning fields. The owner's rule is that
+    /// flipRecoveryDelay alone decides how punishing a flip is, so a second duration
+    /// on the same subject would be a competing knob for the same feeling. These two
+    /// are a detector, not a feel choice, and the margin is wide enough that there is
+    /// nothing here to tune: a stuck craft moves 0.00 degrees per window while the
+    /// quietest window of a 25 m/s wipeout still swings 5.76.
+    /// </summary>
+    private const float ForcedRecoveryStallWindow = 0.3f;
+    private const float ForcedRecoveryStallBand   = 1f;
     private float   unstickForceTimer;       // counts down while sustained unstick lift is being applied
     private Vector3 unstickForceDir;         // direction cached at trigger time, held for duration
     private float   _effectiveHoverHeight;   // ride height the springs target this tick (lowest of the two below)
@@ -576,6 +633,13 @@ public class HoverController_Foundation : MonoBehaviour
             unstickTimer       = 0f;
             flipTimer          = 0f;
             rightingAuthorized = false;
+
+            // The dead-man clock goes with them. Its whole premise is that the craft has
+            // been helpless for a while with nothing coming; a caller that has just turned
+            // recovery off is stating the opposite, and banked time would let the rescue
+            // fire the instant recovery came back.
+            EndForcedRighting(restoreLift: true);
+            downedElapsed = 0f;
         }
     }
 
@@ -642,6 +706,15 @@ public class HoverController_Foundation : MonoBehaviour
             AirControlClearance    = 0f;
             HasAirControlClearance = false;  // no attitude authority during a freeze
             IsDowned               = false;  // EMP already removes all control
+
+            // A freeze outranks the dead-man: being helpless is the point of an EMP, so
+            // nothing may right the craft through one. Leaving the state set would also
+            // hold the hover push off past the freeze, since nothing in here runs the
+            // spring loop that would clear it. The restore ramp is armed rather than
+            // skipped, so the push returns the same way it does on any other exit.
+            EndForcedRighting(restoreLift: true);
+            downedElapsed = 0f;
+
             return;
         }
 
@@ -653,6 +726,7 @@ public class HoverController_Foundation : MonoBehaviour
         ApplyPitchRollDamping();
         HandleRecovery();
         UpdateDownedState();
+        UpdateForcedRecovery();       // after UpdateDownedState: reads this tick's IsDowned
         ApplyUnstickForce();
     }
 
@@ -938,6 +1012,26 @@ public class HoverController_Foundation : MonoBehaviour
         {
             float progress = hardLandingTimer / Mathf.Max(0.01f, F.hardLandingSuppressDuration);
             liftFactor = 1f - F.hardLandingSuppressStrength * hardLandingSeverity * progress;
+        }
+
+        // Dead-man righting: the hover push is what holds a stuck craft in the pose that
+        // trapped it, so it is off entirely while the forced righting turns the craft and
+        // fades back in afterwards. Folded into liftFactor rather than applied separately
+        // because all spring scaling belongs at one multiplication site; two would be two
+        // authorities on one value, which is the mistake this file is built to avoid.
+        //
+        // One tick behind by construction: forcedRighting is written by UpdateForcedRecovery
+        // at the END of FixedUpdate and read here at the start of the next one. That is 10ms
+        // against a stall that has already lasted over a second, and the same accepted lag
+        // as _lastGroundNormal above.
+        if (forcedRighting)
+        {
+            liftFactor = 0f;
+        }
+        else if (liftRestoreTimer > 0f)
+        {
+            liftRestoreTimer = Mathf.Max(0f, liftRestoreTimer - Time.fixedDeltaTime);
+            liftFactor *= 1f - liftRestoreTimer / Mathf.Max(0.01f, F.forcedRecoveryLiftRestore);
         }
 
         // Total downward acceleration the springs have to hold against: Unity's own
@@ -1644,9 +1738,21 @@ public class HoverController_Foundation : MonoBehaviour
     ///   Latch term (rightingAuthorized): holds the lockout through the rest of
     ///   the recovery even after ground contact is lost. Load-bearing: as the
     ///   righting torque swings the craft back through ~82 degrees the hover
-    ///   springs re-acquire and fling it clear of the ground, and without this
-    ///   term the lockout released mid-flip at 137 degrees of tilt and handed
-    ///   back both air control and the air jump. Authority is only revoked when
+    ///   springs re-acquire and LIFT THE CRAFT BACK TO RIDE HEIGHT, which breaks
+    ///   ground contact, and without this term the lockout released mid-flip at
+    ///   137 degrees of tilt and handed back both air control and the air jump.
+    ///
+    ///   THE CRAFT IS NOT FLUNG AND NEVER WAS. This comment said "fling it clear
+    ///   of the ground" and that wording has now sent two sessions hunting a
+    ///   launch that does not exist. The craft rises about 5m from lying on its
+    ///   hull to its ride height and travels 0.15m horizontally, so a speed
+    ///   reading peaks near 20 m/s while the craft goes essentially straight up
+    ///   and stays put. Speed magnitude cannot tell standing back up apart from
+    ///   being thrown; measure DISPLACEMENT before ever calling this a launch.
+    ///   Owner, twice, having played it: it flips over basically right where it
+    ///   is. See Measuring.md trap 45 and CLAUDE.md > Disproved by measurement.
+    ///
+    ///   Authority is only revoked when
     ///   tilt falls under flipRecoveryReleaseAngle (35), NOT flipRecoveryAngleThreshold
     ///   (80), which is only what ARMS the lockout. The two are deliberately
     ///   different and the gap is large. Measured 2026-08-17: control returns
@@ -1670,6 +1776,131 @@ public class HoverController_Foundation : MonoBehaviour
                             && Vector3.Angle(transform.up, Vector3.up) >= F.flipRecoveryAngleThreshold;
 
         IsDowned = recoveryEnabled && (rightingAuthorized || restingInverted);
+    }
+
+    // -------------------------------------------------------------------------
+    // ⏱️ Dead-Man Righting (the safety net under flip recovery)
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// Rescues a craft that is down and has stopped moving, whatever stopped it.
+    ///
+    /// There are two ways to end up here and they fail in OPPOSITE directions, which
+    /// is why one rule covers both and why the rule ignores the arming gates entirely.
+    /// Against a wall, righting arms normally and then loses: the sensors cannot tell
+    /// a wall from ground, so the springs hold the craft at hover height off it, belly
+    /// first, which is precisely the pose it is stuck in. Righting is not fighting an
+    /// obstacle, it is fighting a servo that re-corrects every tick, and it loses
+    /// permanently. Carried by anything that moves, isSlow reads WORLD velocity, so a
+    /// craft sitting perfectly still on a moving thing never reads slow and the arm
+    /// clock never completes at all.
+    ///
+    /// BOTH HALVES OF THE FIX ARE REQUIRED AND NEITHER IS SUFFICIENT. Forcing authority
+    /// does nothing against a wall, where authority was already held and losing.
+    /// Suppressing the springs does nothing when carried, where there is no righting to
+    /// unblock; that was run and the craft sat there for another twelve seconds. Do not
+    /// "simplify" this to one of them.
+    ///
+    /// DETECTION ASKS WHETHER THE CRAFT IS MOVING, NOT WHETHER IT IS IMPROVING, and the
+    /// difference is the whole reason the ordinary paths survive. A fast wipeout spends
+    /// about two seconds rolling FURTHER over before it settles, so "no progress toward
+    /// upright" describes an ordinary crash just as well as a stuck craft and fires two
+    /// seconds early on one. Tilt movement in either direction separates them with room
+    /// to spare.
+    ///
+    /// Timing follows the owner's rule that flipRecoveryDelay is the single knob for how
+    /// punishing a flip is: the craft must be down that long, and then everything else
+    /// happens as fast as it can be told apart from a recovery that is working.
+    /// </summary>
+    private void UpdateForcedRecovery()
+    {
+        if (!recoveryEnabled)
+        {
+            EndForcedRighting(restoreLift: forcedRighting);
+            downedElapsed = 0f;
+            return;
+        }
+
+        float tiltAngle = Vector3.Angle(transform.up, Vector3.up);
+
+        if (forcedRighting)
+        {
+            // Hands back at the same attitude the ordinary righting hands back at, so
+            // there is one release angle in this file rather than two that can drift
+            // apart. Min() guards the same crossed-tuning case HandleRecovery does.
+            if (tiltAngle < Mathf.Min(F.flipRecoveryReleaseAngle, F.flipRecoveryArmAngle))
+                EndForcedRighting(restoreLift: true);
+            else
+                rightingAuthorized = true;
+
+            return;
+        }
+
+        if (!IsDowned)
+        {
+            downedElapsed = 0f;
+            ResetStallWindow(tiltAngle);
+            return;
+        }
+
+        downedElapsed      += Time.fixedDeltaTime;
+        stallWindowElapsed += Time.fixedDeltaTime;
+
+        if (tiltAngle < stallTiltMin) stallTiltMin = tiltAngle;
+        if (tiltAngle > stallTiltMax) stallTiltMax = tiltAngle;
+
+        if (stallWindowElapsed < ForcedRecoveryStallWindow)
+            return;
+
+        bool motionless = stallTiltMax - stallTiltMin < ForcedRecoveryStallBand;
+        ResetStallWindow(tiltAngle);
+
+        if (!motionless || downedElapsed < F.flipRecoveryDelay)
+            return;
+
+        forcedRighting     = true;
+        rightingAuthorized = true;
+
+        unstickFiredFlashTimer = 0.5f;
+        firedFlashWasFlip      = true;
+
+        if (ShouldDrawDebug)
+            Debug.DrawRay(transform.position, Vector3.up * 3f, Color.red);
+    }
+
+    /// <summary>
+    /// Leaves the forced state and starts the hover push easing back in.
+    ///
+    /// The push has to come back GRADUALLY, and this is not politeness. Restoring it in
+    /// one step puts full spring authority under a craft that is still low and still
+    /// beside whatever trapped it, and it launches: 13m of horizontal travel and 4.63m
+    /// of overshoot above ride height, against the 0.15m and 1.54m an ordinary recovery
+    /// produces. That launch was manufactured entirely by switching the springs off and
+    /// back on, so it is this method's job to not create it. At the shipped restore the
+    /// same case gives 4.8m and 2.17m.
+    ///
+    /// Overshoot falls monotonically as the restore lengthens (4.63 / 4.45 / 3.31 / 2.17
+    /// / 1.12m at 0 / 0.3 / 0.6 / 0.9 / 1.4s), so the value is NOT bounded by the craft
+    /// dropping while the push is weak, which was the expected trade and does not exist:
+    /// the craft is resting on the ground throughout and its lowest point barely moves.
+    /// What actually bounds it is that control returns before the restore finishes, so a
+    /// long one hands the player a craft whose hover is still soft.
+    /// </summary>
+    private void EndForcedRighting(bool restoreLift)
+    {
+        if (!forcedRighting)
+            return;
+
+        forcedRighting = false;
+
+        if (restoreLift)
+            liftRestoreTimer = F.forcedRecoveryLiftRestore;
+    }
+
+    private void ResetStallWindow(float tiltAngle)
+    {
+        stallWindowElapsed = 0f;
+        stallTiltMin       = tiltAngle;
+        stallTiltMax       = tiltAngle;
     }
 
     // -------------------------------------------------------------------------
@@ -1807,14 +2038,22 @@ public class HoverController_Foundation : MonoBehaviour
                 // once authority is held, and that label sent a whole debugging
                 // session after the wrong condition. The gates below describe
                 // only what is stopping the timer from ARMING.
+                // The dead-man outranks authority for the same reason authority
+                // outranks the arming gates: once it is driving, every gate below
+                // it is describing something that is no longer deciding anything.
+                // It also has to be visually distinct from an ordinary righting,
+                // because the two look identical in the game and the whole question
+                // when this readout is open is which one you are watching.
                 string blocker =
-                      rightingAuthorized ? "RIGHTING"
+                      forcedRighting     ? "FORCE-RIGHTING (hover push off)"
+                    : rightingAuthorized ? "RIGHTING"
                     : !contactNow  ? "BLOCKED: no ground contact"
                     : !flippedNow  ? "BLOCKED: tilt below threshold"
                     : !slowNow     ? "BLOCKED: moving too fast"
                     : "counting up";
 
-                UnityEditor.Handles.color = rightingAuthorized ? Color.magenta
+                UnityEditor.Handles.color = forcedRighting ? Color.cyan
+                                          : rightingAuthorized ? Color.magenta
                                           : (contactNow && flippedNow && slowNow) ? new Color(1f, 0.6f, 0f)
                                           : Color.red;
                 UnityEditor.Handles.Label(
@@ -1827,7 +2066,15 @@ public class HoverController_Foundation : MonoBehaviour
                     $"FLIP {flipTimer:F2}/{F.flipRecoveryDelay:F2}s  {blocker}\n" +
                     $"  tilt {tiltNow:F1}deg (arm at {F.flipRecoveryArmAngle:F1}, downed at {F.flipRecoveryAngleThreshold:F1})\n" +
                     $"  speed {speedNow:F2} (need < {F.flipRecoverySpeedThreshold:F2})\n" +
-                    $"  contact {contactNow}   hoverGrounded {IsHoverGrounded}   authorized {rightingAuthorized}   downed {IsDowned}"
+                    $"  contact {contactNow}   hoverGrounded {IsHoverGrounded}   authorized {rightingAuthorized}   downed {IsDowned}\n" +
+                    // Every dead-man gate with its live value, same rule as the
+                    // arming gates above. "swing" is the one that decides, and it
+                    // is the one with no threshold in the inspector to check it
+                    // against, so it has to print its own.
+                    $"  DEADMAN down {downedElapsed:F2}/{F.flipRecoveryDelay:F2}s   " +
+                    $"still {stallWindowElapsed:F2}/{ForcedRecoveryStallWindow:F2}s   " +
+                    $"swing {stallTiltMax - stallTiltMin:F2}deg (stuck under {ForcedRecoveryStallBand:F2})" +
+                    (liftRestoreTimer > 0f ? $"\n  hover push easing back in, {liftRestoreTimer:F2}s left" : "")
                 );
             }
         }

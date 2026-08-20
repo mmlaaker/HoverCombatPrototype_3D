@@ -251,6 +251,69 @@ sufficient test here, exactly as it was not for the release-angle equilibrium.
 
 ---
 
+#### Closed as 0.27: the dead-man righting, and the one number it added
+
+*Shipped and judged good in play 2026-08-20. `forcedRecoveryLiftRestore` added at 0.9. Nothing else
+moved: the asset diff is one line. Measured against the arena's own wall at x=277.4 with flat ground
+running up to it, and against a scripted moving platform standing in for the case that outlives
+`6.2`.*
+
+**The mechanism was settled by ablation, not by argument, and the intuitive answer lost.** With the
+craft on its side a hover height off a wall, righting arms normally and then stalls at 111.37 degrees
+for as long as you care to watch, with authority held the whole time. Two candidates: the springs
+loading horizontally, or the leveling torque treating the wall normal as "level" and holding the
+craft in the pose. A 2x2 killed the second one outright.
+
+| springs | leveling | outcome |
+|---|---|---|
+| 16 | 12 | stuck at 111.37 deg indefinitely |
+| 16 | **0** | stuck at 111.37 deg indefinitely, identical |
+| **0** | 12 | rights in **0.68s** |
+
+**Leveling contributes nothing and should not be reopened.** The hover push is the whole of it.
+
+**The half of the fix that nearly shipped alone.** Suppressing the springs closes the wall case
+completely and does **nothing** for the carried case: run against a platform at 4 m/s, the timer
+fired on schedule and the craft sat at 177 degrees for another twelve seconds, because there the
+righting had never armed and there was nothing to unblock. Forcing authority has the mirror problem
+against the wall, where authority was already held and losing. **Both halves, always.**
+
+**Why the detector asks about movement rather than progress**, which is the least obvious decision
+here. A 25 m/s wipeout spends its first two seconds rolling FURTHER over, 88 -> 177 degrees, before
+it settles onto its roof. "No progress toward upright" describes that perfectly, so the first version
+fired at 1.20s against a real control handback at 3.40s and would have gutted the high-speed
+punishment. Tilt movement in either direction separates them with room to spare: **0.00 degrees per
+0.3s window on a stuck craft, against 5.76 in the quietest window of that wipeout**, on a 1 degree
+band.
+
+**The restore sweep, and the trade is not the one that was predicted.** Suppressing the springs means
+restoring them, and restoring them in one step is the only thing in this project that has genuinely
+launched the craft.
+
+| fade-in | rise above ride height | horizontal travel |
+|---|---|---|
+| instant | 4.63m | 13.14m |
+| 0.3s | 4.45m | 4.58m |
+| 0.6s | 3.31m | 4.50m |
+| **0.9s (shipped)** | **2.17m** | **4.77m** |
+| 1.4s | 1.12m | 3.28m |
+
+For scale, an ordinary recovery rises 1.54m and travels 0.15m.
+
+**The expected bound was that a long fade would drop the craft while the springs were weak. It does
+not exist.** The craft is resting on the ground throughout and its lowest point moves 0.85m across
+the entire sweep. **What actually bounds it is that control returns before the fade finishes**
+(2.82s against a fade still running to ~3.7s), so a long value hands the player a craft whose hover
+is still soft. 0.9 puts the rise within touching distance of an ordinary recovery without much of a
+soft tail. **Nothing here is knife-edge; move it if it feels wrong.**
+
+**A process note worth more than the number.** The value was set to 0.9 in the C# initialiser,
+recompiled, and the game kept behaving at 0.6, because the loaded `VTP_Default` had already baked the
+old default into memory and survived the domain reload with it. A fresh instance read 0.9 while the
+live one served 0.6, and the asset file contained neither. **That is `Measuring.md` trap 21 with the
+serialised copy being the in-memory one rather than the file**, and it is why the value now lives
+explicitly in the asset and why every measurement was re-run after it was caught.
+
 #### Closed as 0.18: the arming clock now decays instead of resetting
 
 *Shipped 2026-08-17. `flipRecoveryProgressDecay` added at 1, `flipRecoverySpeedThreshold` left at 2.*

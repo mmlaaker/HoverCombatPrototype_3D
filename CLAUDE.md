@@ -175,8 +175,8 @@ Format is **Does** (current responsibility), **Public** (the surface other modul
 ### `HoverController_Foundation.cs`
 
 **Does.** Spring-damper hover lift with gravity feedforward, so the spring corrects error only instead
-of also holding the craft up. Leveling torque as the single attitude authority. Two-path recovery
-(upright-stuck unstick, and flip righting). Air control torque on behalf of Propulsion. Asymmetric
+of also holding the craft up. Leveling torque as the single attitude authority. Three-path recovery
+(upright-stuck unstick, flip righting, and the dead-man righting that backstops it). Air control torque on behalf of Propulsion. Asymmetric
 gravity (generous on the rise, decisive on the fall). Ceiling duck and charge squat, min-combined into
 one ride-height target. Hard-landing spring give. Hover
 rays read the interpolated smooth surface normal, not the flat triangle normal, and are cast from
@@ -189,9 +189,10 @@ rather than to the ground, so terrain does not steer the gun.
 
 **Constraints.**
 
-- **Do not modify without explicit justification.** Modified 2026-08-17 on the owner's report that
-  aiming sank the craft into the terrain and it scraped. There is no queued justification now; the
-  next change needs a new one.
+- **Do not modify without explicit justification.** Last modified 2026-08-20 to close `0.27`, the
+  soft lock, which was the milestone blocker and had five sightings. Before that, 2026-08-17 on the
+  owner's report that aiming sank the craft into the terrain. There is no queued justification now;
+  the next change needs a new one.
 - **Leveling torque is the SINGLE attitude authority.** Nothing else may apply pitch or roll torque.
   Propulsion hands over intent; it never applies the torque itself.
 - **The hover sensors are placed, pointed and loaded as if the craft were NOT aiming**, and every
@@ -268,6 +269,26 @@ rather than to the ground, so terrain does not steer the gun.
   parks the craft in a hover-supported equilibrium at ~78 degrees.
 - **Recovery disarm is on attitude only.** Adding an `|| IsHoverGrounded` term revokes authority
   mid-rotation, because a craft on its flank still lands two rays on the floor.
+- **THE DEAD-MAN RIGHTING NEEDS BOTH OF ITS HALVES AND NEITHER IS SUFFICIENT.** It forces
+  `rightingAuthorized` AND suppresses the hover push, and each half closes a different soft lock.
+  Against a wall righting was already authorized and losing, so forcing authority changes nothing;
+  carried by something moving the righting never armed at all, so suppressing the springs unblocks
+  nothing (measured: the timer fired and the craft sat at 177 degrees for another twelve seconds).
+  **Do not simplify it to one of them.**
+- **Its detector asks whether the craft is MOVING, not whether it is improving**, and that is what
+  keeps ordinary recoveries out of it. A fast wipeout spends about two seconds rolling FURTHER over
+  before it settles, so a progress-based test reads an ordinary crash as stuck and fires ~2s early.
+  The margin is wide rather than tuned: a stuck craft moves 0.00 degrees per window against a
+  1 degree band, while the quietest window of a 25 m/s wipeout still swings 5.76.
+- **The hover push FADES back in over `forcedRecoveryLiftRestore`; it must never be restored in one
+  step.** The step version is the only thing in this project that has ever genuinely launched the
+  craft: 13m sideways and 4.63m above ride height, entirely manufactured by switching the springs off
+  and back on. **The limit on the value is not the craft dropping** (it rests on the ground
+  throughout), it is that control returns before the fade finishes, so a long one hands the player
+  soft hover.
+- **Its window and band are `const`, deliberately, and should not become tuning fields.** The owner's
+  rule is that `flipRecoveryDelay` alone prices a flip; a second duration on the same subject would
+  be a competing knob for one feeling. They are a detector, not a feel choice.
 - **Unstick arms only while vertically settled, and only against surfaces within
   `unstickMaxSurfaceAngle` of horizontal**, so belly scrapes get no pulse trains and walls and other
   vehicles are never pushed off.
@@ -826,6 +847,7 @@ is stable and never reused.**
 | 42 | A recorded-but-never-run mechanism needs the third arm: the case that is fine AND shares an ingredient with the bad one |
 | 43 | Reconstructing a loop from outside it is not measuring it; when the reconstruction disagrees with observed motion, the reconstruction is wrong |
 | 44 | `ForceMode.Acceleration` on `AddTorque` is a direct angular acceleration and does NOT go through the inertia tensor. Calibrate units before theorising |
+| 45 | A magnitude that discards direction describes the wrong event. Speed called a flip recovery a "fling" twice; displacement is the honest instrument |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
@@ -901,6 +923,20 @@ rediscovery of the thing that prompted it.
   time, which reads as punishment. **Do not lower `flipRecoveryTorque`** for the same purpose, which
   just makes righting look sluggish, and **do not raise `flipRecoveryReleaseAngle` toward the arm
   angle**, which reintroduces the ~78 degree equilibrium stall.
+- **`flipRecoveryDelay` IS THE ONLY KNOB THAT PRICES A FLIP, and that is now a design rule rather
+  than a description.** Owner, 2026-08-20, setting the dead-man's timing: every other stage of getting
+  the player back on their wheels happens as fast as it can be told apart from a recovery that is
+  working, so lengthening or shortening the helpless period is one number. **Anything added to this
+  area later must not introduce a second duration on the same subject.**
+- **A HOVER SENSOR CANNOT TELL A WALL FROM A FLOOR, and that is the root of the wall soft lock rather
+  than anything in the recovery code.** With the craft on its side the rays point horizontally, the
+  springs hold it at hover height off the wall belly-first, and that pose IS the pose it is stuck in,
+  so righting is not fighting an obstacle but a servo that re-corrects every tick. Measured frozen at
+  111.37 degrees for thirteen seconds with authority held throughout. **Ablation settled it and the
+  intuitive answer was wrong:** with leveling torque off it stalls at the identical angle, with the
+  springs off the same righting torque finishes in 0.68s. **The leveling torque is not a contributor,
+  so do not re-open it.** A contact-relative velocity for `isSlow` remains a real improvement on its
+  own merits and is not needed for this.
 - **The `strafeAccel / lateralDamp` relationship is NOT an invariant. Do not add a check for it.** Drag
   now damps lateral velocity minus intended strafe velocity, so it contributes exactly zero at the cap
   and the cap is reachable regardless of that ratio. This was flagged as a live invariant once and
@@ -1094,6 +1130,30 @@ the owner's hands**, and it is why they are recorded as criteria rather than as 
   Give it a second run before it is written down as a defect, and weight the complaints that survive
   contact over the ones that arrive with it.
 
+### Judged good 2026-08-20
+
+- **THE SOFT LOCK IS CLOSED, judged by the owner driving both repro cases.** Owner: unable to get
+  stuck in either. That closes `TODO.md` 0.27, the only item in the project that could end a session.
+  **What this bounds is the whole dead-man design** (module constraints above): both halves of the
+  fix, the movement-based detector, the faded restore, and the choice to say nothing to the player.
+  Measured alongside the verdict, and these are the numbers a regression would move:
+
+  | case | rescue fires | helpless for | rise above ride height |
+  |---|---|---|---|
+  | stuck against a wall | 2.18s | 2.80s | 2.16m |
+  | carried at 4 and 8 m/s | 1.34s | 2.09s | 2.46 / 2.50m |
+  | ordinary recovery, two entries | **never** | 1.80 / 1.95s | 1.54 / 1.76m |
+  | five wipeouts, 20 to 35 m/s | **never on any** | 0.01s to 3.63s | 1.09 to 1.79m |
+
+  **The acceptance criterion is the "never" column, not the fires column.** Both ordinary recovery
+  paths are untouched and two of those wipeouts kept the craft down for over 3.4 seconds without the
+  rescue looking at them twice. **A change that makes the dead-man fire during an ordinary recovery
+  is a regression even if every soft lock stays closed.**
+- **The rescue is SILENT and that is a decision, not an omission.** Owner's call, 2026-08-20, taken
+  with the options on the table (HUD line, camera kick, rumble, sound). It reuses the ordinary
+  righting motion, so from the seat it is the recovery taking a beat longer; announcing it would only
+  tell the player a rescue system exists. **Do not add a cue for it without a play report asking.**
+
 ### Trick economy
 
 - **Revolutions are COMPLETED, never accumulated travel**, and bank on the crossing, so a counter-rotation
@@ -1242,6 +1302,16 @@ session being spent re-deriving a dead end.
   The proxy moves exactly 0.000 degrees while air control is held; zero single-frame yaw jumps over 15
   degrees exist in the run.
 - **The convex hull on `car.fbx`** as the cause of unattributed floor contacts. They were hard landings.
+- **THE CRAFT BEING FLUNG OR LAUNCHED BY A FLIP RECOVERY. It is not, it never has been, and this has
+  now cost two sessions.** Corrected by the owner on play evidence on 2026-08-17 and again on
+  2026-08-20, both times against an assistant's confident number. A recovery moves the craft **0.15m
+  horizontally** while it rises about 5m from lying on its hull back to ride height, so a speed
+  readout peaks near 20 m/s describing a craft that goes straight up and stays where it fell. Owner,
+  both times: it flips over basically right where it is. **The error is the instrument, not the
+  tuning** — speed magnitude cannot separate standing back up from being thrown, so measure
+  displacement (`Measuring.md` trap 45). The wording that kept regenerating this lived in a code
+  comment and has been corrected at source. **A genuine launch on recovery would be new behaviour and
+  a real defect**, so do not dismiss one; just prove it with displacement before naming it.
 
 **One camera theory is UNPROVEN rather than disproved, and the distinction matters:** `SmartUpdate` on
 the brain against a rig whose Follow is a plain script-driven Transform and whose LookAt is an
