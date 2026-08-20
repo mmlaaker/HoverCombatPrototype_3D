@@ -19,60 +19,57 @@ ready to ship. Nothing on this roadmap reaches final art.
 
 > Movement physics and machine gun. Greybox art. Test environment. No enemies. Bare minimum VFX.
 
-**Status: essentially reached.** Movement was judged good on 2026-08-14 (see `CLAUDE.md`, the
-movement pass is accepted); the test environment, greybox art and the machine gun are all in place;
-the first build runs at 6.07ms with a 0.39ms spread.
+**Status: playtested 2026-08-19, scope re-set 2026-08-20.** The test environment, greybox art and the
+machine gun are all in place; the first build runs at 6.07ms with a 0.39ms spread.
 
-Remaining, and the owner's own framing is "a few minor things":
+**The milestone now has a completion criterion rather than a percentage.** The owner's 2026-08-14
+estimate was movement at ~88% wanting ~95%, which was never going to resolve into a decision.
+**PRE-ALPHA 1 is complete when the five Tier 0 items below are built AND judged good in play by the
+owner.** Owner's decision, 2026-08-20.
 
-The owner's own estimate 2026-08-14 is **movement at ~88%, wanting ~95% before calling this done.**
-What stands in the way:
+**The scope was expanded deliberately, and bounded just as deliberately.** The four-tester playtest on
+2026-08-19 produced three new movement items. They are in because **they are directly about how the
+craft moves**, which is this milestone's subject. Everything else the playtest produced was deferred
+rather than absorbed: the camera and altitude items behind a representative arena, the control-scheme
+items behind a complete control set, and two design questions filed with no action. **This is a scope
+expansion of exactly three items and it is not an invitation to a fourth.**
 
-**`TODO.md` Tier 0 IS this milestone's work list**, since the 2026-08-16 re-tiering put movement and
-camera in the top tier. Every row below is a Tier 0 item.
+**`TODO.md` Tier 0 IS this milestone's work list, and the two are now the same five numbers.** In the
+owner's working order:
 
 | | |
 |---|---|
-| **0.27** | **SOFT LOCK, opened 2026-08-18 and this milestone's only blocker.** The craft parks nose-up against a wall at ~91 degrees, hover-supported, and righting never finishes. Observed in a build, 70 seconds stuck, owner quit rather than escaping. Unstick is switched off against vertical surfaces by design, so the one self-rescue path does not apply |
-| **0.12** | a sliver of bumper still clips on the pitch-up. **Largely resolved** by `minFrameMargin` 5 and accepted by the owner, but **confirmed still present 2026-08-17** after four separate drive-camera changes |
+| **0.27** | **SOFT LOCK, and the only item here that can end a session. Five sightings: one instrumented on 2026-08-18, four observed across the 2026-08-19 playtest.** The playtest separated it into two mechanisms that want different fixes. **A:** against a wall or on its side, the hover springs load horizontally and out-torque the righting, so recovery is authorised and simply loses. **B:** `isSlow` reads world-space velocity, so a craft being carried by anything never reads slow and the arm gate never completes. Seen on the rotating platform, but **do not fix it against that platform** — `6.2` deletes it. The case that survives is a downed craft in contact with a moving craft, which BETA guarantees. A dead-man timer is the one fix that closes both |
+| **0.33** | Acceleration is flat and top speed arrives in about 0.92s. There is no curve to tune because there is no curve. **Taken before 0.32 on purpose:** it decides how much time a player spends at the speeds 0.32 is judged at |
+| **0.32** | Steering authority does not fade with speed. **Two independent testers.** No speed term exists in the turning code. Partly reopens a judged-good entry, deliberately |
+| **0.36** | Left stick X does nothing in drive mode. **Two testers asked unprompted.** The axis is already read; the trap is that air control uses it for roll, so the push must be grounded-only |
+| **0.12** | A sliver of bumper still clips on the pitch-up. **Last, and still an accepted residual rather than a blocker.** Confirmed present 2026-08-17 after four separate drive-camera changes |
 
-**Tier 0 had been down to `0.12` alone, an accepted residual rather than a blocker. `0.27` reopened
-it on 2026-08-18** and is a different class of thing: a soft lock that ends a session, found in a
-build during a 20 minute run. It is the first genuine blocker this milestone has carried in weeks.
+**What the playtest confirmed, and it is the larger half of the result.** Four testers who had never
+played judged the hover read, drive mode, the twin-stick scheme and the learning curve all good, and
+all four improved sharply in a second run they asked for. Recorded as acceptance criteria in
+`CLAUDE.md` > Judged good in the pre-alpha 1 playtest. **A change that degrades one of those is a
+regression even if it closes an item above.**
 
-Everything else on this milestone's list is closed. The charge squat was the last item that changed
-how movement reads, and it is built but **not yet judged in play** — that judgement is still a gate,
-alongside `0.27`.
+**Deferred out of this milestone by the owner on 2026-08-20**, all renumbered out of Tier 0 by the
+sorting rule: **2.16** (altitude cue, was 0.28) and **2.17** (a more active camera) behind a
+representative arena; **2.18** (binding ergonomics) and **2.19** (teaching air control and tricks)
+behind a complete control set; **5.13** (aim feel, was 0.31) behind weapons. **5.14** and **5.15** are
+filed as feedback with no action. See `TODO.md` > Retired numbers for what each number became.
 
-**Closed since this list was written**, all 2026-08-17 unless noted: `0.15` (never a defect, a
-deliberate playtest scoping decision), `0.17` (boost drive mode judged good; residual became `0.20`),
-`0.22` (aiming moved the craft), `0.14` (framing shipped for pre-alpha 1; the revisit is deferred to
-`5.12`), `0.23` (**a suppression bug rather than a missing cue**, and no cue was built), `5.10`
-(**wall jumping already works**, confirmed in play), `0.20` (**the mechanism the tracker had recorded
-was wrong**; the cause was the look-ahead, not the speed gate), `0.24` (**retired without being
-built**, deferred behind the thruster replacement as `2.14`), and `0.16` (**retired without being
-judged**; the scoping that hides it is intentional and confirmed, successor `2.15`), and `0.26`
-(**opened and closed the same session**: the boost camera stepped on and off whenever travel speed
-crossed zero), `0.19` (**three preview states that break the nose-follows-travel assumption**, so the class of bug that cost two playtests is now visible in the inspector), `0.13` (**the camera now hands the player the stick while downed**, judged good; the handback was closed on play evidence), `0.18` (**the speed threshold was never the defect**: the arming clock reset to zero instead of decaying, which cost 0.78s on a wipeout), `0.25` (**the ride height is now the charge meter**; the owner ruled the squat expresses the charge
-rather than storing it, which the measurements showed was the difference between a jump that keeps
-its tuned arc and one silently 4.9% taller), and `0.21` (`extraFallGravity` 30 -> 35, **judged good in play the same day**; the
-hard-landing framing this milestone carried was the wrong headline, and the real cost is the
-barrel-roll landing margin). See `TODO.md` > Retired numbers.
+**Also worth doing during the next long run, though it gates nothing: 4.4**, now narrowed to
+allocation under sustained weapon fire alone. **Its marker half closed 2026-08-20** — the marker key
+and the pad are both confirmed working in a build, which also retired the standing worry that
+`PlaytestSession` had never been driven by a physical button.
+
+Closed on 2026-08-15: the trick energy economy, built and judged good in one session. Everything else
+this milestone carried was closed across 2026-08-17 and 2026-08-19; the full list and where each
+outcome went is in `TODO.md` > Retired numbers.
 
 **`0.21` carries its own regression test**, which is unusual and is recorded in `CLAUDE.md` > Judged
 good: the owner accepted the value on the condition that two barrel rolls still land. That makes the
 trick margin, not the hard landing, the thing to re-check after anything that touches fall gravity,
-roll rate or jump impulse.
-
-Also worth doing during the next long run, though it gates nothing: **4.4**, confirm the marker key
-works in a build and measure allocation under sustained fire.
-
-Closed on 2026-08-15: the trick energy economy, built and judged good in one session. That was the
-last open item that changes how movement PLAYS rather than how it behaves.
-
-Deferred out of this milestone by the owner: **2.11** (boost presentation FX, blocked on the general
-VFX pass) and **5.11** (strafe camping) both move to PRE-ALPHA 2. The second is principled: it asks
-whether players camp under combat pressure, and there is no combat until `1.3`.
+roll rate or jump impulse. **0.33 and 0.32 both qualify**, so re-run it after each.
 
 Note the AI already exceeds this milestone's bar: it drives, roams, flees and shoots, where
 PRE-ALPHA 1 asks for no enemies at all.
@@ -98,7 +95,7 @@ The step is **weapon physics** and **a target worth hitting**. The AI punching b
 | **2.13** | charge jump wind-up VFX, energy gathering under the craft. **The movement half shipped as `0.25`**, and hands this a hard constraint: the squat must not add impulse, so the discharge has to read as release without pushing |
 | **2.14** | thruster VFX and the boost camera fall out of step on release, measured at 2.2x. Deferred here 2026-08-17 because the thrusters it targets are placeholder; succeeds `0.24` |
 | **5.11** | whether players camp in strafe. Unanswerable until `1.3` gives combat something to pressure with |
-| **5.12** | revisit the aim framing once there is something to aim at. Succeeds `0.14`, same reasoning as `5.11` |
+| **5.12**, **5.13** | revisit the aim framing, and re-judge the aim feel, once there is something to aim at. `5.12` succeeds `0.14`, same reasoning as `5.11`. **`5.13` was `0.31` and was deferred out of PRE-ALPHA 1 on 2026-08-20**: three tuning values whose meaning changed when `0.29` closed and which have never been judged for what they now do. It wants the same session as `5.12` |
 | **3.1**, **3.6**, **3.7** | weapon-side traps worth clearing while the code is open |
 | **5.2**, **5.3**, **5.4** | the knock-around pass, only partly applied |
 
@@ -118,8 +115,12 @@ The step is **consequence**: death, respawn, pickups, and an AI that can actuall
 | **3.3** | the AI steers away from its own target |
 | **6.3** | no match flow |
 | **5.1** | Hard Lock is not designed through |
+| **2.16**, **2.17** | the altitude cue and a more active camera, **both deferred out of PRE-ALPHA 1 on 2026-08-20 behind exactly the arena this milestone starts.** Sequenced here because neither can be judged in the RVP demo city: an altitude cue compensates for a tiled ground and no props, and an automatic camera earns its keep by anticipating terrain. **Judge whether they are still needed once `6.2` has landed, rather than assuming they are** |
+| **2.18**, **2.19** | binding ergonomics, and teaching air control and tricks. Deferred out of PRE-ALPHA 1 on 2026-08-20 until the control scheme is complete. **2.19 is FTUE work and this is the first milestone with a loop to teach inside of.** 2.18 may slip to BETA: "all the controls in" is not strictly true until `6.1` finishes the weapon roster |
 
-Placeholder arena work begins here (`6.2`), replacing the RVP demo city.
+Placeholder arena work begins here (`6.2`), replacing the RVP demo city. **It now gates two deferred
+movement items as well as its own quality bar**, which raises its value above what this table showed
+before 2026-08-20.
 
 ---
 

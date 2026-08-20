@@ -1007,8 +1007,22 @@ regression even if it improves something else.
   shipped camera terms stand. **This withdraws the queued `boostBlendSeconds` 0.35 to 0.15 change**,
   which was contingent on boost still reading flat, and it did not. What remains is presentation
   only (`TODO.md` 2.11), which the owner independently reached the same conclusion about.
-- **Speed and turning.** `topSpeed` 80, `strafeTopSpeed` 53, the yaw pair and the drift yaw
-  multiplier are now bounded by a feel report rather than free.
+- **Speed and turning. PARTLY REOPENED 2026-08-20 by the pre-alpha 1 playtest — read the reopen before
+  using this as a bound.** `topSpeed` 80, `strafeTopSpeed` 53, the yaw pair and the drift yaw
+  multiplier were bounded by an owner feel report on 2026-08-16.
+  **What the four-tester playtest changed, and it is a deliberate reopen rather than a contradiction:**
+  two testers independently asked for steering authority to fade with speed, and a third said top speed
+  arrives far too quickly. The entry was judged by one driver at one skill level, which is the new
+  reason this file requires for reopening rather than a rediscovery of what prompted it.
+  **Precisely what is reopened and what is not:**
+  - **`topSpeed` 80 STANDS.** Nobody said the craft was too fast, only that it reached top speed too
+    quickly and turned too well once there. Treat 80 as fixed and the approach to it as free
+    (`TODO.md` 0.33).
+  - **The yaw pair is reopened** for a speed-dependent term that does not exist today (`TODO.md` 0.32).
+  - **`driftYawMultiplier` and the drift behaviour are NOT reopened** and must not be reshaped as a
+    side effect. Drift is separately judged good below and has its own equilibrium via `maxDriftAngle`.
+  - **`strafeTopSpeed` 53 and the 66.25% ratio STAND**, and now do double duty as the ceiling
+    `TODO.md` 0.36's lateral push must stay well clear of.
 - **Drift, as a held slide.** `driftLateralDamp`, `driftForwardDamp`, `driftYawMultiplier`,
   `driftSustainedTopSpeed` and the sustain/bleed pair are bounded. **The drift HOP is excluded and is
   was a separate complaint, closed 2026-08-17 as a suppression bug rather than a missing cue
@@ -1041,6 +1055,44 @@ Added 2026-08-17, judged the same day they were built:
   Two rolls is the binding case — a flip is faster, so it fails second — which means **any future
   change that spends trick margin can be judged against the two-roll landing alone.** The margin is
   0.09s here, and the 50-degree roll tolerance no longer covers it (see Trick economy).
+
+### Judged good in the pre-alpha 1 playtest, 2026-08-19
+
+**FOUR TESTERS, NOT THE OWNER.** Every other acceptance criterion in this file was set by the owner
+driving. These were set by four people who had never touched the game, two runs each, with the owner
+watching. **That makes them the only entries here that are evidence about players rather than about
+the owner's hands**, and it is why they are recorded as criteria rather than as anecdotes.
+
+- **HOVER READS AS HOVER, and this is the strongest confirmation the project has.** All four reported
+  the craft felt clearly hovering, and specifically that it was **manoeuvring with respect to the
+  ground rather than flying or pushing off nothing**. That is the "Hover is persistent" pillar
+  confirmed by strangers who were told nothing about it. It bounds ride height, the spring-damper
+  tuning and the gravity feedforward as a system: **a change that makes the craft read as flying is a
+  regression even if every number that produced it looks better in isolation.**
+- **Drive mode.** Tester 4: basically perfect, and the controls very standard for this type of game.
+  Judged by someone with genre expectations and nothing invested in this build.
+- **THE TWIN-STICK SCHEME SURVIVES CONTACT, and the way it survived is the finding.** Players **tried
+  to invent better control schemes and failed to produce one.** They reported the twin sticks as
+  contextualized once they understood the drive/aim mode switch. **Individual binding confusion does
+  not contradict this** (`TODO.md` 2.18 and 2.19 record all of it): the mapping of specific actions to
+  specific buttons is open, the two-stick model with a held mode switch is not.
+- **THE LEARNING CURVE, and this is what the session was really testing.** All four improved sharply
+  between run one and run two. All four asked for a second run unprompted. By the second run they were
+  landing tricks, timing jumps off ramps for more air, taking secondary air off a bounce and jumping
+  out of a drift — **none of which anyone had explained beyond the basic mechanics.** All four
+  independently described it as easy to pick up within fifteen minutes and hard to master, and could
+  see real high-skill expression in it. They also watched the owner drive at a much higher level than
+  their own first runs and read that gap as something to climb rather than as a wall.
+  **This is the acceptance criterion that most easily gets traded away by accident**, because
+  simplifying any single mechanic in response to a first-run complaint spends it. See `TODO.md` 5.15.
+- **A FIRST IMPRESSION THAT REVERSED ITSELF IN THIRTY SECONDS, recorded as a standing caution rather
+  than as a result.** Tester 4's first reaction was that steering felt too floaty. Within about thirty
+  seconds of play they reversed it unprompted: because it is a hovercraft, the floatiness was
+  contextualized and made sense. **They then called drive mode basically perfect.** The same session
+  produced two separate high-speed complaints that did NOT resolve themselves (`TODO.md` 0.32).
+  **The rule this supports: a complaint from the first thirty seconds of a first run is not yet data.**
+  Give it a second run before it is written down as a defect, and weight the complaints that survive
+  contact over the ones that arrive with it.
 
 ### Trick economy
 

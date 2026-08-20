@@ -59,12 +59,12 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.27 · 0.28 · 0.31 |
+| **0** | 0.12 · 0.27 · 0.32 · 0.33 · 0.36 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
-| **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 |
+| **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 · 2.16 · 2.17 · 2.18 · 2.19 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
 | **4** | 4.1 · 4.2 · 4.3 · 4.4 · 4.5 |
-| **5** | 5.1 · 5.2 · 5.3 · 5.4 · 5.5 · 5.7 · 5.8 · 5.11 · 5.12 |
+| **5** | 5.1 · 5.2 · 5.3 · 5.4 · 5.5 · 5.7 · 5.8 · 5.11 · 5.12 · 5.13 · 5.14 · 5.15 |
 | **6** | 6.1 · 6.2 · 6.3 · 6.4 · 6.5 · 6.6 |
 
 ### The agreed working order for Tier 0
@@ -101,23 +101,35 @@ tuning and features.** Struck items are done.
 
 **Added after that list was set, and it continues it. 2026-08-19 ran `0.29`, then `0.30`, and both
 closed the same day**; `0.29` was taken ahead of `0.28` because it was the live complaint, and `0.30`
-is what `0.29`'s fixes uncovered once the craft stopped fighting itself. **What is left is `0.27`, the
-milestone blocker, then `0.28` by the owner's earlier decision**, with `0.31` available as a tuning
-pass whenever the owner wants it rather than as queued work. `0.12` stays where it has been, an
-accepted residual rather than work.
+is what `0.29`'s fixes uncovered once the craft stopped fighting itself.
+
+**The pre-alpha 1 movement playtest, four testers, 2026-08-19, re-set this list.** The owner's order,
+approved 2026-08-20, is **`0.27`, then `0.33`, then `0.32`, then `0.36`, with `0.12` last.** Those five
+are the whole of Tier 0 and the whole of what stands between here and PRE-ALPHA 1: **the owner's
+completion criterion is those items built AND judged good in play.**
+
+**`0.33` deliberately precedes `0.32` even though `0.32` had two independent votes and `0.33` had one.**
+They are the same subsystem, and the acceleration shape decides how much time a player spends at the
+speeds where a steering fade would be felt. Tuning the fade first means re-tuning it after the curve
+lands.
+
+**Five Tier 0 numbers were retired to lower tiers in the same pass**, by the sorting rule: `0.28` and
+`0.31` were open, and `0.34`, `0.35` and `0.37` were issued during the playtest intake and never
+written here. See Retired numbers. **What is left in this tier is gated on nothing.**
 
 ### Before the next playtest build
 
 Cheap things that make a long session worth more, or that stop it producing an unreadable result:
 
-- **4.4** press `M` once in the first thirty seconds and confirm the marker landed in `Player.log`
-  before continuing. Eight sessions have already been lost to a marker key that silently never arrived.
-- **`PlaytestSession` has never been driven by a physical button.** Every behaviour was verified
-  through reflection in the editor, which proves the state machine and proves nothing about the
-  input read. **Press Options on the pad, in a build, before anyone arrives.** If it does not
-  register the tester sits on the splash screen and the session is over before it starts. Same
-  failure shape as 4.4 and trap 30: the logic is fine and the instrument never fires. While there,
-  hold `P` (session restart) and hold Share (un-stick, and confirm energy refills).
+- **The marker key and the pad both work in a build, confirmed across the four-tester session
+  2026-08-19.** This closes the half of **4.4** that was about the marker, and it closes the
+  `PlaytestSession` question below it: Options, hold `P` and hold Share were all driven by a physical
+  button in a build for the first time. **What 4.4 still wants is the allocation figure under
+  sustained weapon fire**, which a movement playtest could never supply.
+- **Markers are only as good as the instruction to press them.** The 2026-08-19 session dropped none,
+  by choice: the owner was watching every run and diagnosed the soft locks live. That worked at four
+  testers with one observer and it does not scale. **If anyone is ever tested without the owner
+  watching, they have to be told to press `M`**, or the trace is a wall of undifferentiated rows.
 - **Watch:** the speed look-ahead is now rate-limited to 8 m/s of look-point travel (`TuningLog.md` >
   The boost jolt at a standstill). If the framing feels like it lags behind hard acceleration, that
   is the first number to suspect. It also changes how the aim point retracts after a collision at
@@ -143,204 +155,200 @@ turning, drift, and the strafe/drive speed ratio. **Read those before changing a
 items below are bounded by something already confirmed to feel right, and those confirmations are the
 acceptance criteria.
 
-### 0.27 SOFT LOCK: the craft parks nose-up against a wall and righting never finishes
+### 0.27 SOFT LOCK: righting never finishes, and there are now two ways in
 
-**Observed in a build 2026-08-18, the first soft lock in months.** The owner was stuck for **70
-seconds** and quit rather than escaping. This is the only item in this tier that can end a playtest
-session, and there are four strangers on the pad tomorrow.
+**FIVE SIGHTINGS. One instrumented, four observed.** The 2026-08-18 build run is the only one with a
+trace; the pre-alpha 1 playtest on 2026-08-19 produced four more across four testers, **all diagnosed
+live by the owner watching the runs** rather than from `Player.log`. No markers were dropped, by
+choice. This is the only item in this tier that can end a session and it is the milestone blocker.
 
-**What the instruments recorded.** Stuck window t=1135.96 to t=1206.5 (quit), throughout which:
-`tilt 91-92 deg`, `speed 0.0`, `support 1.00`, `downed True`, every input zero. Immediately before,
-at t=1117.94, **speed 231.9 m/s** against a `topSpeed` of 80, and `MotionTrace` logged the session's
-hardest collision at **131,477 Ns against `mountainroad`**. So an enormous impact, a launch, and the
-craft comes to rest vertical.
+**The 2026-08-18 trace, which is still the best evidence for the wall case.** Stuck window t=1135.96
+to t=1206.5 (quit), throughout which: `tilt 91-92 deg`, `speed 0.0`, `support 1.00`, `downed True`,
+every input zero. Immediately before, at t=1117.94, **speed 231.9 m/s** against a `topSpeed` of 80,
+and `MotionTrace` logged the session's hardest collision at **131,477 Ns against `mountainroad`**.
+**It partially righted and then stalled: 107 -> 94 -> 91 degrees, then nothing for 70 seconds.** That
+is the tell. Righting was making progress and stopped.
 
-**It partially righted and then stalled: 107 -> 94 -> 91 degrees, then nothing for 70 seconds.**
-That is the tell. Righting was making progress and stopped.
+**There are two distinct mechanisms and they want different fixes.** The playtest is what separated
+them; before it this item described only the first.
 
-**Owner's description, which matches the numbers exactly:** on the ground, *"a hover distance away
-from the wall"*, nose straight up. `support 1.00` means all four springs were at full authority, and
-with the craft vertical the sensors point horizontally, so they were loaded against the WALL.
+---
 
-**The mechanism, narrowed but NOT proven.** This looks like the equilibrium `CLAUDE.md` already
-documents under Foundation ("releasing at the arm angle parks the craft in a hover-supported
-equilibrium at ~78 degrees"), except against a wall and at 91 degrees. The hover springs pushing off
-the wall balance the righting torque and the craft sits there.
+**MECHANISM A: the springs out-torque the righting, against a wall or on the craft's side.** The
+common case, and three or four of the playtest locks were this shape: the craft comes to rest on its
+side or nose-up with a wall or other vertical surface roughly a hover height off the belly.
 
-**Why the player could not self-rescue, and this part IS certain:** unstick arms only against
-surfaces within `unstickMaxSurfaceAngle` of horizontal, so a vertical wall is excluded **by design**
-(the exclusion exists so walls and other vehicles are never pushed off). The one recovery path that
-could have applied is switched off in exactly this geometry.
+**The owner's initial reading was that the hover sensors were blocking recovery from firing. They are
+not, and the distinction decides the fix.** The arm gate is `IsContactingGround && isFlipped && isSlow`
+(`HoverController_Foundation.cs:1599`). **`IsHoverGrounded` is not in it** and never was: `CLAUDE.md`
+records that adding an `|| IsHoverGrounded` term was tried and deliberately rejected, because a craft
+on its flank still lands two rays on the floor and the term revoked authority mid-rotation.
+`IsContactingGround` counts walls, so a wall makes arming MORE likely rather than less.
 
-**The open question, and what would answer it.** Was righting authorized and simply out-torqued, or
-did it never arm? The gate is `IsContactingGround && isFlipped && isSlow`; tilt and speed both
-clearly passed, and `IsContactingGround` counts walls, so contact probably passed too, which points
-at out-torqued. **Not settled, because gizmos were off.** The Foundation overlay already prints the
-discriminator (`authorized`, and `flipTimer` against `flipRecoveryDelay`) so **one repro with the
-Recovery category on decides it.** Do not guess it from this entry.
+**What the sensors actually do in that pose is push.** With the craft vertical or on its side the rays
+point horizontally into the wall, all four springs load at full authority (`support 1.00` in the
+trace), and that force fights the righting torque to a standstill. **So righting was authorized and
+out-torqued, not unarmed** — which is the question the previous version of this entry left open and
+said needed a repro to settle. Four independent sightings of the same geometry answer it. **A repro
+with the Recovery category on is still worth one run** to confirm `authorized True` directly, but it
+is no longer the thing blocking a fix.
 
-**Repro recipe:** hit `mountainroad` hard enough to be launched, or place the craft vertical with a
-wall roughly one hover height off the belly, and let it settle.
+**Why the player could not self-rescue, and this part was always certain:** unstick arms only against
+surfaces within `unstickMaxSurfaceAngle` (60) of horizontal, so a vertical wall is excluded **by
+design** (the exclusion exists so walls and other vehicles are never pushed off). The one recovery
+path that could have applied is switched off in exactly this geometry.
 
-**Done looks like:** a craft cannot remain downed indefinitely. Options, and they are not exclusive:
-a dead-man timer that force-rights after N seconds downed with no tilt progress; letting unstick fire
-against steep surfaces when the craft is downed AND stationary (narrower than lifting the horizontal
-restriction generally); or having righting torque scale up while tilt refuses to change.
+**MECHANISM B: against anything that moves, the arm gate can never complete.** One playtest lock, on
+the rotating platform, and it is not the wall case at all. `isSlow` reads `rb.linearVelocity` in
+**world space** (line 1508). A craft being carried by something is not stationary in that frame even
+when it is perfectly still relative to what it is resting on.
 
-**Mitigation for the pre-alpha 1 playtest, already in place:** `PlaytestReset` (hold Share) is an
-unconditional teleport and escapes this instantly. **It was never fired during the 70 seconds** (no
-`RESET 2` in `Player.log`), so the escape hatch worked and was not reached for. The splash screen now
-names it, which is the cheapest fix available before tomorrow.
+The numbers make this unforgiving: `flipRecoverySpeedThreshold` is **2** m/s, `flipRecoveryDelay` is a
+full **1.0s** of accumulation, and `flipRecoveryProgressDecay` 1 drains the timer whenever the gate
+breaks. **So above 2 m/s of carried speed the timer never completes. Not slowly. Never.**
 
-### 0.28 No reliable altitude cue: the realtime shadow degrades exactly as altitude grows
+**Do NOT build a fix aimed at the rotating platform.** Owner, 2026-08-20: the platform is RVP demo
+city content, `6.2` replaces it, and a real arena may well have no such feature. Sizing anything
+against it means measuring a prop that is being deleted.
 
-**Owner playtest feedback 2026-08-19, raised deliberately BEFORE the pre-alpha 1 playtest and
-deliberately NOT acted on for it.** Owner: *"it's hard to judge how high off the ground I am and how
-fast I am moving sometimes because the ground is a tiled texture and there are no props in the test
-env, which is fine at this stage."* Expected to come back from testers as well, which is why it was
-raised early rather than after the session.
+**The mechanism outlives the platform, and one case is certain rather than speculative.**
+`IsContactingGround` counts other vehicles. **A downed craft resting against a moving craft, or nudged
+while it waits out its 1.0s, fails in exactly this way** — and BETA puts five AI in one arena, so that
+contact is guaranteed. Anything else dynamic in the eventual arena joins it for free.
 
-**Owner decision 2026-08-19: this is the next thing worked.** `0.27` is the milestone blocker and
-today's playtest may say more about it; if it does, it goes first. `0.12` remains an accepted
-residual and is not work.
+**This is why the dead-man timer is the recommended fix rather than one of the narrow ones.** It does
+not care which gate failed, so **it closes B without anyone having to decide which moving things the
+real arena will contain.** A platform-relative or contact-relative velocity for `isSlow` is a real
+improvement and may be worth doing later on its own merits, but it is not what unblocks this item.
 
-**Tier 0 rather than Tier 2, and the sorting rule is why.** This is movement legibility, and it is
-NOT blocked on art or VFX: what it needs is a quad, an unlit transparent material and a soft radial
-texture, none of which touch the missing VFX package that blocks 2.4, 2.11 and 2.12.
+---
 
-**Why the one cue that exists fails, measured read-only in the editor 2026-08-19.** The scene has a
-single realtime directional light at euler `(43.57, 12.30, 0.00)`, so the sun sits **43.6 degrees**
-above the horizon and the cast shadow displaces **1.05m horizontally per metre of altitude**, in a
-**world-fixed** direction. Three consequences, and they compound:
+**What both have in common, and it is the argument for one fix over three.** In neither case is the
+player trapped by geometry. They are trapped by a recovery that cannot finish, with nothing on screen
+saying why. **The dead-man timer is the only candidate that does not care which gate broke** — force
+righting after N seconds downed with no tilt progress. The narrower options each solve one of the two:
+letting unstick fire against steep surfaces while downed AND stationary addresses A only; a
+contact-relative velocity for `isSlow` addresses B only. They are not exclusive and the timer does
+not make either wrong, but the timer alone closes the item.
 
-- At hover equilibrium the belly rides about 4.7m up, so the shadow already lands roughly one craft
-  length away before the player has done anything.
-- At a full-charge apex (about 20m above ride height) it lands about 25m away, which is either the
-  blurriest cascade or past `m_ShadowDistance: 50` in `URP_RenderAsset.asset` entirely.
-- Because the offset direction is world-fixed and the craft is not, yawing swings the shadow from
-  ahead of you, to behind you, to beside you, with no altitude change at all.
+**Repro recipes.** A: place the craft vertical or on its side with a wall roughly one hover height off
+the belly and let it settle, or hit `mountainroad` hard enough to be launched. B: land inverted on the
+rotating platform **while it still exists**. After `6.2` the standing repro for B is a downed craft in
+contact with a moving one, which is also the case that matters.
 
-**So the single altitude cue in the game degrades exactly as altitude grows, which is precisely when
-it is needed.** The tiled ground and the deliberately sparse arena (6.2) mean there is nothing else
-to read height against.
+**Done looks like:** a craft cannot remain downed indefinitely, in either geometry.
 
-**What to build: a fake blob straight down under the craft, present at all times.** The standard 3D
-platformer fix, and the vertical range here is closer to a platformer than to a racer -- Wipeout and
-F-Zero craft ride a metre or two off the track, this one rides 4.7m and can be 25m up.
+**Mitigation, in place and proven.** `PlaytestReset` (hold Share) is an unconditional teleport and
+escapes both instantly, and the splash screen names it. **It was never fired during the 70 seconds on
+2026-08-18** (no `RESET 2` in `Player.log`). Hold Share was confirmed working on the pad during the
+2026-08-19 session, so the escape hatch works and the gap is that players under pressure do not reach
+for it.
 
-**The hovercraft reframing, and it changes the brief.** In a grounded car game the shadow is a
-contact confirmation: near-zero offset, effectively binary, nobody reads it as a quantity. Here
-altitude is a continuously varying quantity the player must read at every instant, on a craft that is
-**never planted**. Two consequences worth designing to:
+### 0.33 Acceleration is flat, and top speed arrives in about nine tenths of a second
 
-1. **Do not encode height in size alone.** Over a 0 to 20m range one channel is either invisible when
-   high or a useless dinner plate when low. Use a coarse channel (size and opacity falling off with
-   height) plus something that resolves sharply in the last metre or two, so touchdown reads
-   precisely instead of asymptotically.
-2. **Calibrate the resting state, not zero.** Because the craft never lands, "zero altitude" is not
-   the interesting reading. What matters is whether you are at ride height, above it, or below it. If
-   the blob has a distinct recognisable look at hover equilibrium, the player learns what normal looks
-   like in a minute and reads every deviation against it. That is the part a car game's shadow never
-   has to do.
+**Pre-alpha 1 playtest, 2026-08-19, one tester and the owner's own reading of the run.** Tester 3:
+top speed is reached far too quickly, and acceleration should be much more gradual. **Worked SECOND,
+before `0.32`, and that order is deliberate** — see the working order above.
 
-**It is an altimeter, NOT a landing predictor, and this item should not drift into claiming
-otherwise.** Falling from a full-charge apex takes about 0.74s at the live fall gravity, and
-`topSpeed` is 80, so the craft can travel up to ~59m horizontally during the descent. A real "where
-will I land" cue is a ballistic marker along the velocity arc, which is a different and much larger
-feature. Do not build it as part of this.
+**There is no curve to tune. There is no curve at all.** `ApplyDrive` computes
+`throttle * blendedFwdAccel` as a constant and applies it until the cap suppresses it outright
+(`HoverController_Propulsion.cs`, the grounded forward branch). Forward drag is mutually exclusive
+with drive and only applies near-zero throttle, so nothing opposes it on the way up either. The shape
+is a straight ramp into a hard ceiling.
 
-**What this does NOT solve: the speed half of the same feel report.** Speed is read from optical
-flow, meaning features fixed in the world passing you. A cue that travels with the craft supplies
-none, so the blob will do nothing for speed and should not be sold as if it will. The project's
-recorded position on speed readability is 6.2 (props are NOT coming to fix it, and the environment
-doubling halved how fast the world goes past at a given speed) and 2.11 (screen-space speed lines,
-deferred to PRE-ALPHA 2). **The one thing this item leaves behind for it:** the downward raycast
-below is exactly the ground anchor a world-anchored ground wash would need, so a wash spawned at the
-ground point and left behind in world space becomes cheap once this exists. 2.4's landing-dust
-raycast is already live and correct with only the two prefab slots empty, so that hook is waiting
-too.
+**The live numbers, and they are why one tester could feel it.** `maxForwardAccel` **87** against a
+`topSpeed` of **80**, so ignoring the cap the craft reaches top speed in roughly **0.92s**. That is
+about 8.9g held flat. Boost scales both accel and ceiling by the same factor, so it does not change
+the time, only the destination.
 
-**The double-shadow contradiction has to be resolved, not ignored.** A blob under the craft plus the
-existing realtime cast shadow puts two shadows in two different places. **Recommended: blob only.**
-Turn Cast Shadows off on the five vehicle mesh renderers (`3D/HoverCar/{Body, Rim_FL, Rim_FR, Rim_RL,
-Rim_RR}`), which is a prefab tick with no code and also saves shadowmap cost. The alternatives, not
-rejected, just not recommended: keep both and accept the disagreement, or keep the cast shadow and
-build a ground-effect ring instead of a shadow, which suits a hovercraft and dodges the contradiction
-entirely.
+**This is a structural absence, not a mistuned value**, which is why it gets an item rather than a
+line in `TuningLog.md`. Lowering `maxForwardAccel` alone buys a longer ramp with the same flat shape
+and a softer launch, which is not what was asked for.
 
-**Free A/B to run first, before any of this.** Rotate the light toward overhead and drive it. It is
-**not** a fix -- it flattens the shading that makes greybox slopes readable, and at 20m the shadow is
-still metres away -- but it costs nothing and it bounds how much of the complaint is the sun angle
-rather than the absence of a cue.
+**Do this one first because it moves the ground `0.32` is judged on.** How much time a player spends
+near top speed is decided here, and a steering fade tuned against a 0.92s ramp would have to be
+re-judged the moment the ramp changes.
 
-**Implementation traps, all project-specific and all cheap to trip:**
+**Bounded by a judged-good entry, and the reopen is deliberate.** `CLAUDE.md` > Judged good in the
+2026-08-16 playtest records speed and turning as bounded by an owner feel report. **`topSpeed` 80 is
+not what is being questioned here** — no tester said the craft was too fast, only that it got there
+too fast — so treat 80 as fixed and the approach to it as free.
 
-- **It needs its own downward raycast.** The hover sensors cannot serve: `sensorRange` 9.5 minus
-  `hoverHeight` 7 tops them out at 2.5m of clearance, so they are blind from any jump.
-- **Cast and place it in `LateUpdate`, not `FixedUpdate`.** Both vehicle prefabs use Rigidbody
-  interpolation against a 0.01 fixed timestep on a 165Hz display, so the physics pose is not the
-  drawn pose. Placing a cosmetic in `FixedUpdate` makes it jitter against the craft it is attached to.
-- **Mask out the vehicle layers.** Self-hits are the documented mechanism behind the drift flip.
-- **Drop the ray from the hull centre, not the transform origin.** The collider union centre is
-  `(0.000, 0.877, 0.732)` in vehicle-local space; that 0.732m forward offset has already caused one
-  false reading, in the camera framing check.
-- **Yaw only.** Align the quad to the hit normal, never pitch or roll it with the craft.
-- **Hide it when nothing is in range** rather than pinning it at max distance. Loops, the screwtower
-  and ledge edges will all produce no hit.
-- **Author it on the prefab, not as a scene instance override** (3.16 and 3.17). `HoverCar_AI` is
-  currently inactive in the scene, so only the player needs it to work for now, but the prefab is
-  still where it belongs.
+**Done looks like:** the owner drives it and judges the ramp good. **Watch the boost read**, which is
+judged good and is the thing most likely to change shape underneath this, and re-check the two-barrel-
+roll landing test if anything here touches airborne drive.
 
-**Rendering: an unlit transparent quad aligned to the hit normal, NOT a URP Decal Projector, at least
-first.** `URP_Renderer.asset` is `m_RenderingMode: 2` (deferred) with SSAO as its only renderer
-feature, so adding a Decal Renderer Feature is a project-wide render change with deferred-path
-caveats and it would invalidate the 6.07ms / 0.39ms perf baseline. Revisit decals only if quad
-intersection artifacts on the loop, the mountains and ledge edges prove annoying in play.
+### 0.32 Steering authority does not fade with speed
 
-**Done looks like:** the player can tell, without looking away from the craft, whether they are above
-or below ride height, and can call a landing before it happens. **The owner supplies the acceptance
-test**, as with 0.21 and 0.13.
+**Pre-alpha 1 playtest, 2026-08-19, TWO INDEPENDENT TESTERS.** Tester 1: the controls feel a little
+too tight and they should have less direct control of a craft like this, with steering fading away the
+faster they go. Tester 3, separately, asked for less control at high speed alongside the acceleration
+complaint in `0.33`. **Worked THIRD, after `0.33`.**
 
-### 0.31 Re-judge the aim feel now that nothing is propping it up
+**A third report looks like it contradicts these and does not.** Tester 4's first impression was that
+steering felt too floaty, then reversed it within thirty seconds as making sense for a hovercraft, and
+went on to call drive mode basically perfect. That report is about LOW speed and it resolved itself.
+Both complaints above are explicitly about high speed. **The reading that fits all three: authority is
+right when slow and too high when fast**, which is one finding with two votes rather than three
+opinions pulling apart.
 
-**Successor to 0.29, which closed 2026-08-19.** New number rather than a reopen, because 0.29's job
-was the defect and that is done and judged. **Nothing here is a known fault.** It is a short list of
-values whose MEANING changed when the un-aim bug was fixed, and which have therefore never been
-judged for what they now do.
+**There is no speed term in the turning code.** `ApplyTurning` computes
+`turn * P.yawAccel * turnScale * effectiveYawMult`, where the only modifiers are `airTurnMultiplier`
+0.5 while airborne and `driftYawMultiplier` 2.5 while drifting. **Yaw authority at 80 m/s is identical
+to yaw authority at 5 m/s.** Live values: `yawAccel` 15, `yawDamping` 8.
 
-**1. `aimPitchTrackingStrength`, live value 200.** Read `TuningLog.md` > Aiming on slopes before
-touching it. **It was never a feel value:** it was the number holding the nose down against a
-suspension that had stopped working, which is why aim tracking needed to be seventeen times leveling
-strength. With the bug gone it barely affects attitude at all — 200, 100, 50, 25 and 12 all hold a 20
-degree ramp within 8 degrees at support 1.000 — so it is now free to be tuned purely for how the nose
-answers the stick, which is what its tooltip always claimed. **The owner tried 100 during the
-2026-08-19 session and liked it, but the change did not persist to the asset**, so that reading is
-unconfirmed and the shipped value is still 200.
+**What a constant yaw acceleration already does, so the fix is not starting from nothing.** Holding a
+fixed yaw rate at a higher linear speed already produces a wider turn radius, which is why this reads
+as a feel gap rather than as the craft turning on a dime at speed. What is missing is the sense that
+speed COSTS you something.
 
-**2. `strafePitchLimit`, live value 20, and its meaning changed.** With the hull levelling to the
-horizon in aim mode, the clamp is now measured from the HORIZON instead of from the surface, with no
-change to the clamp code. **A ramp no longer adds to your reach**, so on a slope steeper than 20
-degrees you cannot point at something directly ahead of you on it, and the arena has the loop and the
-screwtower. Raising it is cheap: 0.22 removed both things that made a large limit dangerous. **Not
-reported as a problem yet** — the owner has driven several sessions since without raising it — so
-this is a watch, not a fix.
+**Bounded by the same judged-good entry as `0.33`, and this is the reopen that matters.** `CLAUDE.md`
+> Judged good in the 2026-08-16 playtest names the yaw pair and the drift yaw multiplier as bounded by
+an owner feel report. **Two testers now push the other way and the owner has accepted the reopen**
+(2026-08-20). The entry is not wrong, it was judged by one driver at one skill level; that is the new
+reason the file asks for, and it should be recorded as a deliberate reopen rather than quietly
+contradicted.
 
-**3. The strafe composer's dead zone and damping, `0.2` and `0.5` on the vcam.** Camera rotation lags
-any hull pitch change, including commanded ones, at roughly 25px per degree at strafe FOV 57. **Do
-not pre-empt this.** It predates everything in 0.29 and the owner has judged the current feel good
-twice since; open it only if a play report points at it. Read the values off the vcam in the editor
-rather than the prefab, per 3.16 and 3.17.
+**The design tension is real and the pillars do not settle it.** The motto is "the fun comes from
+control", which argues against taking authority away. "Momentum is the primary skill expression"
+argues that speed should cost something. **The owner's call is that it fades**; what is open is how
+much and over what range.
 
-**Done looks like:** the owner has driven each of the three and either changed it deliberately or
-recorded that it is right as it stands. **This item is tuning, not engineering**, and it closes on a
-feel report rather than a measurement.
+**Do not touch `driftYawMultiplier` as part of this.** Drift is a judged-good behaviour with its own
+bounded values and its own equilibrium via `maxDriftAngle`. A speed fade that also reshapes drift
+changes two accepted things at once and neither can then be judged.
 
-**Related but NOT in scope: the nose overshoots its commanded aim by about ten degrees across a
-landing.** That is recorded as a consciously accepted limitation in `CLAUDE.md`, with the owner's
-verdict that it reads as a natural consequence of a high aimed jump. **If it is ever reopened, it is
-the pitch overshoot that gets fixed, not the camera**, which only moves because the strafe rig
-inherits hull pitch by design.
+**Done looks like:** the owner drives it and judges the fade good. **The acceptance test to preserve:**
+the strafe-to-drive ratio and the drift behaviour both still read as they did.
 
+### 0.36 Left stick X does nothing in drive mode
+
+**Pre-alpha 1 playtest, 2026-08-19, TWO TESTERS UNPROMPTED.** Both suggested the same thing: the axis
+should push the craft slightly left or right while driving, without taking over steering the way the
+right stick does. **Worked FOURTH.** Owner's constraint, 2026-08-20: **the push must not be large
+enough to feel like strafing or to overlap with it.**
+
+**The axis is already read and already has three consumers.** `PlayerHoverInput` maps left stick X to
+`StrafeX` (the full-stick Vector2 read, so nothing needs rebinding). It currently drives lateral
+movement in strafe mode, the dodge burst's lateral direction, and **roll during air control**
+(`HoverController_Propulsion.cs:1785`).
+
+**The live conflict is air-control roll, and it is the one trap here.** Air control is airborne-only
+and reads the same axis for roll. **Gate the drive-mode push to GROUNDED and the two never meet.** If
+it is not gated, a lateral push fights roll on the same stick with no way for the player to separate
+them, and roll is load-bearing for wall jumps and the trick economy.
+
+**The ceiling has a number already, so this does not need a feel target to start from.**
+`strafeTopSpeed` is 53 against a `topSpeed` of 80, and that **66.25% ratio is itself a judged-good
+entry** (`CLAUDE.md`). The push wants to be an acceleration whose resulting lateral velocity stays
+well clear of 53, or it becomes strafe without the trigger and makes the mode switch pointless.
+
+**Watch the interaction with `0.33` and `0.32`, both of which land first.** A lateral push is felt
+relative to how much authority the player already has, so judge this after the speed and steering work
+rather than alongside it.
+
+**Done looks like:** the owner drives it, the push is useful for line adjustment, and holding L2 still
+feels like a distinct mode rather than more of the same.
 ### 0.12 A sliver of bumper still clips on the pitch-up
 
 **CONFIRMED STILL PRESENT 2026-08-17.** Owner, asked to glance at it after four separate changes to
@@ -800,6 +808,224 @@ when the three nulled impulse channels come back.*
 
 ---
 
+### 2.16 No reliable altitude cue: the realtime shadow degrades exactly as altitude grows
+
+*Was `0.28`. **Retired from Tier 0 on 2026-08-20** and renumbered, because the owner gated it behind a
+more representative arena and an arena is art. Nothing below changed; the analysis was done read-only
+in the editor on 2026-08-19 and stands.*
+
+**TWO THINGS THE PLAYTEST CHANGED, and both argue for the deferral.** This item was opened on
+2026-08-19 with an explicit prediction: raised deliberately BEFORE the pre-alpha 1 playtest because
+the owner expected it to come back from testers.
+
+1. **It did not come back. No tester raised altitude legibility at all**, across four players and two
+   runs each. That is not proof there is no problem — new players were not pushing altitude the way the
+   owner does — but the prediction this item was filed on did not land, and the file should say so
+   rather than quietly dropping it.
+2. **The owner's own complaint named the environment as the cause** ("the ground is a tiled texture and
+   there are no props in the test env"). Building a cue to compensate for a placeholder arena risks
+   tuning it against conditions that will not exist. **Judge the arena first, then judge whether the
+   cue is still needed.**
+
+**Gate: a representative arena (6.2).** Owner decision 2026-08-20, alongside 2.17 for the same reason.
+
+
+**Owner playtest feedback 2026-08-19, raised deliberately BEFORE the pre-alpha 1 playtest and
+deliberately NOT acted on for it.** Owner: *"it's hard to judge how high off the ground I am and how
+fast I am moving sometimes because the ground is a tiled texture and there are no props in the test
+env, which is fine at this stage."* Expected to come back from testers as well, which is why it was
+raised early rather than after the session.
+
+**Superseded 2026-08-20, and the original wording is kept here because it dates the decision.** This
+item read *"Owner decision 2026-08-19: this is the next thing worked"* and argued itself into Tier 0
+on the grounds that it is movement legibility and is NOT blocked on art or VFX, since all it needs is
+a quad, an unlit transparent material and a soft radial texture. **That reasoning was correct about
+the assets and wrong about the gate.** What blocks it is not the material, it is not knowing whether
+a real arena makes the cue unnecessary. The build cost was never the constraint.
+
+**Why the one cue that exists fails, measured read-only in the editor 2026-08-19.** The scene has a
+single realtime directional light at euler `(43.57, 12.30, 0.00)`, so the sun sits **43.6 degrees**
+above the horizon and the cast shadow displaces **1.05m horizontally per metre of altitude**, in a
+**world-fixed** direction. Three consequences, and they compound:
+
+- At hover equilibrium the belly rides about 4.7m up, so the shadow already lands roughly one craft
+  length away before the player has done anything.
+- At a full-charge apex (about 20m above ride height) it lands about 25m away, which is either the
+  blurriest cascade or past `m_ShadowDistance: 50` in `URP_RenderAsset.asset` entirely.
+- Because the offset direction is world-fixed and the craft is not, yawing swings the shadow from
+  ahead of you, to behind you, to beside you, with no altitude change at all.
+
+**So the single altitude cue in the game degrades exactly as altitude grows, which is precisely when
+it is needed.** The tiled ground and the deliberately sparse arena (6.2) mean there is nothing else
+to read height against.
+
+**What to build: a fake blob straight down under the craft, present at all times.** The standard 3D
+platformer fix, and the vertical range here is closer to a platformer than to a racer -- Wipeout and
+F-Zero craft ride a metre or two off the track, this one rides 4.7m and can be 25m up.
+
+**The hovercraft reframing, and it changes the brief.** In a grounded car game the shadow is a
+contact confirmation: near-zero offset, effectively binary, nobody reads it as a quantity. Here
+altitude is a continuously varying quantity the player must read at every instant, on a craft that is
+**never planted**. Two consequences worth designing to:
+
+1. **Do not encode height in size alone.** Over a 0 to 20m range one channel is either invisible when
+   high or a useless dinner plate when low. Use a coarse channel (size and opacity falling off with
+   height) plus something that resolves sharply in the last metre or two, so touchdown reads
+   precisely instead of asymptotically.
+2. **Calibrate the resting state, not zero.** Because the craft never lands, "zero altitude" is not
+   the interesting reading. What matters is whether you are at ride height, above it, or below it. If
+   the blob has a distinct recognisable look at hover equilibrium, the player learns what normal looks
+   like in a minute and reads every deviation against it. That is the part a car game's shadow never
+   has to do.
+
+**It is an altimeter, NOT a landing predictor, and this item should not drift into claiming
+otherwise.** Falling from a full-charge apex takes about 0.74s at the live fall gravity, and
+`topSpeed` is 80, so the craft can travel up to ~59m horizontally during the descent. A real "where
+will I land" cue is a ballistic marker along the velocity arc, which is a different and much larger
+feature. Do not build it as part of this.
+
+**What this does NOT solve: the speed half of the same feel report.** Speed is read from optical
+flow, meaning features fixed in the world passing you. A cue that travels with the craft supplies
+none, so the blob will do nothing for speed and should not be sold as if it will. The project's
+recorded position on speed readability is 6.2 (props are NOT coming to fix it, and the environment
+doubling halved how fast the world goes past at a given speed) and 2.11 (screen-space speed lines,
+deferred to PRE-ALPHA 2). **The one thing this item leaves behind for it:** the downward raycast
+below is exactly the ground anchor a world-anchored ground wash would need, so a wash spawned at the
+ground point and left behind in world space becomes cheap once this exists. 2.4's landing-dust
+raycast is already live and correct with only the two prefab slots empty, so that hook is waiting
+too.
+
+**The double-shadow contradiction has to be resolved, not ignored.** A blob under the craft plus the
+existing realtime cast shadow puts two shadows in two different places. **Recommended: blob only.**
+Turn Cast Shadows off on the five vehicle mesh renderers (`3D/HoverCar/{Body, Rim_FL, Rim_FR, Rim_RL,
+Rim_RR}`), which is a prefab tick with no code and also saves shadowmap cost. The alternatives, not
+rejected, just not recommended: keep both and accept the disagreement, or keep the cast shadow and
+build a ground-effect ring instead of a shadow, which suits a hovercraft and dodges the contradiction
+entirely.
+
+**Free A/B to run first, before any of this.** Rotate the light toward overhead and drive it. It is
+**not** a fix -- it flattens the shading that makes greybox slopes readable, and at 20m the shadow is
+still metres away -- but it costs nothing and it bounds how much of the complaint is the sun angle
+rather than the absence of a cue.
+
+**Implementation traps, all project-specific and all cheap to trip:**
+
+- **It needs its own downward raycast.** The hover sensors cannot serve: `sensorRange` 9.5 minus
+  `hoverHeight` 7 tops them out at 2.5m of clearance, so they are blind from any jump.
+- **Cast and place it in `LateUpdate`, not `FixedUpdate`.** Both vehicle prefabs use Rigidbody
+  interpolation against a 0.01 fixed timestep on a 165Hz display, so the physics pose is not the
+  drawn pose. Placing a cosmetic in `FixedUpdate` makes it jitter against the craft it is attached to.
+- **Mask out the vehicle layers.** Self-hits are the documented mechanism behind the drift flip.
+- **Drop the ray from the hull centre, not the transform origin.** The collider union centre is
+  `(0.000, 0.877, 0.732)` in vehicle-local space; that 0.732m forward offset has already caused one
+  false reading, in the camera framing check.
+- **Yaw only.** Align the quad to the hit normal, never pitch or roll it with the craft.
+- **Hide it when nothing is in range** rather than pinning it at max distance. Loops, the screwtower
+  and ledge edges will all produce no hit.
+- **Author it on the prefab, not as a scene instance override** (3.16 and 3.17). `HoverCar_AI` is
+  currently inactive in the scene, so only the player needs it to work for now, but the prefab is
+  still where it belongs.
+
+**Rendering: an unlit transparent quad aligned to the hit normal, NOT a URP Decal Projector, at least
+first.** `URP_Renderer.asset` is `m_RenderingMode: 2` (deferred) with SSAO as its only renderer
+feature, so adding a Decal Renderer Feature is a project-wide render change with deferred-path
+caveats and it would invalidate the 6.07ms / 0.39ms perf baseline. Revisit decals only if quad
+intersection artifacts on the loop, the mountains and ledge edges prove annoying in play.
+
+**Done looks like:** the player can tell, without looking away from the craft, whether they are above
+or below ride height, and can call a landing before it happens. **The owner supplies the acceptance
+test**, as with 0.21 and 0.13.
+
+
+### 2.17 The camera should be more active and automatic, with manual override
+
+**Pre-alpha 1 playtest, 2026-08-19, two testers.** Tester 1 suggested a more active or automatic
+camera that can still be overridden by hand. Tester 4 independently said they would prefer the same
+thing, and **explicitly was not put off by controlling camera pitch themselves** — they called drive
+mode basically perfect and the controls standard for the genre in the same breath.
+
+**Gate: a representative arena (6.2).** Owner decision 2026-08-20: *the camera is good enough until we
+have a better test arena to see if camera changes are necessary in that type of environment.* The
+reasoning is the same as 2.16's. An automatic camera earns its keep by anticipating terrain and
+framing what matters, and the current arena is an RVP demo city being driven as greybox. **Nothing
+about how a camera behaves in a real arena can be learned in this one.**
+
+**What already exists, so this is not a from-scratch feature.** `HoverCameraController` already solves
+framing per state, already has drive, strafe, boost, reverse-boost, downed and nose-across-travel
+states with an inspector preview (`0.19`), and already runs look-ahead with a rate limit. The question
+here is authority, not capability: how much the rig decides on its own and how the player takes it
+back.
+
+**Do not confuse this with the framing revisit.** `5.12` revisits the AIM framing once there is
+something to aim at. This is about the drive camera acting on its own. They will probably want judging
+in the same session and they are different questions.
+
+**Related, and it is why 2.18 sits next to this one:** the third tester's difficulty was the right
+stick carrying both steering and camera pitch. That is a binding question, not a camera-behaviour one.
+
+### 2.18 Control scheme: three testers reached for bindings the game does not have
+
+**Pre-alpha 1 playtest, 2026-08-19.** Three separate mismapping reports, none of which cost anyone a
+run, all of which say the same thing about expectations:
+
+- One player reached for **Cross for gas**, old-school racing convention. Cross is `Jump`.
+- One player reached for **R2 for gas**. R2 is `Fire`.
+- One player expected **all steering on the left stick and all camera on the right**. The live scheme
+  is the reverse for steering: `Turn` is right stick X, throttle is left stick Y.
+- Tester 2 struggled with **camera pitch sharing the right stick with steering**, which is the same
+  expectation expressed as a difficulty rather than a guess.
+
+**The scheme survived contact, and that is the more important finding.** Players tried to invent
+alternatives and **failed to produce one**, and reported the twin sticks as contextualized once they
+understood the drive/aim mode switch. Recorded as judged good in `CLAUDE.md`. **This item is about
+placement, not about the model.**
+
+**Gate: the full control set exists.** Owner decision 2026-08-20: *bindings are easy enough to swap
+but we should wait until we have all of the controls in before deciding if they are placed in the most
+optimized or ergonomic spots.* Seven of thirteen weapons are unimplemented (6.1), pickups do not exist
+(1.5), and three impulse channels are off. **Optimising a layout against a partial control set means
+doing it twice.**
+
+**One concrete ergonomic collision to carry forward, since it is the only one with a mechanism rather
+than an expectation:** `Boost` is L3, a CLICK of the left stick, while air control reads that same
+stick's DEFLECTION for pitch and roll. Boosting mid-trick asks one thumb to press and steer the same
+input. Tester 3's report of boosting through tricks is this. See 2.19.
+
+**Do not renumber the actions to fix a doc.** `HoverControls.inputactions` is the source of truth for
+the control table in `GameDesignDocument.md` section 6, settled by `3.18`.
+
+### 2.19 Air control and tricks need to be taught, not discovered
+
+**Pre-alpha 1 playtest, 2026-08-19.** Tester 2 believed L1 and R1 were mirrored roll buttons, one for
+each direction, **and never found flips at all.** Tester 3 kept disengaging air authority part way
+through a rotation. Neither found the mechanic on their own.
+
+**The binding is a fair reason to read it that way.** L1 and R1 are bound **identically** to `Drift`,
+so two mirrored shoulder buttons genuinely do the same thing. Held airborne, left stick Y is pitch and
+X is roll (`HoverController_Propulsion.cs`, `ApplyAirControl`). Nothing on screen says so.
+
+**Tester 3's dropped rotations have a mechanism worth recording.** Tricks arm on the rising edge of
+air control, once per flight (`CLAUDE.md` > `HoverController_Tricks`). Releasing the shoulder mid-
+rotation does not disarm the trick, it removes the authority needed to COMPLETE the revolution, and
+revolutions bank on the crossing. **So the trick was still armed and simply never finished**, which
+from the player's side looks like the game not counting it.
+
+**This is an onboarding gap, not a defect, and the playtest proved that.** Owner, 2026-08-20: the
+tricks were there for everyone once they were told about the mechanics and given a run to feel them
+out. **All four testers were landing tricks in their second run** — timing jumps off ramps, taking
+secondary air off a bounce, jumping out of a drift. Whatever the discovery cost is, thirty seconds of
+explanation clears it and the skill sticks immediately.
+
+**Gate: the core loop, via the FTUE that will teach it.** Owner decision 2026-08-20: this is what a
+first-time user experience covers, and an FTUE needs a loop to be taught inside of. Filed with 2.18
+because both are the control scheme becoming legible.
+
+**Consequence for reading future playtests, and the only reason this needs writing down before the
+FTUE exists:** testers reach the trick layer in run two, not run one. **First-run data says nothing
+about tricks either way.** Do not read a quiet first run as a negative result on the trick economy.
+
+---
+
 ## Tier 3 — Known traps and code quality
 
 **These are not currently causing visible problems.** Each is recorded because it will be misdiagnosed as
@@ -1032,9 +1258,11 @@ knockback could be exercised today.
 Related and still unmeasured: **particle collision at scale.** Every multi-vehicle performance figure
 was taken with AI driving and no combat, because the AI cannot fire (1.6).
 
-### 4.4 Two things the first build did not test
+### 4.4 Allocation under sustained weapon fire has never been measured
 
-The GC question itself is closed: the periodic hitch was the editor's own allocation and does not
+**Narrowed 2026-08-20: the marker half closed, the allocation half did not.** Retitled rather than
+renumbered, because what remains is the half the number was issued for. The GC question itself was
+already closed: the periodic hitch was the editor's own allocation and does not
 survive a build. What that three-minute run did not cover:
 
 **Allocation under sustained weapon fire and heavy projectile traffic.** Never measured. `AllocationBisect`
@@ -1043,19 +1271,17 @@ all. **The build makes this cheap:** idle allocation there is 0.01-0.08 MB/s, so
 allocate will stand out against a floor of essentially zero, which was never true in the editor's
 4.47 MB/s. Fire continuously through a long run and read `alloc_mb_s` in the spike CSV.
 
-**The marker key has never been confirmed in a build.** The first build run recorded zero markers because
-nobody pressed `M`: not evidence of failure, but not evidence of success either, and this project has
-already lost eight sessions to a marker key that silently never arrived. **Press `M` once in the first
-thirty seconds of the next long run and confirm `[MotionTrace] MARKER 1` in `Player.log` before
-continuing.** If it is missing, stop and fix it rather than spending the rest of the session producing an
-unfalsifiable trace. Gamepad input is already proven in a build.
+**The marker key is CONFIRMED WORKING in a build, 2026-08-20**, on the owner's report from the
+four-tester session. It had never been proven before: the first build run recorded zero markers because
+nobody pressed `M`, and the 2026-08-18 run reported `0 markers` despite the owner spamming `M` for
+about a minute during a soft lock, **which was the buffer having filled at t=666.9s and not the key**.
+That is now settled in the other direction and needs no further runs.
 
-**Still unanswered after the 2026-08-18 build run, and the reason is worth recording.** That session
-reported `0 markers` despite the owner spamming `M` for about a minute during a soft lock, which reads
-exactly like the failure this item is about. **It was not.** The `MotionTrace` buffer had filled at
-t=666.9s and the presses came around t=1200s, nine minutes after the instrument stopped accepting rows.
-So the key remains untested rather than disproved. **Do not close this item on that session, and do not
-open a new one for a broken marker key.**
+**What replaced it as the marker risk, and it is a process one rather than a code one.** The
+2026-08-19 session dropped no markers at all, by choice: the owner watched every run and diagnosed the
+soft locks live, which worked at four testers with one observer. **It does not scale, and the traces
+from that session are correspondingly hard to navigate.** Anyone tested without the owner watching has
+to be told to press `M`.
 
 **The real finding from that run is the buffer, and it changed a shipped value.** `captureSeconds` was
 600 against sessions running 20 minutes, so capture ended at 11.1 minutes and the entire soft lock,
@@ -1268,6 +1494,109 @@ half-day.
 
 ---
 
+### 5.13 Re-judge the aim feel now that nothing is propping it up
+
+*Was `0.31`. **Retired from Tier 0 on 2026-08-20** and renumbered. Owner: the aim feel is good enough
+for now, defer until weapons are further along. **Tier 5 rather than Tier 2** because this item was
+always tuning that closes on a feel report rather than code, which is this tier's definition, and
+because it now shares 5.12's gate: judging how the nose answers the stick is worth more when there is
+something at the end of the barrel. **Read alongside 5.12** — that one is the aim FRAMING, this one is
+the aim FEEL, and they will want the same session.*
+
+
+**Successor to 0.29, which closed 2026-08-19.** New number rather than a reopen, because 0.29's job
+was the defect and that is done and judged. **Nothing here is a known fault.** It is a short list of
+values whose MEANING changed when the un-aim bug was fixed, and which have therefore never been
+judged for what they now do.
+
+**1. `aimPitchTrackingStrength`, live value 200.** Read `TuningLog.md` > Aiming on slopes before
+touching it. **It was never a feel value:** it was the number holding the nose down against a
+suspension that had stopped working, which is why aim tracking needed to be seventeen times leveling
+strength. With the bug gone it barely affects attitude at all — 200, 100, 50, 25 and 12 all hold a 20
+degree ramp within 8 degrees at support 1.000 — so it is now free to be tuned purely for how the nose
+answers the stick, which is what its tooltip always claimed. **The owner tried 100 during the
+2026-08-19 session and liked it, but the change did not persist to the asset**, so that reading is
+unconfirmed and the shipped value is still 200.
+
+**2. `strafePitchLimit`, live value 20, and its meaning changed.** With the hull levelling to the
+horizon in aim mode, the clamp is now measured from the HORIZON instead of from the surface, with no
+change to the clamp code. **A ramp no longer adds to your reach**, so on a slope steeper than 20
+degrees you cannot point at something directly ahead of you on it, and the arena has the loop and the
+screwtower. Raising it is cheap: 0.22 removed both things that made a large limit dangerous. **Not
+reported as a problem yet** — the owner has driven several sessions since without raising it — so
+this is a watch, not a fix.
+
+**3. The strafe composer's dead zone and damping, `0.2` and `0.5` on the vcam.** Camera rotation lags
+any hull pitch change, including commanded ones, at roughly 25px per degree at strafe FOV 57. **Do
+not pre-empt this.** It predates everything in 0.29 and the owner has judged the current feel good
+twice since; open it only if a play report points at it. Read the values off the vcam in the editor
+rather than the prefab, per 3.16 and 3.17.
+
+**Done looks like:** the owner has driven each of the three and either changed it deliberately or
+recorded that it is right as it stands. **This item is tuning, not engineering**, and it closes on a
+feel report rather than a measurement.
+
+**Related but NOT in scope: the nose overshoots its commanded aim by about ten degrees across a
+landing.** That is recorded as a consciously accepted limitation in `CLAUDE.md`, with the owner's
+verdict that it reads as a natural consequence of a high aimed jump. **If it is ever reopened, it is
+the pitch overshoot that gets fixed, not the camera**, which only moves because the strafe rig
+inherits hull pitch by design.
+
+
+### 5.14 The air jump does not justify itself
+
+**Pre-alpha 1 playtest, 2026-08-19, all four testers.** The consensus: they could take or leave the
+air jump. It did not hurt anything and it did not add enough to justify its presence.
+
+**This is a VALUE report and NOT a feel report, and the distinction is the whole item.** Air jump feel
+was judged good on 2026-08-14 (*"air jump feels good now"*) after `airJumpFallCancel` 0.6 fixed the
+real defect, which was that the ability's strength depended on WHEN it was pressed. Nothing in this
+report contradicts that. **Four players said the ability works and does not earn its place**, which is
+a different question and does not reopen `TuningLog.md` > Air jump.
+
+**Three things constrain any answer, and two of them are load-bearing elsewhere:**
+
+1. **Wall jumping falls out of the air jump firing along local up** and is confirmed working in play
+   (`CLAUDE.md` > Standing Decisions, closed as `5.10`). Removing or re-scoping the air jump removes
+   wall jumping with it, and wall jumping was accepted as advanced movement.
+2. **Cosine loss is intended.** Vertical gain scales with how upright the craft is, which is the direct
+   consequence of the directional-juke decision and cannot be removed without giving up the wall-shove.
+3. **It costs 15 energy** against a tap jump's 10 and a charge jump's 25, inside an economy that was
+   rebalanced when `regenRate` was halved to 10 and tricks became an income.
+
+**No action is being taken.** Owner, 2026-08-20: this sits as feedback. It is filed rather than
+dropped because "works and is not worth it" is an open design question, and this tier is where those
+live. **Do not act on it as a tuning problem** — making the air jump stronger is not what four people
+asked for.
+
+### 5.15 How much stacks on top of a jump, and whether it is too much at once
+
+**Pre-alpha 1 playtest, 2026-08-19, one tester.** Tester 3 struggled to manage boost, jump, air
+authority and tricks all building off each other, and was often boosting through tricks or dropping
+air authority part way through a rotation.
+
+**The discoverability half of this is 2.19 and is answered.** Once told how air control works, every
+tester was landing tricks in their second run. **What is left here is the question 2.19 does not
+cover: whether the abilities layering onto one jump is too much to hold at once even when understood.**
+
+**One concrete ergonomic collision belongs to 2.18, not here:** `Boost` is L3, a click of the same left
+stick whose deflection air control reads for pitch and roll. Some of "boosting through tricks" is that
+one input doing two jobs, and it gets solved when the control scheme is finalised.
+
+**Why this is a real question rather than a first-session complaint.** Everything stacked on a jump was
+judged good individually — the trick economy (2026-08-15), boost in drive mode (2026-08-16), fall
+gravity and the two-barrel-roll margin (2026-08-17), the charge squat (2026-08-17). **Each was judged
+alone. Nobody has judged the combination**, and the project has already recorded the general lesson
+that neighbouring systems need re-judging when a shared quantity moves (`TuningLog.md` > Air jump).
+
+**No action is being taken.** Owner, 2026-08-20: this sits as feedback. **Do not simplify anything on
+the strength of one first-run report** — the same session recorded an approachable learning curve and
+real high-skill headroom, judged good in `CLAUDE.md`, and that is the thing this tier must not trade
+away by accident.
+
+
+---
+
 ## Tier 6 — Unimplemented features
 
 ### 6.1 Seven of thirteen weapons
@@ -1374,9 +1703,12 @@ reused.
 | **0.18** | `TuningLog.md` > The downed window > Closed as 0.18. Shipped 2026-08-17. **The title of this item was the wrong diagnosis:** `flipRecoverySpeedThreshold` was never the defect and stayed at 2. The arming clock was RESETTING to zero on any excursion past it, pricing a one-frame blip and a 229ms one identically, and the craft is pushed out of the gate by its own settling tumble -- so recovery interrupted its own clock. `flipRecoveryProgressDecay` 1 makes the cost symmetric. Worth 0.78s on a 25 m/s wipeout and 2ms at rest |
 | **0.21** | `TuningLog.md` > Fall gravity and airtime, in the 2026-08-17 continuation rather than a new entry. Shipped `extraFallGravity` 30 -> 35. **Closed without a sweep**, because the closed-form model reproduced the 2026-08-14 table to within measurement slop on three independent quantities, so a sweep would have re-measured arithmetic. **The hard-landing framing this file carried was the wrong headline:** both of the owner's rules survive the whole usable range and the real cost is the barrel-roll landing margin, which has no ceiling to trip — it degrades continuously, ~25ms per 5 units. **Judged good in play the same day**, against a test the owner supplied: two barrel rolls still land |
 | **0.25** | `TuningLog.md` > The charge squat. Shipped 2026-08-17. Ride height is now the charge meter, `chargeSquatDepth` 0.2 of hover height. **The owner answered this item's blocking design question: the squat EXPRESSES the charge and never stores it**, so nothing here stacks on `jumpImpulseMax` and the tuned arc keeps its meaning. Two of the three traps this file recorded were real and one was overstated. **Trap 1 was real and this file understated WHERE it bites:** support does not collapse on the slow charge ramp (worst 0.85, a steady 15% sag), it collapses to exactly 0 for 0.2s when the target STEPS -- landing with a charge already held, or ducking into a tunnel at speed. **The latent ceiling-duck bug this file predicted was therefore confirmed and is fixed as part of this**, by keying support to the authored ride height instead of the targeted one. Trap 2 handled by min-combining two ride-height writers; trap 3 is why depth is a fraction rather than a distance |
-| **0.29** | `TuningLog.md` > Aiming on slopes: the un-aim reference, and the horizon. Shipped and **judged good in play 2026-08-19**: *"This genuinely feels much better."* Two things, and **the bug was the larger half**: the owner's design decision that aim mode stabilises the BASE rather than the gun (`CLAUDE.md` > Standing Decisions), and a real defect where `UnaimRotation` referenced a `AverageGroundNormal` that `ApplyHoverForces` had just reset to `Vector3.up`, so the un-aim was measured against the world vertical instead of the surface. **Invisible on flat ground, which is where 0.22 was measured**, and on a 20 degree ramp it unloaded the rear springs to exactly zero and left the craft hanging off its front pair. It also closed a hypothesis 0.22 had recorded and marked unmeasured. **`aimPitchTrackingStrength` 200 was never a feel value** and the successor for re-judging it is **0.31** |
+| **0.29** | `TuningLog.md` > Aiming on slopes: the un-aim reference, and the horizon. Shipped and **judged good in play 2026-08-19**: *"This genuinely feels much better."* Two things, and **the bug was the larger half**: the owner's design decision that aim mode stabilises the BASE rather than the gun (`CLAUDE.md` > Standing Decisions), and a real defect where `UnaimRotation` referenced a `AverageGroundNormal` that `ApplyHoverForces` had just reset to `Vector3.up`, so the un-aim was measured against the world vertical instead of the surface. **Invisible on flat ground, which is where 0.22 was measured**, and on a 20 degree ramp it unloaded the rear springs to exactly zero and left the craft hanging off its front pair. It also closed a hypothesis 0.22 had recorded and marked unmeasured. **`aimPitchTrackingStrength` 200 was never a feel value** and the successor for re-judging it is **5.13** (issued as 0.31, retired to Tier 5 on 2026-08-20) |
 | **0.30** | `TuningLog.md` > The landing snap in strafe was the damping coefficient, not the damping. Shipped and **judged good 2026-08-19**: *"it feels good."* The stutter was neither the springs nor the craft, whose motion is continuous across touchdown; the strafe camera's vertical damping collapsed from 0.25 to 0 in the ~20ms hover support takes to arrive, snapping out two metres of accumulated lag in two frames. Fixed with a slew limit on the coefficient, `verticalDampingSlew` 0.6, the same instrument as the speed look-ahead's. **The residual dip on high aimed landings was ACCEPTED by the owner rather than fixed** and is recorded in `CLAUDE.md` > Consciously accepted limitations, along with the note that the thing to fix there would be the pitch overshoot, not the camera |
 | **5.10** | `CLAUDE.md` > Standing Decisions. **Wall jumping already works** and was never built; it falls out of the air jump firing along local up. Confirmed in play by the owner 2026-08-17 and accepted as advanced movement |
+| **0.28** | **2.16**, which carries the whole analysis forward unchanged. **Retired from Tier 0 on 2026-08-20 without anything being built**, because the owner gated it behind a representative arena and an arena is art, which is the sorting rule's own demotion case. **Two findings travelled with it and both argue for the gate:** no tester raised altitude legibility at all across four players and two runs each, against an item that was explicitly filed on the prediction that they would; and the owner's original complaint named the tiled ground and the propless test environment as the cause, so the cue would have been tuned against conditions that will not exist |
+| **0.31** | **5.13**, which carries the three values and their measurements forward unchanged. **Retired from Tier 0 on 2026-08-20 without being judged.** Owner: the aim feel is good enough for now, defer until weapons are further along. Tier 5 rather than Tier 2 because it was always a feel report rather than code, and it now shares 5.12's gate |
+| **0.34, 0.35, 0.37** | **2.18, 2.17 and 2.19 respectively.** Issued during the pre-alpha 1 playtest intake on 2026-08-19, never written into this file at Tier 0, and **placed straight into Tier 2 on 2026-08-20** by the same sorting rule: 0.35 is gated on the arena, 0.34 and 0.37 on the control scheme being complete. **Listed here anyway so the three numbers are burned**, because they were discussed by number before they were filed and a number that has ever named a thing is never reused |
 
 **The old Tier 4 was a deletion list and is fully executed**, which is why the number was free to reuse for
 verification debt. Three dead APIs were removed. If a lock tone or a HUD pitch indicator is ever wanted, add
