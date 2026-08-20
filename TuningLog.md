@@ -575,6 +575,92 @@ A/B in the regime where the effect exists: **drive 96.6 deg/s against strafe 105
 **Trick regression unaffected:** the asset diff has zero deletions, so none of the five inputs to the
 two-roll margin moved, and the fade is grounded-only.
 
+---
+
+### The drive-mode lane change, and what it is deliberately not
+
+*Built for `0.36` 2026-08-20 and NOT yet judged in play. `driveLateralPush` added at **8**; the asset
+diff is one added line and zero deletions, so nothing else moved -- `lateralDamp` in particular is
+untouched at 1. Judged with `0.33` and `0.32` in one feel pass.*
+
+**The owner's definition, and every decision below falls out of it:** *"definitively not a steering
+mechanism -- a lane change, or a way to make a small adjustment to your line or line up a shot a
+little better, without being twitchy."* If a future change makes this feel like steering, it is
+wrong regardless of what else it improves.
+
+**Two testers asked for it unprompted**, and the item warned that the axis is shared with mid-air
+barrel roll. That trap turned out to be easier than the item expected, and the ceiling question
+answered itself.
+
+#### Built against the drag rather than beside it
+
+The game already wipes away sideways motion in drive mode; that is what makes the craft track its
+nose instead of skating. **The push works against that existing drag rather than adding a new cap.**
+Two consequences, both wanted:
+
+- **The knob IS the settled sideways speed**, whatever `lateralDamp` happens to be, because push and
+  drag are multiplied by the same coefficient and cancel at exactly the tuned number. A later change
+  to the drag cannot silently rescale it.
+- **Releasing the stick re-centres the craft for free.** The drag wins the moment the push stops;
+  nothing has to actively pull the craft back onto its line.
+
+The rejected alternative was excluding the push from the drag and giving it its own ceiling, the way
+strafe works. That means a hand-rolled second copy of a cap, which is the precise shape of the defect
+that produced the strafe forward dead band.
+
+#### Scaled by forward speed, which is the constraint and not a polish detail
+
+A fixed sideways speed would be a gentle lean at 80 and **a stationary craft crabbing sideways under
+its own power** — strafing without the trigger, which the owner ruled out explicitly. Scaling by
+forward speed makes it a constant ANGLE off the line instead: the same move at every speed, no
+threshold to tune or to feel, and exactly nothing at rest.
+
+| | measured |
+|---|---|
+| at rest, full stick, 3s | **0.00 m/s, 3cm of drift** |
+| 80 m/s, sideways at 1s | 5.07 m/s, **2.96m moved** |
+| 80 m/s, sideways at 2s | 7.35 m/s, 9.47m moved |
+| 80 m/s, settled | 8.00 m/s = **5.7° off the line**, 15% of the strafe ceiling |
+
+Forward speed held at 80 throughout, so the manoeuvre costs nothing.
+
+#### The knob sets distance, not timing, and cannot be made to set both
+
+Measured at 4 / 8 / 16, as the fraction of each setting's OWN final speed:
+
+| | 0.25s | 0.5s | 1s | 2s | 3s |
+|---|---|---|---|---|---|
+| push 4 | 24% | 41% | 64% | 99% | 106% |
+| push 8 | 23% | 40% | 64% | 92% | 100% |
+| push 16 | 22% | 39% | 64% | 88% | 98% |
+
+**The shape is invariant — 64% at one second in all three.** Only the scale moves, so turning the
+knob up genuinely does make the first half-second respond harder (0.96 / 1.84 / 3.48 m/s at 0.25s)
+while leaving the roughly three seconds to fully settle unchanged.
+
+**What the knob therefore cannot buy is a SMALL lean that arrives QUICKLY.** That pairing needs a
+dedicated response term. **`lateralDamp` is not it: the owner ruled it out on 2026-08-20 — "I don't
+want to change lateral damping, period. Too much feel is built around that number."** Deliberately
+not built on spec; it waits on the owner driving it and wanting it.
+
+#### The airborne exemption, and the leak that was not one
+
+Air, strafe and drift are all exempt. Strafe measured **exactly** exempt by A/B: 53.53 m/s lateral
+with the push at 8 and 53.53 with it at 0, where stacking would have read about 61.
+
+**The airborne exemption is structural rather than a flag.** `ApplyDrag` returns early at zero
+support, so no lateral force can exist airborne at all. It also makes the handoff exact: air-control
+roll fades IN on `1 - HoverSupport` while this fades OUT on the same number, so the two can never
+both own the stick and there is no seam. **A grounded bool would have switched at a threshold** —
+the defect `ApplyDrag` itself already fixed once by scaling on support instead of gating on it.
+
+**The first airborne measurement looked like a leak and was not.** Sideways velocity read 0.42 m/s
+with the push on against −0.04 with it off. That was the instrument: local-frame velocity is measured
+against an axis that ROTATES with the chassis, so a body coasting on a fixed world velocity reads as
+a drifting local one as it banks. Re-measured in world frame across **279 airborne samples at exactly
+zero support with full stick, horizontal velocity moved 0.0036 m/s** — floating-point noise. Filed as
+`Measuring.md` trap 47.
+
 #### Closed as 0.18: the arming clock now decays instead of resetting
 
 *Shipped 2026-08-17. `flipRecoveryProgressDecay` added at 1, `flipRecoverySpeedThreshold` left at 2.*

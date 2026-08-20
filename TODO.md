@@ -317,6 +317,33 @@ rather than alongside it.
 
 **Done looks like:** the owner drives it, the push is useful for line adjustment, and holding L2 still
 feels like a distinct mode rather than more of the same.
+
+**STATUS 2026-08-20: built, measured, NOT yet judged in play.** `driveLateralPush` added at 8; the
+asset diff is one added line and zero deletions, so **`lateralDamp` is untouched at 1**. Settles at
+8 m/s sideways at top speed, which is **5.7 degrees off the line and 15% of the strafe ceiling** — so
+the "must not overlap with strafe" constraint is met with room to spare. Full result in
+`TuningLog.md` > The drive-mode lane change.
+
+**The owner's definition of the feature, which now governs it:** *"definitively not a steering
+mechanism — a lane change, or a way to make a small adjustment to your line or line up a shot a
+little better, without being twitchy."*
+
+**The standstill constraint is met by construction, not by a threshold.** The push is scaled by
+forward speed, so it is a constant ANGLE off the line at any speed and exactly nothing at rest:
+measured 0.00 m/s and 3cm of drift over three seconds at full stick. A fixed sideways speed would
+have been strafing without the trigger.
+
+**The item's named trap is closed structurally.** Air-control roll fades in on the same hover-support
+number this fades out on, so the two can never both own the stick and there is no seam — better than
+the grounded gate the item proposed. Verified in world frame: 0.0036 m/s of drift across 279 airborne
+samples at full stick.
+
+**One thing left open for the playtest, and it is the only one.** The lean arrives over about a
+second and settles over three. **The knob sets distance, not timing** — measured at 4/8/16, the craft
+is 64% of the way to its own final speed at one second in every case. If it reads as mushy, the fix
+is a dedicated response term; **`lateralDamp` is explicitly NOT available for it** (owner,
+2026-08-20: *"I don't want to change lateral damping, period. Too much feel is built around that
+number."*). Not built on spec.
 ### 0.12 A sliver of bumper still clips on the pitch-up
 
 **CONFIRMED STILL PRESENT 2026-08-17.** Owner, asked to glance at it after four separate changes to

@@ -1,7 +1,45 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v2.1
+/// HoverController_Propulsion v2.2
+///
+/// v2.2: The drive-mode lane change. TODO 0.36, two testers asking unprompted for left
+///       stick X to nudge the craft sideways while driving.
+///
+///       WHAT IT IS, in the owner's words 2026-08-20: "definitively not a steering
+///       mechanism -- a lane change, or a way to make a small adjustment to your line or
+///       line up a shot a little better, without being twitchy." Every decision below
+///       falls out of that sentence, so read it before changing any of them.
+///
+///       driveLateralPush is expressed as the sideways speed the craft SETTLES at, and it
+///       is applied against the existing lateral drag rather than alongside a new cap.
+///       Push and drag balance at exactly the tuned number whatever lateralDamp is, so a
+///       later change to the drag cannot silently rescale the knob, and releasing the
+///       stick lets the drag put the craft back on its line with nothing to re-centre it.
+///
+///       SCALED BY FORWARD SPEED, which is the owner's hard constraint and not a polish
+///       detail: a fixed sideways speed would be a lean at 80 and a craft crabbing under
+///       its own power at a standstill, which is strafing without the trigger. Scaling
+///       makes it a constant ANGLE off the line -- 5.7 degrees at the shipped 8 -- so it
+///       is the same move at every speed and exactly nothing when stopped. Measured at
+///       rest with full stick for 3s: 0.00 m/s and 3cm of drift.
+///
+///       Measured at 80 m/s: 2.96m sideways in the first second, 9.47m by two, settling
+///       at 8.00 m/s. Forward speed held at 80 throughout, so the manoeuvre is free.
+///
+///       THE KNOB SETS DISTANCE, NOT TIMING, and the two cannot be separated with it.
+///       Measured at 4 / 8 / 16, the craft is 64% of the way to its own final speed at
+///       one second in ALL THREE cases -- the shape is invariant and only the scale moves.
+///       Turning it up therefore does make the first half-second respond harder (0.96 /
+///       1.84 / 3.48 m/s at 0.25s) but cannot buy a SMALL lean that arrives QUICKLY. That
+///       pairing would need a dedicated response term; lateralDamp is NOT it and the owner
+///       has ruled it out, since too much feel is built on that number.
+///
+///       Air, strafe and drift are all exempt. The airborne one is the item's named trap
+///       and is structural rather than a flag: ApplyDrag returns early at zero support, so
+///       no lateral force can exist there at all. It also makes the handoff exact, since
+///       air-control roll fades IN on (1 - HoverSupport) while this fades OUT on the same
+///       number -- a grounded BOOL would switch at a threshold and leave a seam mid-band.
 ///
 /// v2.1: Steering fades with speed. TODO 0.32, two independent testers asking for less
 ///       direct control the faster they go. There was no speed term in ApplyTurning at
@@ -1540,6 +1578,50 @@ public class HoverController_Propulsion : MonoBehaviour
         return Mathf.Lerp(faded, 1f, Mathf.Max(driftLerp, _strafeModeBlend));
     }
 
+    /// <summary>
+    /// THE ONE PLACE the drive-mode lane change is decided. Returns the sideways speed the
+    /// craft should settle at, in m/s, signed right-positive.
+    ///
+    /// SCALED BY FORWARD SPEED, and that is the whole design rather than a refinement. A
+    /// fixed sideways speed would be a gentle lean at 80 and a craft crabbing sideways
+    /// under its own power at a standstill -- which is strafing without the trigger, the
+    /// one thing the owner ruled this must never become. Scaling by speed makes it a
+    /// constant ANGLE off the line of travel instead: the same move at every speed, and
+    /// exactly nothing when stopped, with no threshold to tune or to feel.
+    ///
+    /// Forward speed is clamped at zero, so there is no lane change in reverse. Lane
+    /// changing backwards is not a manoeuvre, and letting it through would flip which way
+    /// the stick moves the craft.
+    ///
+    /// THREE EXEMPTIONS, matching yawSpeedFade:
+    ///   Air     -- fades out with HoverSupport, via the damping coefficient this is
+    ///              multiplied by. That is the SAME number air-control roll fades IN on
+    ///              (_airControlWeight scales by 1 - HoverSupport), so the two are exactly
+    ///              complementary and can never both own the stick. A grounded BOOL would
+    ///              switch at a threshold and leave a seam mid-band, which is the defect
+    ///              ApplyDrag already fixed once by scaling on support instead of gating.
+    ///   Strafe  -- faded by _strafeModeBlend, because that axis is the strafe axis and the
+    ///              two would otherwise stack into more lateral speed than either grants.
+    ///   Drift   -- faded by driftLerp. A sideways shove during a held slide fights a
+    ///              judged-good behaviour, and not exempting drift has now been the defect
+    ///              twice in this subsystem (accelCurve, then yawSpeedFade).
+    /// </summary>
+    private float DriveLateralTarget()
+    {
+        if (P.driveLateralPush <= 0f)
+            return 0f;
+
+        float stick = Mathf.Clamp(input.StrafeX, -1f, 1f);
+        if (stick == 0f)
+            return 0f;
+
+        float speedFraction = Mathf.Clamp01(Mathf.Max(0f, _cachedLocalVel.z) / Mathf.Max(0.01f, P.topSpeed));
+
+        return stick * P.driveLateralPush * speedFraction
+             * (1f - _strafeModeBlend)
+             * (1f - driftLerp);
+    }
+
     // -------------------------------------------------------------------------
     // Drag (grounded only, both axes)
     // -------------------------------------------------------------------------
@@ -1588,6 +1670,23 @@ public class HoverController_Propulsion : MonoBehaviour
             float unwantedLateral = _cachedLocalVel.x - intendedLateral;
 
             rb.AddForce(transform.right * (-unwantedLateral * effectiveLateralDamp), ForceMode.Acceleration);
+
+            // The drive-mode lane change (TODO 0.36). Deliberately applied HERE, against the
+            // damping term directly above it, because the two are one mechanism: the push is
+            // expressed as the sideways speed it should SETTLE at, and multiplying by the same
+            // damping coefficient is what makes that true. At equilibrium the two forces cancel
+            // at exactly DriveLateralTarget, whatever lateralDamp happens to be, so the knob
+            // cannot be silently rescaled by a later change to the drag.
+            //
+            // The consequence worth knowing: lateralDamp sets how QUICKLY the lean arrives
+            // (time constant 1/lateralDamp, about a second at the shipped 1) while
+            // driveLateralPush sets how FAR it goes. Splitting a single feel across two knobs
+            // is a real cost, accepted because the alternative is excluding this from the drag
+            // and rebuilding a second cap -- and a hand-rolled copy of a cap is exactly what
+            // produced the strafe forward dead band.
+            float lateralTarget = DriveLateralTarget();
+            if (lateralTarget != 0f)
+                rb.AddForce(transform.right * (lateralTarget * effectiveLateralDamp), ForceMode.Acceleration);
         }
 
         // Forward drag: fades in as throttle approaches zero.

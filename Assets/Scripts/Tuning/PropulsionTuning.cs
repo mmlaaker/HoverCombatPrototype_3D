@@ -467,6 +467,25 @@ public class PropulsionTuning
     [Range(0f, 120f)]
     public float strafeLateralCapStrength = 3f;
 
+    [Tooltip("A lane change while driving. Left stick sideways leans the craft off its line " +
+             "without turning it, for lining up a shot or slipping past something.\n\n" +
+             "THE NUMBER IS THE SIDEWAYS SPEED YOU SETTLE AT, at full stick and full speed. It is " +
+             "scaled by how fast you are going, so the lean is the same few degrees off your line " +
+             "at any speed and is EXACTLY NOTHING standing still. That is the point: a stationary " +
+             "craft sliding sideways is strafing without the trigger, which is the one thing this " +
+             "must never become.\n\n" +
+             "Judge it as a lean, not a speed. Against a Top Speed of 80: 5 is about 3.6 degrees " +
+             "off your line, 8 is 5.7, 12 is 8.5. Past roughly 20 it starts reading as weak " +
+             "strafing and holding the trigger stops being worth it.\n\n" +
+             "It builds over about a second rather than snapping across, because the same sideways " +
+             "drag that limits it is what it has to push through. Lateral Damp therefore sets how " +
+             "QUICKLY the lean arrives, while this sets how FAR it goes.\n\n" +
+             "DRIVE MODE, ON THE GROUND, FORWARD ONLY. It fades out as the craft leaves the ground " +
+             "exactly as mid-air roll fades in, so the two can never both have the stick. Strafe " +
+             "and drift both keep their own behaviour untouched.")]
+    [Range(0f, 25f)]
+    public float driveLateralPush = 8f;
+
     /// <summary>
     /// The shipped shape for accelCurve: full thrust off the line, tapering to a floor
     /// near the ceiling. Only ever reached by a field that has never been serialised --

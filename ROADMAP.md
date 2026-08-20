@@ -24,12 +24,20 @@ test environment, greybox art and the machine gun are all in place; the first bu
 with a 0.39ms spread. **`0.27` is done and judged good, so four remain: `0.33`, `0.32`, `0.36`,
 `0.12`.**
 
-**The owner changed the sequencing on 2026-08-20 and it is now build-three-then-judge-once.** `0.33`
-and `0.32` are both BUILT and neither is judged; `0.36` is next to build; then **one playtest judges
-speed, acceleration and turning together**, because all three move the same subsystem and judging
-them in turn would mean re-tuning each as the next arrived. **`0.12` is explicitly not part of that
-pass** and can wait — it is an accepted residual rather than a blocker. **So the milestone now turns
-on a single feel pass plus a decision on `0.12`.**
+**The owner changed the sequencing on 2026-08-20 and it is now build-three-then-judge-once.** **All
+three are now BUILT and none is judged:** `0.33`, `0.32` and `0.36` all landed on 2026-08-20. **The
+next step is one playtest judging speed, acceleration, turning and line adjustment together**,
+because they all move the same subsystem and judging them in turn would mean re-tuning each as the
+next arrived. **`0.12` is explicitly not part of that pass** and can wait — it is an accepted
+residual rather than a blocker.
+
+**So PRE-ALPHA 1 now turns on a single feel pass plus a decision on `0.12`.** That is the whole of
+the remaining milestone. **The three items each ship with one tunable and each is measured**, so the
+feel pass should be a tuning conversation rather than a build one: `accelCurve` (solve it, do not
+sweep it), `yawSpeedFade` plus `boostYawMultiplier` (the value is the outcome), and
+`driveLateralPush` (an angle off the line). **The known open questions are two**, both timing rather
+than size: whether the acceleration ramp still reads sluggish now that corners hold speed, and
+whether the lane change arrives quickly enough.
 
 **The milestone now has a completion criterion rather than a percentage.** The owner's 2026-08-14
 estimate was movement at ~88% wanting ~95%, which was never going to resolve into a decision.
@@ -52,7 +60,7 @@ owner's working order:
 | ~~**0.27**~~ | **DONE. Shipped and judged good in play 2026-08-20**, the owner driving both repro cases and unable to get stuck in either. The soft lock is closed and this milestone no longer has an item that can end a session. Outcome in `TuningLog.md` > Closed as 0.27. **The dead-man timer was the right shape and the obvious implementation of it was not:** forcing the righting on and suppressing the hover push are each necessary and neither is sufficient, which only showed up by building half of it and watching a craft sit at 177 degrees for twelve more seconds |
 | **0.33** | Acceleration is flat and top speed arrives in about 0.92s. There is no curve to tune because there is no curve. **Taken before 0.32 on purpose:** it decides how much time a player spends at the speeds 0.32 is judged at. **BUILT 2026-08-20 and awaiting judgement, not closed:** `accelCurve` shipped, top speed now takes 2.35–2.43s, and the owner's first read is that it feels sluggish |
 | **0.32** | Steering authority does not fade with speed. **Two independent testers.** Partly reopens a judged-good entry, deliberately. **BUILT 2026-08-20 and awaiting judgement:** `yawSpeedFade` and `boostYawMultiplier` shipped, yaw rate at top speed halved to 53.4 deg/s, low speed untouched, and `yawAccel`/`yawDamping` themselves never moved |
-| **0.36** | Left stick X does nothing in drive mode. **Two testers asked unprompted.** The axis is already read; the trap is that air control uses it for roll, so the push must be grounded-only. **Last of the three to build, and the last gate on the combined feel pass** |
+| **0.36** | Left stick X does nothing in drive mode. **Two testers asked unprompted.** **BUILT 2026-08-20 and awaiting judgement:** `driveLateralPush` shipped at 8, giving a 5.7° lean off the line, exactly nothing at a standstill, and no effect airborne. The item's roll-axis trap is closed structurally rather than by a grounded gate |
 | **0.12** | A sliver of bumper still clips on the pitch-up. **Last, and still an accepted residual rather than a blocker.** Confirmed present 2026-08-17 after four separate drive-camera changes |
 
 **What the playtest confirmed, and it is the larger half of the result.** Four testers who had never

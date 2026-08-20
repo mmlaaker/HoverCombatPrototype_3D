@@ -190,6 +190,7 @@ MonoBehaviour:
     strafePitchSensitivity: 100
     strafeModeBlendSeconds: 0.2
     strafeLateralCapStrength: 3
+    driveLateralPush: 8
   energy:
     maxEnergy: 100
     startingEnergy: 100

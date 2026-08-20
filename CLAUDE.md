@@ -330,6 +330,19 @@ intent to Foundation.
   asymptotic: the craft approaches the number in the inspector forever and never arrives, which
   presents as a mysterious cap below the tuning value. There is a 0.01 safety floor in code, but the
   floor that is meant to be tuned is the curve's own.
+- **The lane change is NOT a steering mechanism and must not become one.** Owner's definition,
+  2026-08-20: *"a lane change, or a way to make a small adjustment to your line or line up a shot a
+  little better, without being twitchy."* **`driveLateralPush` is scaled by forward speed so it is a
+  constant ANGLE off the line** (5.7° at the shipped 8) rather than a constant sideways speed —
+  which makes it exactly zero at a standstill, because a stationary craft sliding sideways is
+  strafing without the trigger. **That scaling is the owner's hard constraint, not a refinement.**
+- **The lane change is applied AGAINST the lateral drag, in the same block, and the two are one
+  mechanism.** The knob is the sideways speed the craft settles at, and multiplying by the same
+  damping coefficient is what makes that true regardless of `lateralDamp`. **The cost is that the
+  knob sets distance and not timing:** measured at 4/8/16, the craft is 64% of the way to its own
+  final speed at one second in all three cases, so the shape is invariant and only the scale moves.
+  **A small lean that arrives quickly would need a dedicated response term. `lateralDamp` is NOT
+  that term — the owner has ruled it out, as too much feel is built on it.**
 - **`yawSpeedFade` reads the value straight out, unlike `accelCurve`.** Settled yaw rate is
   `yawAccel / yawDamping`, which is linear, so 0.5 on the curve IS half the turn rate — no integral
   between the number and the feel. **It scales `yawAccel` and must not scale `yawDamping`:** the
@@ -889,6 +902,7 @@ is stable and never reused.**
 | 44 | `ForceMode.Acceleration` on `AddTorque` is a direct angular acceleration and does NOT go through the inertia tensor. Calibrate units before theorising |
 | 45 | A magnitude that discards direction describes the wrong event. Speed called a flip recovery a "fling" twice; displacement is the honest instrument |
 | 46 | A test whose two outcomes predict the same number proves nothing and still returns one. State what the FAILING case would print before believing a verification |
+| 47 | A velocity component read in the craft's own frame drifts when nothing acts on the craft, because the axis rotates. World frame for forces, local frame for behaviour |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
