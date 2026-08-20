@@ -30,6 +30,24 @@ public class PropulsionTuning
     [Min(0.01f)]
     public float topSpeed = 40f;
 
+    [Tooltip("The SHAPE of the acceleration: how much of Max Forward Accel you get at each " +
+             "fraction of the top speed currently in force.\n\n" +
+             "Flat at 1.0 is no shape at all — full thrust until the ceiling cuts it off, which " +
+             "reaches top speed in under a second and is what one playtester called far too quick. " +
+             "Falling to the right buys a long tail: the launch is unchanged and the last stretch " +
+             "has to be earned.\n\n" +
+             "WHICH KEY TO DRAG DEPENDS ON THE COMPLAINT, and they are not interchangeable. " +
+             "The RIGHT-HAND end only buys back the last quarter of the range: raising it five-fold " +
+             "moves time-to-top-speed from about 2.4s to 1.7s and leaves time-to-40 and time-to-60 " +
+             "where they were. If the craft feels SLUGGISH rather than slow to top out, that is the " +
+             "MIDDLE keys, and lifting the whole shape toward 1.0 is the move.\n\n" +
+             "Keep the right-hand end above zero or top speed stops being reachable at all.\n\n" +
+             "Read against a FRACTION of the current ceiling, not against metres per second, so " +
+             "boost and strafe get the same shape measured against their own top speeds.\n\n" +
+             "Applies to forward drive in both modes and to airborne boost. NOT to reverse, so " +
+             "braking is untouched.")]
+    public AnimationCurve accelCurve = DefaultAccelCurve();
+
     [Tooltip("How hard the craft accelerates backwards, and also THE BRAKE.\n\n" +
              "Pulling reverse while still moving forward slows you at this rate, so set it by how " +
              "fast you want to STOP rather than how fast you want to reverse.\n\n" +
@@ -418,4 +436,35 @@ public class PropulsionTuning
              "Try 2 to 6.")]
     [Range(0f, 120f)]
     public float strafeLateralCapStrength = 3f;
+
+    /// <summary>
+    /// The shipped shape for accelCurve: full thrust off the line, tapering to a floor
+    /// near the ceiling. Only ever reached by a field that has never been serialised --
+    /// an existing asset keeps whatever curve it already holds, so changing this does
+    /// NOT change any craft already tuned (Measuring.md trap 21).
+    ///
+    /// The floor at the right-hand end is deliberate and is not decoration: a curve that
+    /// reaches zero makes top speed asymptotic, so the craft approaches the number in the
+    /// inspector forever and never arrives at it.
+    /// </summary>
+    private static AnimationCurve DefaultAccelCurve()
+    {
+        var c = new AnimationCurve(
+            new Keyframe(0f,    1f),
+            new Keyframe(0.15f, 1f),
+            new Keyframe(0.40f, 0.70f),
+            new Keyframe(0.70f, 0.32f),
+            new Keyframe(1f,    0.12f));
+
+        for (int i = 0; i < c.length; i++) c.SmoothTangents(i, 0f);
+
+        // Flatten the entry segment by hand. SmoothTangents gives the second key a
+        // downward slope on BOTH sides, and a Hermite segment between two equal values
+        // with one sloped end bulges above them: it peaked at 1.013, so the craft
+        // briefly accelerated harder than Max Forward Accel claims to be its maximum.
+        var k0 = c[0]; k0.inTangent = 0f; k0.outTangent = 0f; c.MoveKey(0, k0);
+        var k1 = c[1]; k1.inTangent = 0f;                     c.MoveKey(1, k1);
+
+        return c;
+    }
 }

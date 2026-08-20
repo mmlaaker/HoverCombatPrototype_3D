@@ -175,8 +175,37 @@ is a straight ramp into a hard ceiling.
 
 **The live numbers, and they are why one tester could feel it.** `maxForwardAccel` **87** against a
 `topSpeed` of **80**, so ignoring the cap the craft reaches top speed in roughly **0.92s**. That is
-about 8.9g held flat. Boost scales both accel and ceiling by the same factor, so it does not change
-the time, only the destination.
+about 8.9g held flat. **Measured 2026-08-20 at 0.919s, so the arithmetic was right.**
+
+**Correction, 2026-08-20: this item previously claimed boost scales accel and ceiling by the same
+factor and so does not change the time. It does not.** `boostAccelMultiplier` is 1.5 and
+`boostSpeedMultiplier` is 1.25, so boost reached its HIGHER ceiling in LESS time — 0.828s to 100
+against 0.919s to 80 — and crossed the ordinary 80 at 0.669s. **Boost was the worst case of the
+complaint, not a neutral one.**
+
+**STATUS 2026-08-20: built, measured, NOT yet judged in play.** `accelCurve` added to
+`PropulsionTuning` and written into `VTP_Default.asset`; drive now takes **2.35–2.43s** to 80 against
+0.919s, with the launch unchanged and the tail carrying all of the added time. Reverse and drift are
+both exempt, the second after measuring that shaping a drift turns a held slide into a brake. Full
+before-and-after in `TuningLog.md` > The acceleration ramp. **This stays open until the owner drives
+it**, which is what "done" means for this item.
+
+**Owner's first drive, 2026-08-20: "this definitely feels more sluggish now."** Not a rejection.
+**The owner's decision is that `0.33` and `0.32` are judged together in one feel pass after the
+steering fade lands**, because they move the same subsystem and a ramp tuned before the fade exists
+would only be re-tuned after it. **So this item is now gated behind `0.32` for its judgement, though
+not for its build**, which is the reverse of the sequencing reason that put it first.
+
+**That pass does not need a sweep, because the ramp has a closed form** (`TuningLog.md` > Tuning the
+ramp to a target time). **A target time maps to a curve arithmetically**, validated to within 1% on
+a curve the model had never seen, so the owner can ask for a feel in words — "punchy start, top
+speed in two seconds" — and get keys back without a search. The integral costs one `eval` call and
+no play mode; the play run is for confirming the winner, not finding it.
+
+**The one thing to carry into that pass: the right-hand end of the curve is NOT the sluggishness
+knob.** Raising it five-fold moves time-to-40 by 0.001s and time-to-60 by 0.017s. It buys back the
+last quarter of the range only. Sluggishness lives in the middle keys, and punch lives in how far
+the leading flat run extends.
 
 **This is a structural absence, not a mistuned value**, which is why it gets an item rather than a
 line in `TuningLog.md`. Lowering `maxForwardAccel` alone buys a longer ramp with the same flat shape

@@ -1,7 +1,41 @@
 using UnityEngine;
 
 /// <summary>
-/// HoverController_Propulsion v1.9
+/// HoverController_Propulsion v2.0
+///
+/// v2.0: Acceleration gets a shape. TODO 0.33, from a playtester who said top speed
+///       arrived far too quickly. The reason there was nothing to tune is that there was
+///       no curve at all: ApplyDrive applied throttle * blendedFwdAccel as a CONSTANT
+///       until the cap cut it off, and forward drag is mutually exclusive with throttle,
+///       so nothing opposed it on the way up either. Measured dead straight in all three
+///       modes: 0.919s to 80 in drive, 0.828s to 100 boosted, 1.130s to 53 in strafe.
+///
+///       accelCurve scales that accel by the craft's FRACTION of whichever cap is in
+///       force. Normalising against the cap rather than against m/s is what lets one
+///       curve cover every mode, and it also closed an asymmetry nobody had noticed:
+///       boost multiplies accel by 1.5 but the ceiling by only 1.25, so boost reached its
+///       HIGHER top speed in LESS time than the craft reached its ordinary one.
+///
+///       Shipped shape, measured: 2.35-2.43s to 80 in drive, 2.03s to 100 boosted, 2.87s
+///       to 53 in strafe. All three stretched by about 2.5x, so the relationship BETWEEN
+///       the modes is unchanged. THE LAUNCH IS UNCHANGED TOO -- 10 m/s arrives at 0.119s
+///       before and 0.114-0.119s after -- because the curve is flat at full thrust for
+///       the first 15% of the ceiling. What got longer is the tail: 70 to 80 m/s alone
+///       now takes about 0.7s of the 2.4.
+///
+///       DRIFT IS EXEMPT, and the exemption is not optional. A drift's cap FALLS by
+///       design, so the fraction pins near 1 and the entire slide runs at the floor
+///       multiplier: measured 53.5 m/s against 77.3 m/s at 1.5s into a held drift, which
+///       is a held slide quietly converted into a brake. Faded out by driftLerp, and
+///       verified to restore the pre-change numbers to within noise. CLAUDE.md fenced
+///       drift off from this item in advance and the fence turned out to be load-bearing.
+///
+///       REVERSE IS EXEMPT TOO, structurally rather than by a flag: the reverse branch
+///       builds its accel from maxReverseAccel and never touches blendedFwdAccel.
+///       maxReverseAccel doubles as the brake, so shaping it would have softened stopping
+///       as a side effect of an acceleration decision. Braking measured at 67.17 m/s^2
+///       after the change against a tuning value of 67, which is the proof rather than
+///       the claim.
 ///
 /// v1.9: Drift stops being the fastest thing in the game, and starts costing something.
 ///       One defect and one feature, and the defect is the reason the feature looked
@@ -123,10 +157,14 @@ using UnityEngine;
 ///   drive. Never both at once. This is the only reliable cure for jitter caused
 ///   by opposing forces fighting at the same speed.
 ///
-///   Top speed is enforced inside ApplyDrive. Full accel until the tick that
-///   crosses the cap, which is clamped to land exactly on it (no overshoot
-///   ripple). At the cap, drive simply stops pushing; no drag wall is needed
-///   to hold the ceiling.
+///   Top speed is enforced inside ApplyDrive. The tick that crosses the cap is
+///   clamped to land exactly on it (no overshoot ripple). At the cap, drive
+///   simply stops pushing; no drag wall is needed to hold the ceiling.
+///
+///   The approach to that cap is SHAPED, and the shape is the only thing that
+///   opposes drive on the way up. Forward drag is mutually exclusive with
+///   throttle, so nothing else can be doing the work: if the ramp feels wrong,
+///   accelCurve is where it is wrong. See AccelCurveMultiplier.
 ///
 ///   Drift modifies three physics values (lateralDamp, forwardDamp, yawAccel) and
 ///   one transform (meshRoot Z rotation). It does not introduce new forces. Note
@@ -1228,8 +1266,16 @@ public class HoverController_Propulsion : MonoBehaviour
 
                 // Suppress drive if already at or above top speed.
                 if (capReference < effectiveCap)
-                    rawAccel = Mathf.Min(throttle * blendedFwdAccel,
+                {
+                    // The ramp shape. Fed the SAME pair the cap is enforced on, so a drift
+                    // is measured against the drift cap rather than against a forward axis
+                    // that has stopped describing its speed -- and then faded straight back
+                    // out by driftLerp, because drift is exempt. See AccelCurveMultiplier.
+                    float shapedAccel = blendedFwdAccel * AccelCurveMultiplier(capReference, effectiveCap, driftLerp);
+
+                    rawAccel = Mathf.Min(throttle * shapedAccel,
                                          (effectiveCap - capReference) / Time.fixedDeltaTime);
+                }
             }
             else
             {
@@ -1261,10 +1307,17 @@ public class HoverController_Propulsion : MonoBehaviour
         }
         else
         {
-            // Airborne with boost. Forward only, capped exactly at top speed.
+            // Airborne with boost. Forward only, capped exactly at top speed. Shaped by the
+            // same curve on purpose: an airborne boost that ignored the ramp would be the
+            // fastest way to reach top speed in the game, which is not a thing anyone asked
+            // for and would quietly become the optimal opening move.
             if (currentFwd < blendedTopSpeed)
-                rawAccel = Mathf.Min(Mathf.Max(throttle, 0f) * blendedFwdAccel,
+            {
+                float shapedAccel = blendedFwdAccel * AccelCurveMultiplier(currentFwd, blendedTopSpeed, 0f);
+
+                rawAccel = Mathf.Min(Mathf.Max(throttle, 0f) * shapedAccel,
                                      (blendedTopSpeed - currentFwd) / Time.fixedDeltaTime);
+            }
         }
 
         if (Mathf.Abs(rawAccel) < 0.001f)
@@ -1280,6 +1333,54 @@ public class HoverController_Propulsion : MonoBehaviour
 
         if (ShouldDrawDebug)
             Debug.DrawRay(transform.position, _driveAxis * rawAccel, Color.yellow);
+    }
+
+    /// <summary>
+    /// THE ONE PLACE the acceleration ramp is shaped. Returns the fraction of full thrust
+    /// available at the craft's current fraction of whichever cap is in force.
+    ///
+    /// Read against the CAP rather than against metres per second, and that is the whole
+    /// reason one curve covers every mode. Boost raises accel by 1.5 and the ceiling by
+    /// only 1.25, so before this existed boost reached its HIGHER top speed in LESS time
+    /// than the craft reached its ordinary one -- 0.83s against 0.92s, both measured. A
+    /// curve read off absolute speed would have preserved that. Read off the fraction,
+    /// boost, strafe and drift each get the same shape stretched over their own ceiling.
+    ///
+    /// Deliberately NOT applied to reverse. maxReverseAccel doubles as the brake, so
+    /// shaping it would soften stopping as a side effect of an acceleration decision.
+    /// The exclusion is structural rather than a flag: the reverse branch builds its accel
+    /// from maxReverseAccel directly and never touches blendedFwdAccel.
+    ///
+    /// DRIFT IS EXEMPT, faded out by driftBlend, and that is not a special case bolted on
+    /// -- it is the fence CLAUDE.md puts around drift for exactly this item. A drift's cap
+    /// FALLS by design (DriftSpeedCap), so the fraction sits pinned near 1 and the craft
+    /// gets the floor multiplier for the whole slide. Measured 1.5s into a held drift:
+    /// 53.5 m/s shaped against 77.3 m/s unshaped. A drift already costs acceleration --
+    /// that is what v1.9 decided it is FOR -- so shaping it charges for the same thing
+    /// twice and quietly turns a held slide into a brake.
+    ///
+    /// No straight-line exploit hides in that exemption: drift needs turn input past
+    /// driftTurnThreshold and minDriftSpeed 53 to start at all, so it cannot be used to
+    /// skip the ramp from a standstill.
+    ///
+    /// The 0.01 floor here is a safety net, not the tuning. It stops a curve dragged to
+    /// zero from making top speed unreachable, which would present as the craft capping
+    /// below the number in the inspector for no visible reason. The floor that is MEANT
+    /// to be tuned is the right-hand end of the curve itself.
+    /// </summary>
+    private float AccelCurveMultiplier(float speed, float cap, float driftBlend)
+    {
+        AnimationCurve curve = P.accelCurve;
+        if (curve == null || curve.length == 0)
+            return 1f;
+
+        // A negative fraction means the craft is still travelling backwards under forward
+        // throttle. Clamp01 hands it full authority there, which is what reversing your
+        // direction of travel should feel like.
+        float fraction = cap <= 0.01f ? 1f : Mathf.Clamp01(speed / cap);
+        float shaped   = Mathf.Max(0.01f, curve.Evaluate(fraction));
+
+        return Mathf.Lerp(shaped, 1f, driftBlend);
     }
 
     // -------------------------------------------------------------------------

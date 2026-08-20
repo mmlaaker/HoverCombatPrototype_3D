@@ -314,6 +314,155 @@ live one served 0.6, and the asset file contained neither. **That is `Measuring.
 serialised copy being the in-memory one rather than the file**, and it is why the value now lives
 explicitly in the asset and why every measurement was re-run after it was caught.
 
+---
+
+### The acceleration ramp, and the drift exemption it needed
+
+*Built for `0.33` 2026-08-20 and NOT yet judged in play. `accelCurve` added to
+`PropulsionTuning`; the asset diff is 51 added lines and zero deletions, so no existing value
+moved. Awaiting the owner's drive before this can be called closed.*
+
+**There was no curve to soften because there was no curve.** `ApplyDrive` applied
+`throttle * blendedFwdAccel` as a constant until the cap cut it off, and forward drag is
+mutually exclusive with held throttle, so nothing opposed it on the way up either. All three
+modes measured dead straight:
+
+| mode | ceiling | before | distance |
+|---|---|---|---|
+| drive | 80 | **0.919s** | 36.5m |
+| drive + boost | 100 | **0.828s** | 39.2m |
+| strafe | 53 | **1.130s** | 29.8m |
+
+**Boost was quietly the worst offender and nobody had noticed.** `boostAccelMultiplier` 1.5
+against `boostSpeedMultiplier` 1.25 means boost reached its HIGHER ceiling in LESS time than the
+craft reached its ordinary one, and it crossed the normal 80 at 0.669s. `TODO.md` had asserted the
+opposite — that boost scaled both by the same factor and so did not change the time. **That is why
+the curve is read against a FRACTION of the cap in force rather than against m/s:** one curve then
+covers drive, boost and strafe, each stretched over its own ceiling, and the asymmetry closes as a
+side effect instead of needing its own fix.
+
+**Shipped shape**, five keys on `accelCurve`, flat at 1.0 out to 15% of the ceiling and falling to
+a floor of 0.12:
+
+| mode | ceiling | before | after | distance after |
+|---|---|---|---|---|
+| drive | 80 | 0.919s | **2.35 – 2.43s** | 129 – 134m |
+| drive + boost | 100 | 0.828s | **2.03s** | 136m |
+| strafe | 53 | 1.130s | **2.87s** | 104m |
+
+All three stretched by about 2.5x, so **the relationship between the modes is unchanged** — strafe
+is still 1.22x drive, as it was at 1.23x before. Boost still crosses 80 at 1.15s against drive's
+2.4s, so boost remains worth pressing.
+
+**The launch is genuinely untouched, and that was the point of the flat entry section.** 10 m/s
+arrives at 0.119s before and 0.114 – 0.119s after; 20 m/s at 0.240s before and 0.234 – 0.241s after.
+What got longer is the far end: 70 to 80 m/s alone is now about 0.7s of the 2.4.
+
+**The tangents needed hand-flattening and the reason is not cosmetic.** `SmoothTangents` gives the
+second key a downward slope on both sides, and a Hermite segment between two equal values with one
+sloped end bulges above them — it peaked at 1.013, so the craft briefly accelerated at 88.2 m/s^2
+against a `maxForwardAccel` of 87. A tuning field that is not actually the maximum is a trap for
+whoever reads it next. Zeroing the first key's tangents and the second key's in-tangent brings the
+peak to exactly 1.0000.
+
+#### The drift exemption, which is the part that would have been shipped as a bug
+
+**Drift was measured, and it was badly hurt.** A drift's cap FALLS by design (`DriftSpeedCap`,
+`driftSustainedTopSpeed` 45), and the curve is fed the same cap the gate is enforced on — so the
+fraction pins near 1 and the entire slide runs at the 0.12 floor. Held drift, full lock, same entry
+speed:
+
+| time into drift | shaped | unshaped | shipped (exempt) |
+|---|---|---|---|
+| 0.5s | 67.4 | 79.6 | 79.7 |
+| 1.0s | 60.0 | 79.2 | 79.2 |
+| 1.5s | **53.5** | **77.3** | **79.2** |
+| 2.0s | 48.7 | 73.3 | 72.6 |
+
+**That is a held slide converted into a brake**, and drift is judged good and was explicitly fenced
+off from this item in `CLAUDE.md` before the work started. The fence was load-bearing. Faded out by
+`driftLerp` rather than switched, matching how every other drift blend in the file works, and the
+exempt column above is the verification that pre-change behaviour is back within noise.
+
+**Why exempting drift opens no exploit:** drift needs turn input past `driftTurnThreshold` 0.5 and
+`minDriftSpeed` 53 to start at all, so it cannot be used to skip the ramp from a standstill, and
+its own cap falls the moment it is held.
+
+**Reverse is exempt structurally rather than by a flag.** The reverse branch builds its accel from
+`maxReverseAccel` and never touches `blendedFwdAccel`, so it could not have been shaped by accident.
+`maxReverseAccel` doubles as the brake, so shaping it would have softened stopping as a side effect
+of an acceleration decision. **Proven at runtime rather than read off the branch** (trap 4): full
+reverse from 80 measured **67.17 m/s^2** against a tuning value of 67.
+
+**The trick regression was checked and is unaffected.** The two-barrel-roll margin depends on
+`extraFallGravity`, `extraGravityMultiplier`, `jumpImpulseMax`, `airRollTorque` and `airPitchTorque`;
+the asset diff has zero deletions, so none of the five moved. A charged jump apexes at 26.5m against
+27.2m predicted by the closed form from today's asset values. The 0.09s margin stands.
+
+#### Tuning the ramp to a target time, without sweeping for it
+
+**A target time and a curve are related by a closed form, so a request like "punchy start, top speed
+in two seconds" is arithmetic, not a sweep.** Nothing below is shipped; this is the tool the feel
+pass uses.
+
+**The identity.** With the ramp expressed as a multiplier `g(f)` over the fraction `f` of the cap:
+
+> **time to top speed = (topSpeed / maxForwardAccel) x I**,  where  **I = the integral of 1/g(f) for f from 0 to 1**
+
+`topSpeed / maxForwardAccel` is just the flat-thrust time, **0.9195s** at today's values. `I` is how
+many times longer the shape makes it. A flat curve has `I` = 1 by construction.
+
+**Validated against ten measured curves, worst error 1.1%**, which is inside the run-to-run spread of
+the play test itself (the shipped curve measured 2.352s and 2.434s on two runs of the same thing).
+**Then validated once more the honest way, on a curve the model had never seen:** solved for a 2.0s
+target, predicted 2.000s, measured **2.019s**.
+
+**To answer a request, invert it.** Required `I` = target seconds / 0.9195, so **`I` is about 1.088 x
+the target in seconds.** Two seconds needs `I` = 2.175. Then shape a curve to that `I`. The integral
+takes one `eval` call and no play mode, so candidate shapes cost seconds to evaluate; spend the play
+run on confirming the winner, not on finding it.
+
+**Which key answers which complaint. These are not interchangeable and that is the whole trap:**
+
+- **"Not punchy enough off the line"** -> the leading FLAT RUN. The curve holds 1.0 out to some
+  fraction, and inside that stretch the craft is bit-identical to full thrust. Punch to 0.25 means
+  full thrust to 20 m/s. This costs almost nothing in total time and is nearly free punch.
+- **"Feels sluggish"** -> the MIDDLE keys. This is the mid-range and it is where the complaint
+  actually lives.
+- **"Takes too long to finally top out"** -> the RIGHT-HAND END, and **only** that. Raising it
+  five-fold, 0.12 to 0.60, moved time-to-80 from 2.352s to 1.677s while moving time-to-40 by 0.001s
+  and time-to-60 by 0.017s. **It buys back the last quarter of the range and nothing else, so it can
+  never be the answer to sluggishness.**
+
+**Anchor points**, enough to sanity-check a new solve without re-deriving the family:
+
+| shape | `I` | to 60 | to 80 | distance |
+|---|---|---|---|---|
+| flat (pre-change) | 1.00 | 0.690s | 0.919s | 36.5m |
+| solved for 2.0s, punch 0.25 | 2.18 | 0.988s | **2.019s** | 108.7m |
+| **shipped** | 2.59 | 1.142s | **2.35 – 2.43s** | 128.5m |
+
+**The 2.0s / punch-0.25 solution, in case it is wanted verbatim:** keys at (0, 1.000), (0.250,
+1.000), (0.471, 0.712), (0.735, 0.347), (1, 0.155), first key's tangents flat and second key's
+in-tangent flat. Measured 20 m/s at 0.237s against the flat ramp's 0.240s, so the launch really is
+untouched.
+
+**Distance is the other half of every choice.** It is how much clear road top speed costs, against
+arena straights that measure 250-400m from the spawn. The shipped 128m needs most of a straight; 73m
+is a corner exit.
+
+**A flat curve at 1.0 restores the old behaviour exactly, not approximately** -- the expression
+becomes `blendedFwdAccel * 1.0`, which is the pre-change line character for character. Measured, not
+argued: the flat-curve ablation is where the "unshaped" column of the drift table above came from.
+The shipped curve is also saved as an editor curve preset, so any experiment is one click from
+reverting.
+
+**Process note.** The live `PropulsionTuning` IS the asset instance, not a runtime clone, so anything
+that writes `pt.accelCurve` in play mode is editing the real asset in memory. Every sweep here
+restores the shipped curve on its last iteration AND the asset file was diffed afterwards to confirm
+it never moved. **Both halves are required**, or a rejected row ships silently.
+
+
 #### Closed as 0.18: the arming clock now decays instead of resetting
 
 *Shipped 2026-08-17. `flipRecoveryProgressDecay` added at 1, `flipRecoverySpeedThreshold` left at 2.*

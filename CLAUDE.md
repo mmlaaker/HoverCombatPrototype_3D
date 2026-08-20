@@ -297,8 +297,9 @@ rather than to the ground, so terrain does not steer the gun.
 
 ### `HoverController_Propulsion.cs`
 
-**Does.** Drive, reverse, strafe, drag and over-speed bleed. Boost blend. Drift as a held slide. Dodge
-burst. Grounded and air jump. Chassis bank. Forwards air-control intent to Foundation.
+**Does.** Drive, reverse, strafe, drag and over-speed bleed. **A shaped acceleration ramp.** Boost
+blend. Drift as a held slide. Dodge burst. Grounded and air jump. Chassis bank. Forwards air-control
+intent to Foundation.
 
 **Public.** `DriftLerp`, `StrafeModeBlend`, `AirControlWeight`, `BoostLerp`, `OnJumpDenied(bool grounded)`,
 `OnDriftHop`, `OnDodge`, `OnDriftSpent`.
@@ -313,7 +314,29 @@ burst. Grounded and air jump. Chassis bank. Forwards air-control intent to Found
   cases (throttle inside the drag fade band, and drift forcing full drag weight); only `UNEXPLAINED`
   is a fault.
 - **`maxReverseAccel` doubles as the brake** and is deliberately NOT strafe-blended, so braking is
-  identical in both modes. It is set by stopping distance, not by reverse speed.
+  identical in both modes. It is set by stopping distance, not by reverse speed. **It is exempt from
+  `accelCurve` for the same reason**, and the exemption is structural: the reverse branch never
+  touches `blendedFwdAccel`, so it cannot be shaped by accident.
+- **`accelCurve` is read against a FRACTION of the cap in force, never against m/s.** That is the
+  only reason one curve covers drive, boost and strafe. It also fixes an asymmetry that predates it:
+  boost scales accel by 1.5 and the ceiling by only 1.25, so boost used to reach its HIGHER top speed
+  in LESS time than the craft reached its ordinary one. A curve read off absolute speed would have
+  preserved that. `AccelCurveMultiplier` is the single site.
+- **DRIFT IS EXEMPT FROM `accelCurve` and must stay exempt.** A drift's cap falls by design, so the
+  fraction pins near 1 and the whole slide runs at the curve's floor — measured as a held slide
+  turned into a brake, 53.5 m/s against 77.3 at 1.5s in. Faded by `driftLerp`, not switched. **A
+  drift already costs acceleration; that is what it is FOR**, so shaping it charges twice.
+- **The curve's right-hand end must stay above zero.** A curve that reaches zero makes top speed
+  asymptotic: the craft approaches the number in the inspector forever and never arrives, which
+  presents as a mysterious cap below the tuning value. There is a 0.01 safety floor in code, but the
+  floor that is meant to be tuned is the curve's own.
+- **Do not sweep `accelCurve`. Solve it.** Time to top speed is
+  `(topSpeed / maxForwardAccel) x integral of 1/curve(f)`, accurate to about 1%, so a target time
+  maps to keys arithmetically in one `eval` call with no play mode. **The three complaints map to
+  three different parts of the curve and are not interchangeable:** punch is the leading flat run,
+  sluggishness is the middle keys, and slow to finally top out is the right-hand end — which moves
+  time-to-60 by 0.017s across a five-fold change and therefore cannot fix the other two. Recipe and
+  worked example in `TuningLog.md` > Tuning the ramp to a target time.
 - **The `HoverSupport < 1f` term in the air-control gate looks redundant and is load-bearing.** It is
   what guarantees leveling and air control never both act on one axis under any tuning.
 - **The downed lockout must include THRUST, not just torque.** Drive is a force, so it escapes a
