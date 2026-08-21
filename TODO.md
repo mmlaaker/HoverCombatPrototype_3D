@@ -1618,6 +1618,10 @@ was dropped as a slot and kept as a concept — see the GDD, and 5.7 for why "on
 anything yet. The Sniper moved to held. Three weapons were added: Lob Bomb, Chain Lightning and the
 Flamethrower.
 
+**Ideas that fit the roster but are not scheduled** — a grapple, a tether, route closure, airspace
+denial — are recorded in `GameDesignDocument.md` > Considered, not scheduled. **They are deliberately
+unnumbered.** If one is ever taken it gets a number then.
+
 **The six unbuilt weapons collapse into five build jobs, and two of them pay for themselves twice.**
 That is the useful decomposition and it is why these are numbered as jobs rather than as weapons:
 6.7 through 6.11, plus 6.12 which is a gate rather than a job.
@@ -1693,6 +1697,12 @@ firing at the muzzle with no launch velocity. Force and concussive damage in a b
 **Consolidated from two weapons to one** by the owner 2026-08-21: the floating proximity mine and the
 directional remote mine are now a single Mine. Worth doing first in the build phase for exactly that
 reason — it proves the loop cheaply.
+
+**One option kept on the table, not a spec change.** The floating mine was specified as deploying at
+hover height and hanging in the airspace, which is the only vertical weapon idea the roster ever had —
+and the merged spec does not mention it. **It is a deploy height rather than a system**, so it can come
+back whenever it is wanted, at close to no cost. Reasoning in `GameDesignDocument.md` > Considered, not
+scheduled.
 
 ### 6.10 Ricochet — buys the Bouncing Disc Blade
 

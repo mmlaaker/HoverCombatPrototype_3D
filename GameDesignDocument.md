@@ -274,6 +274,71 @@ That makes **turn rate the evasion dial**, not merely the accuracy one. A fast p
 
 **The Special is a concept, not a slot.** Every vehicle gets a unique special weapon and what those are is TBD. It was removed from this table on 2026-08-21 because reserving a numbered slot for it implied a design that does not exist yet: there is one vehicle profile (`TODO.md` 5.7), so "one per vehicle" has nothing to vary against. **The expected route is promotion** -- build a weapon for general use, and designate it a Special if it turns out to want that.
 
+### Considered, not scheduled
+
+**Ideas that fit the roster's logic, recorded so the reasoning is not re-derived. Deliberately
+unnumbered: no `TODO.md` item and no milestone**, because they are not committed work. If one is ever
+taken it gets a number then.
+
+**The observation they all come from.** Counting verbs rather than weapons, the roster has five ways to
+explode near someone and make them tumble, two near-identical automatics, and several ways to deal
+damage at range. **It is rich in disrupting an enemy's momentum and thin on changing your own or
+changing the map** — which is an odd shape for a game whose first pillar is that movement is the
+primary weapon.
+
+#### Grapple / swing line
+
+**Arrived at twice independently on 2026-08-21, which is the reason it leads this list.** A player asked
+for *"a grapple like Jet Moto has, so you can swing around corners"* — a feel request, unprompted. The
+same gap shows up structurally: the roster contains **exactly one directed pull** (the Gravity Well, and
+it is a deployed area rather than something you aim) and **exactly one self-momentum tool** — the rocket
+jump, which is an emergent consequence of `selfImpactScale` rather than a designed instrument.
+
+**Those are two different objects and the difference decides everything.**
+
+| | Anchors to | Is about | Fits the energy rule? |
+|---|---|---|---|
+| **Movement grapple** (the player's) | Terrain, pylons, geometry | Cornering and carrying speed | **Yes** |
+| **Weapon grapple** (the structural gap) | A target | Yanking them to you, or you to them | **No** |
+
+**The energy rule is the fork.** This document states that energy governs mobility and utility and that
+weapons never spend energy. A movement grapple is simply a **fourth mobility tool beside boost, jump and
+drift**: spends energy, no ammo, always available, and the existing rule covers it unchanged. A weapon
+grapple breaks that rule and would need it rewritten.
+
+**The movement reading is the more coherent one, and it is also the one a player asked for.** If this is
+ever built, build that one first.
+
+#### Tether
+
+Link a target to a surface, or two targets to each other, and constrain where they can go. **No damage;
+pure momentum denial**, which is the pillar's stated preference.
+
+**Cheap relative to its novelty**, because the acquisition half already exists: it reuses the
+multi-target lock (`TODO.md` 6.8) being built for the Hard Lock volley and Chain Lightning. That
+primitive would be doing three jobs instead of two.
+
+#### Route closure
+
+A lingering field, wall or hazard that temporarily removes a driving line. **Aimed at the map rather
+than at a player**, and nothing in the roster does that today.
+
+The arena philosophy is built on parallel routes at every major point. A weapon that closes one for a
+few seconds is disruption without damage, and it makes map knowledge a weapon in the same way the
+Bouncing Disc does.
+
+#### Airspace denial, and a note on the mine consolidation
+
+**Every weapon in the roster is effectively planar.** The Lob Bomb's arc is the only use of the vertical
+axis and it uses it as a delivery path, not as a subject — which is a strange result for a hover game
+with a jump, air control, tricks and a three-layer arena.
+
+**The roster used to have one vertical weapon and the consolidation removed it.** The Floating Proximity
+Mine was specified as *"deploys at hover height, suspended in airspace, omnidirectional trigger
+radius"* — that is airspace denial, and it is a genuinely different thing from a charge on the floor.
+The merged Mine (12) carries a blast radius with no mention of suspension. **Restoring it is a deploy
+height, not a system**, so it stays available cheaply whenever it is wanted.
+
 ### Implementation status
 
 Deliberately not recorded here. This document is design intent; it should stay readable as the
