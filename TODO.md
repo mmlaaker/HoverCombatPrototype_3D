@@ -379,6 +379,12 @@ The only planned-and-entirely-absent gameplay module. Design calls for Ammo, Ene
 pickups, with **placement as the primary mechanism for forcing engagement** (powerful pickups in exposed
 positions). Depends on 1.3 and 1.4 to have anything meaningful to give.
 
+**One unscheduled design idea is filed against this**, and it would change what this module is: stacking
+same-type pickups that upgrade a weapon along a tier path, so what other players contest is a trajectory
+rather than an item. **Its load-bearing question belongs to 1.1 rather than here** — what happens to the
+ladder on death is what decides whether it snowballs. Full write-up, including the owner's risk
+assessment, in `GameDesignDocument.md` > Considered, not scheduled > Loadout built through play.
+
 ### 1.6 The AI cannot fire anything except slot 0
 
 `AIHoverInput` never sets `FirePressed`, so it cannot fire any `SingleShot` or `Missile` weapon, including
@@ -939,6 +945,12 @@ three-second wind-up erased by driving over a pickup. Nothing in the method name
 
 Harmless today because there are no pickups and no ammo; a confusing "minigun bug" the day both exist.
 **Fix:** split ammo restoration out of `Initialize`.
+
+**One filed design idea would make this materially worse rather than merely visible.** If same-type
+pickups upgrade a weapon (`GameDesignDocument.md` > Considered, not scheduled > Loadout built through
+play), collecting a weapon you already hold becomes a frequent and deliberate act rather than an
+incidental top-up — so this stops being an occasional oddity and becomes a spin-up dumped on every
+upgrade.
 
 ### 3.2 `ParticleWeaponCollision` walks the hierarchy per collision event
 

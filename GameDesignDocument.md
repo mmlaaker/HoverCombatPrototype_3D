@@ -276,9 +276,9 @@ That makes **turn rate the evasion dial**, not merely the accuracy one. A fast p
 
 ### Considered, not scheduled
 
-**Ideas that fit the roster's logic, recorded so the reasoning is not re-derived. Deliberately
-unnumbered: no `TODO.md` item and no milestone**, because they are not committed work. If one is ever
-taken it gets a number then.
+**Ideas that fit the design's logic — weapons and the systems around them — recorded so the reasoning
+is not re-derived. Deliberately unnumbered: no `TODO.md` item and no milestone**, because they are not
+committed work. If one is ever taken it gets a number then.
 
 **The observation they all come from.** Counting verbs rather than weapons, the roster has five ways to
 explode near someone and make them tumble, two near-identical automatics, and several ways to deal
@@ -339,6 +339,81 @@ radius"* — that is airspace denial, and it is a genuinely different thing from
 The merged Mine (12) carries a blast radius with no mention of suspension. **Restoring it is a deploy
 height, not a system**, so it stays available cheaply whenever it is wanted.
 
+#### Loadout built through play: stacking pickups upgrade a weapon
+
+**Player suggestion, 2026-08-21, same player as the grapple.** Weapon pickups of the same type build on
+each other rather than merely topping up ammo. Collect a rocket and you have the base rocket; collect
+another and it becomes the soft homing version; another and it becomes the hard lock. **The example is
+illustrative only and is explicitly not a proposed upgrade path** — the throughline is that repeated
+pickups of one type deepen that weapon.
+
+**The half the player cared about is the counter-play, not the power.** Other players can *see* someone
+building toward something and try to deny it. The contested object stops being an item and becomes a
+**trajectory**.
+
+**Why it fits this game specifically.** The pickup philosophy already says powerful pickups live in
+vulnerable positions and that collecting them costs positional exposure, borrowed from Quake and Unreal
+Tournament. This extends that rule rather than fighting it: **the third pickup in a ladder costs three
+exposures, not one.** It also gives an ammo pickup something to mean when your ammo is already full,
+which is a real gap once 1.4 and 1.5 exist.
+
+**The roster already has latent families**, which is why the idea lands so naturally: Rocket and Lob
+Bomb are trajectory variants of one weapon; Soft Homing, Hard Lock Missile and Chain Lightning share an
+acquisition model; and the Chain Gun is described in the owner's own spec as *"the better Machine Gun
+that is not free."* Twelve parallel weapons may really be five or six families with depth.
+
+##### The risk, which is the owner's and is the known failure mode
+
+**A strong player compounds their advantage relative to everyone else.** Owner's assessment, and it is
+the standard objection to ladder mechanics: the player who is winning is also the player free to go
+collect, so the mechanic pays out most to whoever needs it least.
+
+**Three things in this game's design cut against it, and they are worth knowing before the idea is
+judged.**
+
+- **Momentum over damage.** A better weapon here disrupts better; it does not necessarily kill faster.
+  A disrupted opponent is inconvenienced, not deleted, so the advantage compounds far less steeply than
+  a raw damage ladder would
+- **Movement is the primary weapon.** The pillars say a player who moves well beats a player who aims
+  well. Weapon tier is structurally not the dominant variable
+- **Exposure is the price and it is paid repeatedly.** Climbing costs map position every step
+
+##### The question that actually decides it: what happens to the ladder on death
+
+**This is load-bearing and it is where the snowball is won or lost.** Death and respawn are ALPHA work
+(1.1, 1.2), so this can be answered as part of designing them rather than retrofitted.
+
+| On death | Effect |
+|---|---|
+| **Keep your tier** | Hard snowball. Near-unrecoverable for whoever is behind. Almost certainly wrong |
+| **Reset to base** | Self-correcting. The ladder becomes a streak: kill the leader and their investment resets |
+| **Drop it as a pickup** | **The strongest anti-snowball version, because it inverts the compounding.** The most-invested player becomes the most valuable target in the arena, and their advantage is transferable to whoever takes them down. Escalation now generates its own counter-pressure |
+
+##### The tension to resolve if it is ever built
+
+**Legible escalation and anti-snowball pull in opposite directions.** The more genuinely frightening the
+top of the ladder is, the better the "deny that player" tension the idea exists for — and the harder it
+compounds. Flatten the ladder into sidegrades rather than upgrades and it stops snowballing, but there
+is also less to fear and therefore less reason to contest it. **The drop-on-death option is the most
+promising route out**, because it keeps the top of the ladder scary while making scary a liability.
+
+##### Dependencies, and the one thing that touches current work
+
+**Cannot be prototyped before ALPHA.** It needs limited ammo (1.4) and `PickupManager` (1.5), neither of
+which exists.
+
+**It makes 3.1 materially worse.** `RefillAmmo` is implemented as `slot.Initialize()`, which silently
+resets cooldown and wind-up. Under this design the same-weapon pickup becomes a *frequent and
+deliberate* action rather than an incidental top-up, so a bug that currently reads as an oddity would
+become a constant one — dumping your Chain Gun spin-up every time you upgrade.
+
+**And one thing worth carrying into PRE-ALPHA 2 now, even though the mechanic is far off.** This
+milestone builds all twelve weapons in order to judge which are fun and which get cut. **If some
+weapons are tiers of each other rather than peers, "is this weapon fun" is the wrong question for
+them** — the right one is "is this a satisfying step up from the one below." Worth knowing before the
+judging drives, because it changes what a weak-feeling weapon means: a mediocre tier-one weapon is
+correct, where a mediocre peer is a cut.
+
 ### Implementation status
 
 Deliberately not recorded here. This document is design intent; it should stay readable as the
@@ -372,6 +447,10 @@ Every arena operates on three levels:
 **Pickup Placement**
 
 Powerful pickups live in vulnerable positions. Collecting them costs positional exposure. This is the primary mechanism for forcing engagement: players cannot ignore a power weapon spawn without conceding map control. The player who reaches it must accept the risk of being caught in the approach or the collection. This logic is borrowed directly from Quake and Unreal Tournament arena design.
+
+**One extension of this rule is on record but not scheduled:** stacking same-type pickups that upgrade
+a weapon, which makes the contested object a trajectory rather than an item. See Considered, not
+scheduled > Loadout built through play.
 
 **Parallel Routes and Intersection Design**
 
