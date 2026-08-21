@@ -871,21 +871,31 @@ weapons use limited pickup ammo except the Machine Gun, though **nothing enforce
 
 | # | Weapon | Input | Status | Notes |
 |---|---|---|---|---|
-| 1 | Machine Gun | Hold | Implemented | Infinite ammo. Low DPS, always available |
-| 2 | Minigun / Chain Gun | Hold | Implemented | Wind-up and wind-down |
-| 3 | Shotgun | Tap | Implemented | 30-pellet burst, `destabilizeFraction` 1, where spread geometry supplies the rotation |
-| 4 | Rocket Launcher | Tap | Implemented | Primary momentum disruption tool |
-| 5 | Soft Homing | Tap | Implemented | Harassment tool. Low damage and force |
-| 6 | Hard Lock | Hold to lock, **release to fire** | Implemented, placeholder shape | Lock COMMITS to one target. Intended as a volley across one or several targets (`TODO.md` 5.1) |
-| 7 | Sniper / Lightning Bolt | Tap | Not built | Zoom scopes view; blind outside scope |
-| 8 | Laser Cannon | Hold to charge | Not built | Sustained beam, pierces targets |
-| 9 | Gravity Well / Repulsor | Tap | Not built | Lobbed deployable. One active; does not affect deployer |
-| 10 | Bouncing Disc Blade | Tap | Not built | Ricochets in 3D. Rewards map literacy |
-| 11 | Floating Proximity Mine | Tap | Not built | Suspended at hover height |
-| 12 | Directional Remote Mine | Tap, tap to trigger | Not built | Attaches to surfaces |
-| 13 | Special | n/a | Not built | One unique per vehicle. Allowed to bend shared rules |
+| 1 | Machine Gun | Hold | Implemented | Infinite ammo. Low DPS. Force, **not concussive**. `damage` 0.25 |
+| 2 | Chain Gun | Hold | Implemented | Wind-up and wind-down. Force, not concussive. **No VFX prefab exists** (`TODO.md` 2.20), and `fireRate` sits at the `[Min]` floor of 0.01 (3.6) |
+| 3 | Shotgun | Tap | Implemented | 30-pellet burst, `destabilizeFraction` 1, where spread geometry supplies the rotation. **Deliberate, not a violation of the flip rule** — see 5.16 |
+| 4 | Rocket Launcher | Tap | Implemented | Straight line, no homing. Primary momentum disruption tool. **Force needs re-baselining against `topSpeed` 105** (5.16) |
+| 5 | Lob Bomb | Tap | **Not built** | Rocket delivered over an arc. Identical to 4 except in trajectory for now. Needs 6.7 |
+| 6 | Soft Homing | Tap | Implemented | Harassment tool. Low damage and force, small concussive blast |
+| 7 | Hard Lock Missile | Hold to scan and lock, **release to fire** | Implemented, placeholder shape | Lock COMMITS to one target. Intended as a volley across one or several targets. Needs 6.8 |
+| 8 | Hard Lock Chain Lightning | Hold to scan and lock, release | **Not built** | Near-instant damage instead of missiles. No blast, not concussive. Needs 6.8. **Answers the Sniper question** |
+| 9 | Laser Cannon | Hold to charge, release | **Not built** | Sustained beam, pierces targets, force along the axis, no blast. Needs 6.11, **which is gated on 6.12** |
+| 10 | Gravity Well / Repulsor Bomb | Tap to deploy | **Not built** | Lobbed deployable. One active; does not affect deployer. Needs 6.7 |
+| 11 | Bouncing Disc Blade | Tap | **Not built** | Ricochets in 3D. **Impact rather than blast**, may destabilise. Needs 6.10 |
+| 12 | Mine | Tap to deploy | **Not built** | Force and concussive blast. **Consolidated from two mines to one, 2026-08-21.** Needs 6.9, the cheapest of the jobs |
+| — | Sniper | — | **Held, undecided** | Its one strong claim was reaching a runner, and the 5.5 speed rule gave that to the whole roster |
+| — | Flamethrower | Hold | **Held, undecided** | Continuous shove through a wide particle cone. **Cheapest weapon in the roster, and 6.12 makes it the gate on the most expensive one** |
 
-`WeaponType.Mine` and `TickMine` already exist, so 11 and 12 are closer than the rest.
+**The Special is a concept, not a slot.** Every vehicle gets a unique one; what they are is TBD, and
+`5.7` (one vehicle profile) is why "per vehicle" cannot mean anything yet. Expected route is promotion:
+build a weapon for general use, designate it a Special if it earns that.
+
+**Force and concussive are the authored vocabulary.** Force is `impact.impactForce`; concussive is
+`impact.destabilizeFraction`. **Explosive weapons may flip a vehicle; non-explosive weapons should not**
+(owner rule, 2026-08-21). **Projectiles are faster than vehicles** and should catch a straight runner —
+the boosted ceiling is 131 m/s and all missiles currently sit at 70 (5.5).
+
+`WeaponType.Mine` and `TickMine` already exist, so 12 is much closer than the rest.
 
 **Definition assets are `Assets/Data/WD_*.asset`.** All weapon tuning lives there; the prefabs and
 emitters carry no tunable values. **Layer masks are authored once**, with the firer's own layer stripped

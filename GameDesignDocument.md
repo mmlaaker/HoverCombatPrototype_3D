@@ -79,7 +79,7 @@ Human-origin vehicles tend toward physical weapons: bullets, explosions, kinetic
 | **Vehicle Movement** | Hovercrafts use a Rigidbody-based controller. Ground proximity forces stabilize hover height. Steering blends drift and strafing. |
 | **Combat** | Forward-facing weapons; player aims primarily via vehicle orientation. No soft lock or perfect tracking. |
 | **Abilities** | Non-damaging utility powers that consume shared energy: <br>• **Boost** – temporary acceleration burst.<br>• **Jump** – instant hover lift.<br>• **Shield** – temporary damage resistance.<br>• **EMP** – soft-homing electric projectile; freezes energy use on unshielded hit. |
-| **Weapons** | Shared 13-weapon roster (Machine Gun is infinite ammo; all others pickup-limited). See Section 9 for the full table. |
+| **Weapons** | Shared 12-weapon roster (Machine Gun is infinite ammo; all others pickup-limited). See Section 9 for the full table. |
 | **Pickups** | Map-scattered items for ammo, health, and energy recharge. |
 | **Game Modes** | 1v1 versus AI opponent (initial). Later expansion: 3–4 combatants per match. |
 
@@ -205,6 +205,10 @@ Governs non-damaging abilities only. Weapons never spend energy. Regenerates ove
 
 Measured in-engine, and it changes how weapon force should be authored.
 
+**Force and concussive are the two words this document uses, and each maps to exactly one authored value.** Owner vocabulary, 2026-08-21. **Force** is the linear push and is `impact.impactForce`. **Concussive** is how much of that push becomes rotation -- the flip component -- and is `impact.destabilizeFraction`. Every weapon in the roster is therefore specifiable as two numbers plus a delivery mechanism, and the numbers are directly comparable across weapons.
+
+**One coupling to know before authoring them: `destabilizeFraction` also governs self-inflicted spin, so past roughly 0.36 a rocket jump starts flipping the player who fired it** (`TODO.md` 5.3).
+
 A vehicle that ends up resting past **80 degrees of tilt** is *downed*: jump, steering and thrust are all locked out for roughly **1.6 seconds**, and no amount of player input shortens it. So every knockback value implicitly picks one of two outcomes, and the gap between them is enormous:
 
 - **Below the threshold**, a hit is momentum disruption. It shoves you off your line and you drive out of it. This is what the pillars ask for.
@@ -212,7 +216,9 @@ A vehicle that ends up resting past **80 degrees of tilt** is *downed*: jump, st
 
 Two rules fall out of this:
 
-1. **Express knockback as a fraction of top speed, not as a raw number.** Vehicle top speed is 60 m/s. A hit that imparts more than that is not disruption, it is removal: the target is travelling faster than it can drive and its own momentum skill is irrelevant until it stops. Measured, the Rocket Launcher currently imparts ~100 m/s, or 1.67x top speed, and displaces a stationary craft roughly 50 metres.
+1. **Express knockback as a fraction of top speed, not as a raw number.** A hit that imparts more than top speed is not disruption, it is removal: the target is travelling faster than it can drive and its own momentum skill is irrelevant until it stops.
+
+   **This rule was authored against a top speed of 60 and the speed pass moved it to 105, which silently changed what every weapon means.** The Rocket Launcher was measured imparting ~100 m/s, which was 1.67x top speed -- removal, comfortably. Against 105 the same force is 0.95x, which by this rule is now *disruption*. Nothing rechecked the roster when the ceiling moved. **Re-measure against 105 and author the whole roster from that baseline** (`TODO.md` 5.16); the numbers quoted above are the old baseline and are kept only to show which way the error runs.
 2. **Where you hit matters more than how hard.** The chassis rolls about three times more easily than it pitches, so a hit that catches a flank high tips the craft far more readily than a square hit of the same force. A centred hit at full Rocket Launcher force barely tilts the target 8 degrees; the same force landing high on the flank rolls it completely over, every time.
 
 This split is now the intended difference between the two homing weapons, verified over repeated identical shots:
@@ -230,29 +236,43 @@ A missile's *path* is a design surface, not just a delivery mechanism. Three dia
 
 - **Straight-flight delay.** How long the missile flies dumb before it starts chasing. At zero, homing shots feel cheap and unavoidable. A short delay lets the target see it coming and gives the missile a sense of weight.
 - **Flare.** How far the missile swings wide before curling onto its target, expressed as a share of the distance to the target so it looks right at every range. Direction can alternate or randomise per shot, which is what makes a volley look like a volley instead of the same animation replayed.
-- **Turn rate.** The turning circle. This is also the accuracy dial, and it is easy to set too low chasing a graceful arc.
+- **Turn rate.** The turning circle. This is the accuracy dial, and **since 2026-08-21 it is also the evasion dial**: with projectiles faster than vehicles, turn rate is what decides whether a dodge beats the shot. Easy to set too low chasing a graceful arc, and now easy to set too high and remove the counter-play.
 
 Crucially, the flare costs no accuracy: the missile aims at a point *beside* its target and that point slides onto the target as it closes, so it always converges. Spectacle and reliability are not in tension here.
 
-**Known constraint:** missiles fly at 70 m/s against a vehicle top speed of 60. A target running flat-out in a straight line is only being closed on at 10 m/s, so no amount of steering makes homing weapons reliable against a fleeing craft. Homing weapons are therefore tools for punishing players who are turning, fighting, or cornered, not for chasing down a runner. If that is not the intent, missile speed is the value to change, not turn rate.
+**Speed catches, turn rate is what skill evades. Owner decision, 2026-08-21, and it reverses what this section used to say.** Projectiles are faster than vehicles: a weapon should generally be able to catch a straight runner, and **clever movement -- dodges, jumps, changes of line -- is what evades it.** Running in a straight line is not meant to be an escape.
+
+That makes **turn rate the evasion dial**, not merely the accuracy one. A fast projectile with a wide turning circle catches the runner and loses to the dodge, which is exactly the intended split. Both dials are now design surfaces per weapon.
+
+**The number to clear is the boosted ceiling, not top speed.** `topSpeed` is 105 and `boostSpeedMultiplier` is 1.25, so a boosted craft reaches **131 m/s**. All three missiles currently sit at `speed: 70` -- **53% of a boosted runner**, so they are not closing slowly, they are being lapped. Clearing 131 with real margin is the requirement (`TODO.md` 5.5).
+
+*What this replaced, because the reversal matters: this section previously read missiles at 70 against a top speed of 60, concluded that homing weapons were tools for punishing players who are turning or cornered rather than for chasing runners, and advised that speed was the value to change and turn rate was not. The first half is no longer the design and the second half is now only half right.*
 
 ### Weapons
 
 | # | Weapon | Input | Ammo | Notes |
 |---|--------|-------|------|-------|
-| 1 | Machine Gun | Hold | Infinite | Low DPS, always available, requires exposure commitment |
-| 2 | Minigun | Hold | Limited | Wind-up/wind-down. Fire rate scales via AnimationCurve. Requires commitment to spin-up |
-| 3 | Shotgun | Tap | Limited | Short range burst. Succeeds only when lethal proximity is achieved |
-| 4 | Rocket Launcher | Tap | Limited | High damage, blast radius, high outward force. Low fire rate. Primary momentum disruption tool |
-| 5 | Soft Homing Projectile | Tap | Limited | Homes on nearest target. High steering, low damage and force, medium fire rate. Harassment and pressure tool |
-| 6 | Hard Lock Projectile | Hold to lock, **release to fire** | Limited | **Not fully designed yet.** The intent is a volley of small, low-damage, low-impact missiles that can be distributed across a single locked target or spread over several. Currently implemented as the degenerate case: one lock, one missile. The lock commits to a target when acquisition starts and holds it, which is the primitive the multi-target version needs |
-| 7 | Sniper / Lightning Bolt | Tap | Limited | Zoom scopes view; blind outside scope. Instant hit, high damage, low fire rate. Strafe mode active during zoom |
-| 8 | Laser Cannon | Hold to charge, release | Limited | Hold to charge, release fires sustained beam. Pierces multiple targets. High damage and outward force on beam axis. Short charge = weak shot, full charge = peak damage window that tapers off |
-| 9 | Gravity Well / Repulsor | Tap to deploy | Limited | Lobbed deployable. Pulls or pushes vehicles caught in field. Drains energy of caught vehicles. Duration-limited with visible decay VFX. One active at a time. Does not affect deploying vehicle |
-| 10 | Bouncing Disc Blade | Tap | Limited | Ricochets off walls, floors, and ceilings in 3D space. Rewards map literacy and spatial prediction |
-| 11 | Floating Proximity Mine | Tap to deploy | Limited | Deploys at hover height, suspended in airspace. Omnidirectional trigger radius. Visual indicator communicates detection field |
-| 12 | Directional Remote Mine | Tap to deploy, tap to trigger | Limited | Attaches to any surface. Fires projectile outward from placement angle on manual trigger. Placement orientation is the skill expression |
-| 13 | Special | None | None | One unique weapon per vehicle. Allowed to bend shared rules and provide spectacle |
+| 1 | Machine Gun | Hold | Infinite | Sustained fire. Delivers force that pushes but is **not concussive** and does not flip. Low DPS, always available, requires exposure commitment |
+| 2 | Chain Gun | Hold | Limited | Sustained fire that must wind up and wind down. **The better Machine Gun that is not free.** Delivers force, not concussive. Fire rate scales via AnimationCurve |
+| 3 | Shotgun | Tap | Limited | Short-range burst damage in a tight cone. Force **and** concussive. **May flip at exactly the right angle and distance, but generally will not** -- the pellets spread across the hull and their torques largely cancel, so the spread pattern is the physics as much as the look. Succeeds only when lethal proximity is achieved |
+| 4 | Rocket Launcher | Tap | Limited | High force with a concussive blast radius. Knocks around vehicles and props. **Straight line, no homing.** The primary momentum disruption tool |
+| 5 | Lob Bomb | Tap | Limited | Variant of the Rocket delivered over a launched arc instead of a straight line. **Identical to the Rocket for now except in trajectory**, and likely to grow bigger to pay for the slower delivery |
+| 6 | Soft Homing Missile | Tap | Limited | Smaller force, small blast radius, concussive. **Soft homing means it can be out-manoeuvred and miss.** Harassment and pressure tool |
+| 7 | Hard Lock Missile | Hold to scan and lock, **release to fire** | Limited | A volley of missiles locking onto one or more targets. Smaller force and blast radius, concussive. The lock commits when acquisition starts and holds, which is the primitive the multi-target version needs |
+| 8 | Hard Lock Chain Lightning | Hold to scan and lock, **release to fire** | Limited | Variant of the Hard Lock Missile that delivers **near-instant damage** instead of missiles that have to find their targets. No blast radius, not concussive; possibly an impact force |
+| 9 | Laser Cannon | Hold to charge, release | Limited | Releases a sustained beam that **carries force but no blast radius**. Pierces multiple targets. Short charge = weak shot, full charge = peak damage window that tapers off |
+| 10 | Gravity Well / Repulsor Bomb | Tap to deploy | Limited | Lobbed deployable that pushes or pulls everything caught in it. Drains energy of caught vehicles. Duration-limited with visible decay VFX. One active at a time. Does not affect the deploying vehicle |
+| 11 | Bouncing Disc Blade | Tap | Limited | Deployable that ricochets off walls, floors and ceilings in 3D space and deals damage on impact. **Impact rather than blast, but it may destabilise.** Rewards map literacy and spatial prediction |
+| 12 | Mine | Tap to deploy | Limited | Force and concussive damage in a blast radius. **Consolidates what were previously two mines** (floating proximity and directional remote) into one weapon |
+
+**Held, and deliberately undecided.** Both are gated on play rather than on argument:
+
+| Weapon | The question | What answers it |
+|---|---|---|
+| **Sniper** | Instant hit, high damage, low fire rate, zoom that blinds outside the scope | **Its strongest claim was being the only weapon that could touch a runner, and the speed rule above just gave that to the whole roster.** What remains is long-range precision, which is a weaker case. Build Chain Lightning (8) first and see whether a long-range hole still exists |
+| **Flamethrower** | Short-range sustained cone delivering a continuous shove rather than a burst | **The cheapest weapon on this list** -- it is the Machine Gun's particle machinery through a wide cone, no new systems. It overlaps the Laser Cannon (9), which is the most expensive. Build the Flamethrower first: it answers whether sustained force is fun before the Laser spends a beam system finding out |
+
+**The Special is a concept, not a slot.** Every vehicle gets a unique special weapon and what those are is TBD. It was removed from this table on 2026-08-21 because reserving a numbered slot for it implied a design that does not exist yet: there is one vehicle profile (`TODO.md` 5.7), so "one per vehicle" has nothing to vary against. **The expected route is promotion** -- build a weapon for general use, and designate it a Special if it turns out to want that.
 
 ### Implementation status
 

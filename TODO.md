@@ -61,11 +61,11 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 |---|---|
 | **0** | 0.12 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
-| **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 · 2.16 · 2.17 · 2.18 · 2.19 |
+| **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 · 2.16 · 2.17 · 2.18 · 2.19 · 2.20 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
-| **4** | 4.1 · 4.2 · 4.3 · 4.4 · 4.5 |
-| **5** | 5.1 · 5.2 · 5.3 · 5.4 · 5.5 · 5.7 · 5.8 · 5.11 · 5.12 · 5.13 · 5.14 · 5.15 |
-| **6** | 6.1 · 6.2 · 6.3 · 6.4 · 6.5 · 6.6 |
+| **4** | 4.1 · 4.2 · 4.3 · 4.4 · 4.5 · 4.6 |
+| **5** | 5.1 · 5.2 · 5.3 · 5.4 · 5.5 · 5.7 · 5.8 · 5.11 · 5.12 · 5.13 · 5.14 · 5.15 · 5.16 |
+| **6** | 6.1 · 6.2 · 6.3 · 6.4 · 6.5 · 6.6 · 6.7 · 6.8 · 6.9 · 6.10 · 6.11 · 6.12 |
 
 ### The agreed working order for Tier 0
 
@@ -137,6 +137,21 @@ lands.
 **Five Tier 0 numbers were retired to lower tiers in the same pass**, by the sorting rule: `0.28` and
 `0.31` were open, and `0.34`, `0.35` and `0.37` were issued during the playtest intake and never
 written here. See Retired numbers. **What is left in this tier is gated on nothing.**
+
+### The working order for PRE-ALPHA 2
+
+**`ROADMAP.md` owns it, in seven phases, set with the owner 2026-08-21.** Not repeated here, because
+that file owns the definition of done at each stage and duplicating the order would let the two drift.
+
+**The one principle behind it, because it decides everything else: fix the baseline on the six weapons
+that exist before building six more.** Every new weapon is authored against the force model (5.16), the
+projectile speed rule (5.5) and the fire rates (2.7, 3.6). Settle those first and you author twelve
+weapons once; leave them and you retune twelve instead of six.
+
+**Two gates are built into the order, and both answer a question in play rather than by argument** —
+6.12 decides whether 6.11 is ever started, and Chain Lightning (6.8) decides whether the Sniper is
+needed at all. **This is the same method that closed PRE-ALPHA 1**: name the items, define done as
+built AND judged by the owner, and make every deferral an explicit recorded decision.
 
 ### Before the next playtest build
 
@@ -334,7 +349,7 @@ Pairs with 1.1: respawning without it is spawn-camping by construction.
 ### 1.3 Four of six implemented weapons deal zero damage
 
 `WD_Missile`, `WD_SoftHomingMissile`, `WD_HardLockMissile` and `WD_Shotgun` are all at `combat.damage: 0`.
-Only `WD_ChainGun` (1) and `WD_MachineGuns` (0.5) do damage.
+Only `WD_ChainGun` (1) and `WD_MachineGuns` (**0.25**) do damage. *Read from the assets 2026-08-21; this item and 1.6 both said 0.5 until then, which overstated the AI offense by double.*
 
 Not cosmetic: both delivery paths are live and both are being handed zero. The combat loop can therefore
 neutralise a player completely but never finish them. **That is a coherent design if chosen deliberately
@@ -370,7 +385,7 @@ positions). Depends on 1.3 and 1.4 to have anything meaningful to give.
 the Shotgun it actually carries in slot 1. It also never sets `CycleWeaponNext/Prev`, so it never leaves
 slot 0 regardless. **Two independent causes; fixing one alone changes nothing.**
 
-Net effect: the AI's entire offense is the Machine Gun at 0.5 damage per pellet, 8 pellets/sec. It carries
+Net effect: the AI's entire offense is the Machine Gun at **0.25** damage per pellet (corrected from 0.5, 2026-08-21), 8 pellets/sec. It carries
 no Chain Gun, which is the only weapon with a reasonable time to kill.
 
 Also deferred inside `AIHoverInput`: strafe, drift, jump, shield, EMP, all hardcoded false or zero. The
@@ -826,7 +841,7 @@ placement, not about the model.**
 
 **Gate: the full control set exists.** Owner decision 2026-08-20: *bindings are easy enough to swap
 but we should wait until we have all of the controls in before deciding if they are placed in the most
-optimized or ergonomic spots.* Seven of thirteen weapons are unimplemented (6.1), pickups do not exist
+optimized or ergonomic spots.* Six of twelve weapons are unimplemented (6.1), pickups do not exist
 (1.5), and three impulse channels are off. **Optimising a layout against a partial control set means
 doing it twice.**
 
@@ -869,6 +884,47 @@ FTUE exists:** testers reach the trick layer in run two, not run one. **First-ru
 about tricks either way.** Do not read a quiet first run as a negative result on the trick economy.
 
 ---
+### 2.20 Weapon VFX: every impact and explosion slot is empty
+
+**This is PRE-ALPHA 2's "placeholder VFX", and it is better shaped than 2.4 and 2.5 alone suggested.**
+Read from the assets 2026-08-21, the split is clean:
+
+- **Missile flight visuals are wired.** `WD_Missile`, `WD_SoftHomingMissile` and `WD_HardLockMissile`
+  all point `projectilePrefab` at real prefabs in `Assets/VFX/Weapons/`
+- **The two particle weapons have their emitter visuals** — `VFX_MachineGuns.prefab` and
+  `VFX_Shotgun.prefab`. That is the ParticleSystem pattern, existing twice, to copy from
+- **The Chain Gun has no VFX prefab at all.** The one gap among the six built weapons
+- **`explosionPrefab` is `fileID: 0` on all six definitions.** Not one weapon in the game produces a
+  visual when it lands. The code null-checks and returns, so this fails silently rather than erroring
+
+**So the work is the impact end of everything**, plus the Chain Gun, plus every new weapon from 6.1.
+The starting point is not zero; the patterns exist.
+
+**The owner's bar, stated 2026-08-21, and it is readability rather than fidelity:** *"I just saw an
+explosion and it pushed the enemy in a readable and sensible way"*, and *"that shotgun spread of
+particles looks like a shotgun burst and I understand what it's doing and why this weapon is the
+obvious choice for close range."* **VFX are communicating what the weapon is and does.** The test is
+whether you can name the weapon from its effect alone.
+
+**Two dependencies that decide the order.**
+
+1. **Blast radius first, VFX second.** The definition states `splashRadius` and the VFX is authored to
+   match it, not the reverse (see 2.5). So this cannot start until 5.16 has re-baselined the forces.
+2. **The Shotgun's spread is the physics as well as the look.** Its knock-around behaviour comes from
+   30 pellets spreading across the hull so their torques largely cancel, which is what makes
+   `destabilizeFraction` 1 safe there. **Reshaping the spread for readability changes how often it
+   flips.** Tune the two together or the second one will surprise you.
+
+**Wire to both vehicle prefabs**, not to the scene. The weapon loadout is authored on
+`HoverCar_PlayerController.prefab` and `HoverCar_AI.prefab`; keep the VFX with it, and see 3.16 and
+3.17 for what happens when this kind of thing drifts into scene overrides.
+
+*2.5 is the missile-explosion subset of this item and stays open as its own number because it carries
+the blast-radius dependency. 2.4 is hard-landing dust and is NOT part of this — that is movement, and
+it is deferred out of PRE-ALPHA 2.*
+
+---
+
 
 ## Tier 3 — Known traps and code quality
 
@@ -1189,6 +1245,31 @@ would also be honest, and is what actually answered the question both times.
 is worse than no answer, which is the premise of this whole file.
 
 ---
+### 4.6 Nothing in the scene can be knocked around except the two craft
+
+**Counted from `Assets/Scenes/Prototype_Scene.unity` 2026-08-21: the scene holds exactly two
+Rigidbodies, both non-kinematic, and they are the player craft and the AI craft. There are no dynamic
+props at all.**
+
+**That makes force unjudgeable, which is a problem for the milestone that is about force.** A blast
+radius has exactly one thing in the world that can respond to it, so what you see is one object moving
+— not a radius, not a falloff, not a direction. The GDD's own rule that *where* you hit matters more
+than how hard cannot be demonstrated against a single target either.
+
+**Six greybox crates around the impact point communicate radius, falloff and direction instantly**, and
+they cost almost nothing to make. They also give a solo tuning session something to shoot that does not
+wander off, which the AI does.
+
+**The owner is setting these up** — cubes and other shapes around the stationary AI vehicle, agreed
+2026-08-21. Filed here rather than in Tier 6 because this is verification debt: the instrument for
+judging force does not exist, and PRE-ALPHA 2's readability bar depends on it.
+
+**Note for whoever places them:** they need to be non-kinematic Rigidbodies on a layer the weapons
+actually collide with, and light enough to move visibly at the forces 5.16 settles on. A crate that
+does not budge is worse than no crate, because it reads as the weapon being weak.
+
+---
+
 
 ## Tier 5 — Design decisions with no engineering blocker
 
@@ -1247,24 +1328,34 @@ speed you close on your own blast. That reads as skill (shooting a wall you are 
 means the mechanic is strongest exactly when you are already fastest. If you would rather it were flat,
 measure falloff from the launch position instead of the detonation point.
 
-### 5.5 Homing cannot catch a runner, and the speed pass turned that into a defect
+### 5.5 Homing cannot catch a runner — **DECIDED 2026-08-21: raise the speed**
 
-**Read from the assets 2026-08-16: all three missiles are at `speed: 70`, against a `topSpeed` of 80 and a
-boosted 100.**
+*Was written as an open decision between two acceptable answers. **The owner chose, and the choice is
+now a design rule rather than a per-weapon tuning question.** See `GameDesignDocument.md` >
+Projectile Flight as Identity, which was rewritten to match.*
 
-So a craft running flat out in a straight line is **not being closed on at all; it is pulling away**, by 10
-m/s unboosted and 30 boosted. Previously missiles at 70 against a top speed of 60 closed at 10 m/s, which was
-slow but finite, and that is the situation the original framing was written for. **No `turnRate` can fix a
-negative closing speed.**
+**The rule: projectiles are faster than vehicles.** A weapon should generally be able to catch a
+straight runner, and **clever movement — dodges, jumps, changes of line — is what evades it.** Running
+in a straight line is not meant to be an escape.
 
-The original conclusion still holds as intent (homing weapons punish players who are turning, fighting or
-cornered rather than running) but it is no longer a choice, it is the only thing the numbers permit.
+**The consequence that is easy to miss: turn rate becomes the evasion dial.** A fast projectile with a
+wide turning circle catches the runner and loses to the dodge, which is exactly the intended split.
+The old advice in this item and in the GDD — *"the value to change is `speed`, not `turnRate`"* — is
+now only half right. Both are design surfaces, per weapon, and turn rate is the one that carries the
+counter-play.
 
-**Decide which:** raise missile `speed` above the new boosted ceiling so homing can threaten a runner, or
-accept the escape and keep homing as a close-quarters harassment tool. Either way **the value to change is
-`speed`, not `turnRate`.** Nothing flagged this when top speed moved, which is the same
-neighbouring-system-invalidated-by-a-shared-quantity shape as the air jump.
+**The number to clear is the boosted ceiling, not top speed.** Read from the assets 2026-08-21:
+`topSpeed` **105**, `boostSpeedMultiplier` **1.25**, so a boosted craft reaches **131.25 m/s**. All
+three missiles sit at `speed: 70`, which is **53% of a boosted runner** — they are not closing slowly,
+they are being lapped. Clearing 131 with real margin is the requirement.
 
+**This applies to the whole roster, not just the three missiles**, since every projectile weapon is
+authored under the same rule. Do it in phase 1 of PRE-ALPHA 2, before six more weapons get authored
+against the old assumption.
+
+**One knock-on worth checking when this lands:** it retires the Sniper's strongest argument. That
+weapon's case was being the only thing that could touch a runner, and this rule hands that to
+everything. See `GameDesignDocument.md` > Weapons > Held.
 ### 5.7 Vehicle roster is one profile
 
 `VTP_Default` is the only `VehicleTuningProfile` in the project. The GDD proposes a five-vehicle framework on
@@ -1293,6 +1384,15 @@ If it is ever revisited, the cheapest single improvement is **narrowing the hull
 dimension to the tuning, since the attitude torques ignore the inertia tensor.
 
 ### 5.11 Boosted strafe reaches a large fraction of drive top speed
+
+**ANSWERED STRUCTURALLY, 2026-08-21, and it drops to a watch.** The owner set two rules that between
+them remove the camping incentive without anyone needing to observe it first. **Strafe costs a third
+of your speed** — `strafeTopSpeed` 70 against `topSpeed` 105 is 66.7%, so 33.3% is gone — **so a camper
+cannot chase and cannot keep up with a fleeing enemy.** And **weapons fire along the vehicle nose**, so
+drive mode is where keeping your nose on a target is rewarded with damage, while strafe buys visibility
+and precision at that speed cost. Chase in drive, fight in strafe. **Add the 5.5 speed rule and a camper
+is also catchable by everything in the roster.** The behaviour is still worth watching once combat
+pressure exists, but it is no longer an open design question.
 
 **DEFERRED to PRE-ALPHA 2, and the deferral is principled rather than a punt:** the open question is whether
 players CAMP in strafe under combat pressure, and there is no combat to apply pressure until weapons deal
@@ -1461,19 +1561,66 @@ real high-skill headroom, judged good in `CLAUDE.md`, and that is the thing this
 away by accident.
 
 
+
+### 5.16 The force model is calibrated against a top speed that no longer exists
+
+**The rule is sound and its baseline is stale.** `GameDesignDocument.md` > Knockback and the Flip
+Threshold says to express knockback as a fraction of top speed: a hit imparting more than top speed is
+not disruption, it is *removal*, because the target is travelling faster than it can drive and its own
+momentum skill stops mattering until it stops.
+
+**That was authored against `topSpeed` 60. The speed pass moved it to 105 and nothing rechecked the
+weapons.** The Rocket Launcher was measured imparting ~100 m/s, which was **1.67x top speed** —
+removal, comfortably, and that measurement is what the whole spectacle-versus-pressure split was
+calibrated from. Against 105 the same force is **0.95x**, which by the document's own rule has quietly
+become *disruption*. **The rule the GDD calls "the model for tuning the rest of the roster" changed
+meaning without moving a single weapon value.**
+
+**Why it is urgent rather than merely wrong:** PRE-ALPHA 2 authors six new weapons. Re-baseline first
+and you author twelve weapons once; leave it and you retune twelve instead of six.
+
+**Same shape as 5.5 and as the air jump: a neighbouring system invalidated by a shared quantity, with
+nothing flagging it.** That is now three instances. The shared quantity was `topSpeed` in all three.
+
+**What the work is.** Re-measure the Rocket Launcher's imparted velocity against 105, decide whether it
+keeps its current number (and becomes gentler than designed) or its current *ratio* (roughly 175 m/s,
+a bigger hit than anything anyone has driven against), then author `impactForce` and
+`destabilizeFraction` across the roster from that baseline.
+
+**The owner's flip rule, set 2026-08-21, constrains the authoring:** weapons that generate explosions
+may flip a vehicle; non-explosive weapons should not. **The Shotgun is the deliberate exception and is
+not a violation** — it sits at `destabilizeFraction` 1, the maximum in the project, and the owner's
+spec is that it "maybe could flip a vehicle at the exact right angle and distance, but generally not
+likely," which is exactly what the implementation produces: 30 pellets spread across the hull and their
+torques largely cancel. **The fragility is real though. That behaviour comes from the spread pattern,
+so reshaping the spread for readability (2.20) changes how often it flips.**
+
+**Do not exceed roughly 0.36 concussive** without rechecking rocket jumps — the same value governs
+self-inflicted spin, so past that a player flips themselves (5.3).
 ---
 
 ## Tier 6 — Unimplemented features
 
-### 6.1 Seven of thirteen weapons
+### 6.1 Six of twelve weapons
 
-Implemented: Machine Gun, Minigun (Chain Gun), Shotgun, Rocket Launcher, Soft Homing, Hard Lock.
+**The roster was respecified by the owner 2026-08-21** and is twelve weapons, not thirteen. Full spec
+in `GameDesignDocument.md` > Weapons; **that document owns what each weapon is, this item owns what is
+missing.** The whole of it is PRE-ALPHA 2 work — it moved out of BETA when the milestone was scoped.
 
-Planned, no asset and no code: Sniper / Lightning Bolt, Laser Cannon, Gravity Well / Repulsor, Bouncing Disc
-Blade, Floating Proximity Mine, Directional Remote Mine, and the per-vehicle Special.
+**Built:** Machine Gun, Chain Gun, Shotgun, Rocket Launcher, Soft Homing, Hard Lock (as the degenerate
+one-lock-one-missile case).
 
-Note `WeaponType.Mine` and `ProjectileMode` already exist and `TickMine` is implemented (fires at the muzzle
-with no launch velocity), so **the two mine weapons are closer than the rest.**
+**Not built:** Lob Bomb, Chain Lightning, Laser Cannon, Gravity/Repulsor Bomb, Bouncing Disc Blade,
+Mine. **Held and undecided:** Sniper, Flamethrower.
+
+**What changed from the thirteen-weapon table.** The two mines consolidated into one (12). The Special
+was dropped as a slot and kept as a concept — see the GDD, and 5.7 for why "one per vehicle" cannot mean
+anything yet. The Sniper moved to held. Three weapons were added: Lob Bomb, Chain Lightning and the
+Flamethrower.
+
+**The six unbuilt weapons collapse into five build jobs, and two of them pay for themselves twice.**
+That is the useful decomposition and it is why these are numbered as jobs rather than as weapons:
+6.7 through 6.11, plus 6.12 which is a gate rather than a job.
 
 ### 6.2 Arena
 
@@ -1518,6 +1665,66 @@ Explicitly a future phase. The solo game is specced to stand alone.
 
 Section 15 lists two planned diagrams, Control Flow and Interaction Map, to be exported to `/Docs/`. Neither
 exists, and neither does the folder.
+### 6.7 Arced launch — buys the Lob Bomb and the Gravity Bomb
+
+A lobbed trajectory instead of a straight line. **Low cost: the blast, radius, detonation and
+self-impact machinery all already work**, so this is a launch angle and a ballistic path, not a new
+weapon system.
+
+Serves two weapons. The Lob Bomb is nearly free once it exists — the owner's spec is *"identical to the
+Rocket for now except in trajectory,"* likely growing bigger later to pay for the slower delivery. The
+Gravity Bomb (6.9's neighbour, below) reuses the same lob.
+
+### 6.8 Multi-target lock — buys the Hard Lock volley and Chain Lightning
+
+Lock several targets and fire a volley, rather than the one-lock-one-missile case that ships today.
+**The lock-and-hold primitive already works**; what is missing is holding more than one.
+
+Serves two weapons. The Hard Lock Missile (7) gets the volley the GDD always specified. Chain Lightning
+(8) is the same acquisition with near-instant delivery instead of missiles, no blast and no concussion.
+
+**Sequence this early in the build phase: Chain Lightning is what answers the Sniper question.**
+
+### 6.9 Mine
+
+**Nearly free.** `WeaponType.Mine` and `ProjectileMode` already exist and `TickMine` is implemented,
+firing at the muzzle with no launch velocity. Force and concussive damage in a blast radius.
+
+**Consolidated from two weapons to one** by the owner 2026-08-21: the floating proximity mine and the
+directional remote mine are now a single Mine. Worth doing first in the build phase for exactly that
+reason — it proves the loop cheaply.
+
+### 6.10 Ricochet — buys the Bouncing Disc Blade
+
+Bounces off walls, floors and ceilings in 3D space. Moderate cost and **self-contained** — nothing else
+in the roster wants it.
+
+**Impact rather than blast, decided 2026-08-21,** on the grounds that five weapons already deliver a
+concussive blast and the Disc's identity is the bounce; making it explode makes it a mine that moves.
+It may still destabilise.
+
+### 6.11 Sustained beam — buys the Laser Cannon
+
+**The most expensive job on the list, and it is gated on 6.12.** Nothing in the project delivers damage
+continuously or hits more than one target with one shot. Hold to charge, release a sustained beam that
+carries force along its axis, no blast radius, pierces multiple targets.
+
+**Do not start this before the Flamethrower has been played.** They are the same idea — sustained,
+hold-to-fire, force-carrying — and the Flamethrower answers whether that idea is fun for almost nothing.
+
+### 6.12 Flamethrower — the cheap answer to an expensive question
+
+**Not a build job so much as a gate.** It is the Machine Gun's particle machinery through a wide
+continuous cone: no new systems, the cheapest weapon in the roster.
+
+**What it is for.** 6.11 spends the single largest engineering cost in PRE-ALPHA 2 on a question nobody
+has answered: *is a sustained-force weapon fun in this game?* The Flamethrower answers it early and
+cheaply. **If continuous push turns out to be dull, the Laser Cannon comes off the list and the most
+expensive job on the milestone is never started.**
+
+If both survive they must differ in kind, not merely in range — the Flamethrower a close-range
+continuous shove with no charge, the Laser a charged piercing line at distance.
+
 
 ---
 

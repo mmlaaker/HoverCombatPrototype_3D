@@ -146,41 +146,96 @@ PRE-ALPHA 1 asks for no enemies at all.
 
 ---
 
-## PRE-ALPHA 2 — weapons become real, and something takes the hits · **CURRENT**
+## PRE-ALPHA 2 — weapons, and how they feel to use · **CURRENT**
 
 > Movement and weapon physics. Grey-box art. Test environment. Enemy punching bag. Placeholder VFX.
 
-The step is **weapon physics** and **a target worth hitting**. The AI punching bag largely exists
-(`1.6` records it as deliberately passive), so most of the work is on the weapons themselves.
+**The completion criterion, set with the owner 2026-08-21: the work below built AND judged good in
+play by the owner.** Same shape as the one that closed PRE-ALPHA 1 in a day, and set before the work
+starts rather than six days into it.
 
-**This milestone has no completion criterion yet, and PRE-ALPHA 1 is the argument for setting one
-before starting.** The criterion that closed the last milestone in a day replaced a percentage that
-had not resolved in six. **The shape that worked: name the specific items, and define done as built
-AND judged in play by the owner** — which also makes deferral an explicit, recorded decision rather
-than a thing that quietly never happens. `1.3` is the obvious root, since nothing can die until it
-moves.
+**The owner's framing, and it is narrower than this milestone's old table was.** *"Damage and health
+are not really a factor for this milestone, other than validating that damage is being registered.
+We are going to build out the entire weapon set... make sure weapons are working -- firing and
+colliding properly, hits are registering and dealing physics forces, knocking around the punching bag
+in a readable way... VFX are communicating what the weapon is and does. We will nail down rate of
+fire and forces but not damage."*
 
-**Two carried-over notes.** The `0.12` bumper sliver is deferred, not fixed, and should be folded
-into any camera framing work rather than re-raised alone. And **`4.4`'s remaining half — allocation
-under sustained weapon fire — becomes measurable for the first time in this milestone**, because it
-needs weapons that actually fire in anger; the constraint on how to measure it is that the figure
-must come from a focused editor or a build, never from remote-driving the editor.
+**Three things fall out of that and they are the reason this milestone is shaped the way it is.**
+Damage is validation only, so `1.3` is a cheap item rather than a tuning pass. Health, death and
+respawn are out entirely, so `1.1`, `1.2` and `1.4` all move to ALPHA. And the weapon set grew: `6.1`
+was a BETA item and is now the bulk of the work here.
 
-| | |
-|---|---|
-| **1.3** | four of six working weapons deal zero damage. **The root item** -- nothing can die until it moves |
-| **1.4** | every weapon has unlimited ammo |
-| **2.7** | automatic fire rates are far too low |
-| **2.2**, **2.15** | EMP launch, and a denied jump, have no acknowledgement. Both wired, both unjudged, and **neither judgeable in this build**: all three impulse channels are deliberately off and come back together. `2.15` succeeds `0.16` |
-| **2.4**, **2.5** | hard landings have no dust, missile detonations have no explosion. This milestone's "placeholder VFX" |
-| **2.11** | boost presentation FX: vignette, speed lines, duration-based rumble. Deferred here 2026-08-14, and **confirmed as the remaining boost gap** by the owner 2026-08-16 |
-| **2.12** | drift has no VFX. Now the whole of what remains from the drift report: `0.23` closed as a suppression bug and no cue was built |
-| **2.13** | charge jump wind-up VFX, energy gathering under the craft. **The movement half shipped as `0.25`**, and hands this a hard constraint: the squat must not add impulse, so the discharge has to read as release without pushing |
-| **2.14** | thruster VFX and the boost camera fall out of step on release, measured at 2.2x. Deferred here 2026-08-17 because the thrusters it targets are placeholder; succeeds `0.24` |
-| **5.11** | whether players camp in strafe. Unanswerable until `1.3` gives combat something to pressure with |
-| **5.12**, **5.13** | revisit the aim framing, and re-judge the aim feel, once there is something to aim at. `5.12` succeeds `0.14`, same reasoning as `5.11`. **`5.13` was `0.31` and was deferred out of PRE-ALPHA 1 on 2026-08-20**: three tuning values whose meaning changed when `0.29` closed and which have never been judged for what they now do. It wants the same session as `5.12` |
-| **3.1**, **3.6**, **3.7** | weapon-side traps worth clearing while the code is open |
-| **5.2**, **5.3**, **5.4** | the knock-around pass, only partly applied |
+### The roster is settled and lives in the GDD
+
+Twelve weapons, specified by the owner 2026-08-21, replacing the thirteen-weapon table the GDD
+carried. **The Special is dropped as a slot but kept as a concept** — every vehicle gets a unique one
+and what they are is TBD, so nothing needs reserving. Two are conceptual and explicitly undecided:
+**Sniper** and **Flamethrower**, each with a gate below that answers it in play rather than by
+argument. Full spec in `GameDesignDocument.md` > Weapons.
+
+**Six of the twelve are built.** The other six collapse into five build jobs, and two of those jobs
+pay for themselves twice — see `TODO.md` 6.7 through 6.12.
+
+### Two design rules the owner set here, both of which reversed a documented position
+
+**Projectiles are faster than vehicles.** Weapons should generally catch a straight runner, and
+clever movement — dodges, jumps — is what evades them. **Turn rate becomes the evasion dial**, where
+the GDD previously said speed was the value to change and turn rate was not. This resolves `5.5`,
+which had been written as an open decision. The number to clear is the boosted ceiling.
+
+**Weapons fire along the vehicle's nose.** Chase in drive mode where the nose points where you are
+going; fight in strafe where you trade a third of your speed for visibility and precision. **That
+disincentivises strafe camping structurally**, which is what `5.11` was waiting to observe, so it
+drops to a watch.
+
+### The order, and the one principle behind it
+
+**Fix the baseline on the six weapons that exist before building six more.** Every new weapon is
+authored against the force model, the speed rule and the fire rates. Settle those first and you
+author twelve weapons once; leave them and you retune twelve instead of six.
+
+| Phase | Work | Judged on |
+|---|---|---|
+| **1** · baseline | `1.3` damage off zero, validation only · `3.6` + `2.7` fire rates, together · `3.7` empty-slot skip · `5.5` projectile speed above the boosted ceiling · **`5.16` re-baseline force against `topSpeed` 105** · `5.2`, `5.3`, `5.4` authored across the six built weapons | — |
+| **2** · impact VFX for the six | `2.5` missile detonations · `2.20` per-weapon identity, including the Chain Gun's missing prefab | **Judged with phase 1 in one drive:** does the explosion and the push read as one event, and can a good driver dodge what now catches them? |
+| **3** · cheap builds, both gates | `6.9` mine · **`6.12` Flamethrower → gate: is sustained push fun?** · `6.8` multi-target lock → Hard Lock volley and Chain Lightning | The gates go early so their answers arrive while there is still time to act on them |
+| **4** · the rest | `6.7` arced launch → Lob Bomb · `6.10` ricochet → Bouncing Disc · Gravity Bomb · **`6.11` sustained beam → Laser Cannon, only if `6.12` passed** | — |
+| **5** · VFX for the new weapons | `2.20`, wired to both vehicle prefabs | Name the weapon from its effect alone |
+| **6** · camera | **Gate: which weapons move the camera, firing one and being hit by one.** Then build it. `2.7`'s deferred recoil-character half and `2.9` are the same decision | The gun has weight without costing you the fight |
+| **7** · aim | `5.12` framing · `5.13` feel · **`0.12`** folds in, closing the last PRE-ALPHA 1 item | Target size and engagement range are real quantities now |
+
+**Two sequencing calls worth seeing rather than discovering.** The **Gravity Bomb sits mid-phase-4
+deliberately, not last**: it is the most on-pillar weapon in the roster and the biggest single build,
+and last place is where things get cut. And **aim lands after every weapon has been judged**, so a
+material framing change at phase 7 shifts some earlier judgments under it. The docs sequenced it that
+way on purpose — aim cannot be judged without targets — but it is a trade, not a free ordering.
+
+### Depends on the owner
+
+**Greybox props around the stationary AI.** The scene currently holds **two Rigidbodies, both craft**,
+so a blast radius has exactly one thing that can respond to it and force readability cannot be judged.
+The owner is setting these up. `TODO.md` 4.6.
+
+**Placeholder VFX for all weapons**, at least enough for readability. Note the dependency runs
+blast-radius-first: the weapon states its radius and the VFX is authored to match, not the reverse.
+
+### Not gating, but first possible here
+
+**`4.4`'s remaining half — allocation under sustained weapon fire** — becomes measurable for the first
+time, because it needs weapons that fire in anger. `3.5` and `3.2` are the two that will contaminate
+the figure and should land before it is taken. **The constraint on how to measure it stands: a focused
+editor or a build, never remote-driving the editor.**
+
+### Deferred out of this milestone, on the record
+
+`1.4` limited ammo and `3.1` its refill bug → ALPHA, with the pickups (`1.5`) that make ammo mean
+something. Ammo that can never be refilled degrades a weapons-feel session rather than informing it.
+**One consequence to accept: the Chain Gun's design cost is ammo, so this milestone can only judge its
+wind-up.** · `1.1`, `1.2` death and respawn → ALPHA, by owner decision: this milestone is weapons, not
+the loop · `2.11`, `2.12`, `2.13`, `2.14` → all four are movement presentation, the largest block on
+this milestone's old table and the least connected to weapons · `2.4` hard-landing dust → movement
+too, and cheap to pick up if the sourced VFX happens to cover it.
 
 ---
 
@@ -193,13 +248,14 @@ The step is **consequence**: death, respawn, pickups, and an AI that can actuall
 | | |
 |---|---|
 | **1.1**, **1.2** | respawn is a stub and post-respawn invulnerability does not exist. Both blocked by `1.3` |
+| **1.4**, **3.1** | every weapon has unlimited ammo, and `RefillAmmo` secretly resets cooldown and wind-up. **Both deferred out of PRE-ALPHA 2 on 2026-08-21** and sequenced here because ammo only means something once `1.5` can refill it |
 | **1.5** | `PickupManager` is unwritten. The only planned-and-entirely-absent module |
 | **1.6** | the AI cannot fire anything except slot 0 |
 | **3.3** | the AI steers away from its own target |
 | **6.3** | no match flow |
 | **5.1** | Hard Lock is not designed through |
 | **2.16**, **2.17** | the altitude cue and a more active camera, **both deferred out of PRE-ALPHA 1 on 2026-08-20 behind exactly the arena this milestone starts.** Sequenced here because neither can be judged in the RVP demo city: an altitude cue compensates for a tiled ground and no props, and an automatic camera earns its keep by anticipating terrain. **Judge whether they are still needed once `6.2` has landed, rather than assuming they are** |
-| **2.18**, **2.19** | binding ergonomics, and teaching air control and tricks. Deferred out of PRE-ALPHA 1 on 2026-08-20 until the control scheme is complete. **2.19 is FTUE work and this is the first milestone with a loop to teach inside of.** 2.18 may slip to BETA: "all the controls in" is not strictly true until `6.1` finishes the weapon roster |
+| **2.18**, **2.19** | binding ergonomics, and teaching air control and tricks. Deferred out of PRE-ALPHA 1 on 2026-08-20 until the control scheme is complete. **2.19 is FTUE work and this is the first milestone with a loop to teach inside of.** 2.18 is no longer gated on the weapon roster: `6.1` finishes in PRE-ALPHA 2, so "all the controls in" is true by the time this milestone starts |
 
 Placeholder arena work begins here (`6.2`), replacing the RVP demo city. **It now gates two deferred
 movement items as well as its own quality bar**, which raises its value above what this table showed
@@ -217,7 +273,7 @@ design one, and nothing has ever been measured with more than two craft in the s
 | | |
 |---|---|
 | **6.2** | the arena, at non-final quality |
-| **6.1** | seven of thirteen weapons still unimplemented |
+| **6.1** | **the roster is built in PRE-ALPHA 2 and what lands here is what those gates deferred**: the Sniper and Flamethrower if either was held, the Laser Cannon if `6.12` failed, and the per-vehicle Specials, which need `5.7` before "one per vehicle" means anything |
 | **5.7** | vehicle roster is one profile |
 | **5.8** | vehicle scale, deferred behind two gates |
 | — | a performance pass against five AI. The instruments exist; the measurement does not |
