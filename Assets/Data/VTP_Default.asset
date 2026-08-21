@@ -55,7 +55,7 @@ MonoBehaviour:
     hardLandingSuppressDuration: 0.35
   propulsion:
     maxForwardAccel: 87
-    topSpeed: 80
+    topSpeed: 105
     accelCurve:
       serializedVersion: 2
       m_Curve:
@@ -107,8 +107,8 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    maxReverseAccel: 67
-    reverseTopSpeed: 67
+    maxReverseAccel: 88
+    reverseTopSpeed: 88
     yawAccel: 15
     maxDriftAngle: 90
     yawDamping: 8
@@ -128,7 +128,7 @@ MonoBehaviour:
         time: 0.5
         value: 1
         inSlope: 0
-        outSlope: -0.5
+        outSlope: 0
         tangentMode: 0
         weightedMode: 0
         inWeight: 0.33333334
@@ -136,11 +136,11 @@ MonoBehaviour:
       - serializedVersion: 3
         time: 1
         value: 0.5
-        inSlope: -1
-        outSlope: -1
+        inSlope: -1.8596718
+        outSlope: -1.8596718
         tangentMode: 0
         weightedMode: 0
-        inWeight: 0.33333334
+        inWeight: 0.088768005
         outWeight: 0
       m_PreInfinity: 2
       m_PostInfinity: 2
@@ -173,9 +173,9 @@ MonoBehaviour:
     driftYawMultiplier: 2.5
     driftSustainSeconds: 1.5
     driftBleedSeconds: 2.5
-    driftSustainedTopSpeed: 45
+    driftSustainedTopSpeed: 59
     driftTurnThreshold: 0.5
-    minDriftSpeed: 53
+    minDriftSpeed: 70
     driftBlendSeconds: 0.1
     driftHopImpulse: 10
     maxBankAngle: 18
@@ -184,13 +184,13 @@ MonoBehaviour:
     enableAirControl: 1
     airControlBlendSeconds: 0.1
     enableStrafe: 1
-    strafeTopSpeed: 53
-    strafeAccel: 47
+    strafeTopSpeed: 70
+    strafeAccel: 62
     strafePitchLimit: 20
-    strafePitchSensitivity: 100
+    strafePitchSensitivity: 75
     strafeModeBlendSeconds: 0.2
     strafeLateralCapStrength: 3
-    driveLateralPush: 8
+    driveLateralPush: 10
   energy:
     maxEnergy: 100
     startingEnergy: 100

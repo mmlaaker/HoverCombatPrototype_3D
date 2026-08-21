@@ -330,6 +330,30 @@ intent to Foundation.
   boost scales accel by 1.5 and the ceiling by only 1.25, so boost used to reach its HIGHER top speed
   in LESS time than the craft reached its ordinary one. A curve read off absolute speed would have
   preserved that. `AccelCurveMultiplier` is the single site.
+- **Because of that fraction, `topSpeed` is the HORIZONTAL SCALE of the acceleration ramp and not
+  just its ceiling.** Raising it stretches the same curve over a wider range, which puts the flat
+  part of the curve over more of the speeds actually driven — so **raising the cap makes the craft
+  reach every absolute speed SOONER while taking longer to top out.** Measured 2026-08-20: cap 80 to
+  105 with `maxForwardAccel` untouched moved time-to-60 from 1.14s to 0.89s and time-to-top from
+  2.30s to 3.02s. **"Too slow" is therefore at least as likely to be the ceiling as the ramp**, and
+  the two levers pull opposite ways on time-to-top. Check which complaint is being made before
+  touching either.
+- **Six values are RATIOS against `topSpeed` and must move with it.** `maxReverseAccel` and
+  `reverseTopSpeed` at 0.838, `strafeTopSpeed` and `minDriftSpeed` at 0.667, `driftSustainedTopSpeed`
+  at 0.562, and `strafeAccel` scaled by the CAP ratio rather than against `maxForwardAccel` (what
+  sets strafe's feel is time-to-its-own-cap). **`minDriftSpeed` must EQUAL `strafeTopSpeed`; the
+  profile validator enforces it.** The one that gets missed is `maxReverseAccel`, because it reads as
+  a reverse value and is actually the brake — left behind, stopping distance from top speed went 48m
+  to 82m.
+- **`hardLandingMinSpeed` and `hardLandingMaxSpeed` are NOT in that set and must not be scaled with
+  `topSpeed`.** `impactSpeed` is closing speed along the ground normal, set by the jump impulses and
+  `extraFallGravity`, not by how fast the craft drives. Scaling them switches hard landings off for
+  ordinary jumps. They look like speed ratios; they are landing values.
+- **A FLATTER `accelCurve` produces a QUICKER craft that feels MORE arcade-y**, and this was measured
+  rather than reasoned. A three-key curve reached 79 m/s in 1.92s against the shipped curve's 2.30s
+  and was rejected in play. **Thrust that stays high and then stops at a wall reads as a governor;
+  thrust that tapers toward a limit reads as physical.** Do not answer "feels too slow" by flattening
+  the curve (`TuningLog.md` > The speed pass).
 - **DRIFT IS EXEMPT FROM `accelCurve` and must stay exempt.** A drift's cap falls by design, so the
   fraction pins near 1 and the whole slide runs at the curve's floor — measured as a held slide
   turned into a brake, 53.5 m/s against 77.3 at 1.5s in. Faded by `driftLerp`, not switched. **A
@@ -931,6 +955,7 @@ is stable and never reused.**
 | 48 | Frame timing read through `eval` measures the measurement. Remote-driving the editor cost a 3077ms frame; relative micro-benchmarks inside one eval survive, frame-level numbers do not |
 | 49 | Only a constant workload separates "the game got heavier" from "the machine got weaker". `FrameSpikeWatch`'s benchmark hit 3.57ms against 0.30ms and invalidated the window |
 | 50 | An instrument that does not report its sample count lets "no data" read as "no problem". Print the count that could have shown the failure next to the verdict |
+| 51 | The asset file and the editor's copy drift apart BOTH ways. Read and write tuning through the editor while it is running, and do not assume a diff line is yours |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).
@@ -1133,24 +1158,34 @@ regression even if it improves something else.
   two testers independently asked for steering authority to fade with speed, and a third said top speed
   arrives far too quickly. The entry was judged by one driver at one skill level, which is the new
   reason this file requires for reopening rather than a rediscovery of what prompted it.
-  **Precisely what is reopened and what is not:**
-  - **`topSpeed` 80 STANDS.** Nobody said the craft was too fast, only that it reached top speed too
-    quickly and turned too well once there. Treat 80 as fixed and the approach to it as free
-    (`TODO.md` 0.33).
-  - **The yaw pair is reopened** for a speed-dependent term (`TODO.md` 0.32). **That term now exists,
-    built 2026-08-20 and not yet judged:** `yawSpeedFade` plus `boostYawMultiplier`. `yawAccel` 15 and
-    `yawDamping` 8 themselves did NOT move — the fade multiplies the first and leaves both in the
-    asset untouched, so this entry's original values still stand and only their effect at speed has
-    changed.
+  **CLOSED AND SUPERSEDED 2026-08-20 by the speed pass** (see > Judged good 2026-08-20, below). The
+  reopen this entry describes ran its course: all three items were built, judged together in one
+  drive, and closed. **The values below are historical from here on** — read the newer entry for what
+  is live. What the sub-bullets are still good for is the reasoning about which things were
+  deliberately NOT reopened.
+  **Precisely what was reopened and what was not:**
+  - **`topSpeed` 80 was treated as fixed for the duration of the reopen, and that turned out to be
+    the wrong bound.** Nobody had said the craft was too fast, so 80 was held and the approach to it
+    made free. **The feel pass established the opposite: the ceiling WAS the complaint** (`topSpeed`
+    is now 105). The entry was not wrong about what the testers said — it was wrong to convert "no
+    one asked for more speed" into "the ceiling is not the lever". **Absence of a request is not a
+    bound.**
+  - **The yaw pair was reopened** for a speed-dependent term, **and that term shipped and was judged
+    good 2026-08-20** (`yawSpeedFade` plus `boostYawMultiplier`, re-eased by the owner in the closing
+    drive). `yawAccel` 15 and `yawDamping` 8 themselves did NOT move — the fade multiplies the first
+    and leaves both in the asset untouched, so this entry's original values still stand and only
+    their effect at speed has changed.
   - **`driftYawMultiplier` and the drift behaviour are NOT reopened** and must not be reshaped as a
     side effect. Drift is separately judged good below and has its own equilibrium via `maxDriftAngle`.
-  - **`strafeTopSpeed` 53 and the 66.25% ratio STAND**, and now do double duty as the ceiling
-    `TODO.md` 0.36's lateral push must stay well clear of.
+  - **The strafe/drive RATIO stands; the numbers that express it have moved.** 53 against 80 became
+    **70 against 105** in the speed pass, holding the ratio at 66.7%. The ratio is the judged-good
+    thing and it survived; the absolute is derived from it and `topSpeed`.
 - **Drift, as a held slide.** `driftLateralDamp`, `driftForwardDamp`, `driftYawMultiplier`,
   `driftSustainedTopSpeed` and the sustain/bleed pair are bounded. **The drift HOP is excluded and is
   was a separate complaint, closed 2026-08-17 as a suppression bug rather than a missing cue
   (`TuningLog.md` > The drift hop was being suppressed). Its VFX half is `TODO.md` 2.12.
-- **The strafe-to-drive top speed ratio, 66.25% in both boosted and unboosted form.** Owner accepted
+- **The strafe-to-drive top speed ratio, ~66% in both boosted and unboosted form** (66.25% as judged,
+  66.7% since the 2026-08-20 speed pass rescaled both numbers). Owner accepted
   it against the 5.0s continuous boost budget (`maxEnergy` 100 / `boostEnergyPerSecond` 20). Boost
   scales both ceilings by the same factor, so **there is only one ratio and it cannot be tuned per
   mode.** This bounds `TODO.md` 5.11 to the camping question alone.
@@ -1212,7 +1247,8 @@ the owner's hands**, and it is why they are recorded as criteria rather than as 
   than as a result.** Tester 4's first reaction was that steering felt too floaty. Within about thirty
   seconds of play they reversed it unprompted: because it is a hovercraft, the floatiness was
   contextualized and made sense. **They then called drive mode basically perfect.** The same session
-  produced two separate high-speed complaints that did NOT resolve themselves (`TODO.md` 0.32).
+  produced two separate high-speed complaints that did NOT resolve themselves (closed as 0.32; see
+  > Judged good 2026-08-20).
   **The rule this supports: a complaint from the first thirty seconds of a first run is not yet data.**
   Give it a second run before it is written down as a defect, and weight the complaints that survive
   contact over the ones that arrive with it.
@@ -1240,6 +1276,29 @@ the owner's hands**, and it is why they are recorded as criteria rather than as 
   with the options on the table (HUD line, camera kick, rumble, sound). It reuses the ordinary
   righting motion, so from the seat it is the recovery taking a beat longer; announcing it would only
   tell the player a rescue system exists. **Do not add a cue for it without a play report asking.**
+- **SPEED, ACCELERATION, STEERING AND THE LANE CHANGE, all judged in one drive.** Owner: *"genuinely
+  better than the playtest build ... feels a lot more realistic now I guess? Still really good
+  control but less arcade-y."* **This closes `0.33`, `0.32` and `0.36` together** and it is the pass
+  the whole PRE-ALPHA 1 sequencing was built around. Live values: `topSpeed` **105**,
+  `maxForwardAccel` 87 unchanged, `maxReverseAccel` and `reverseTopSpeed` **88**, `strafeTopSpeed`
+  and `minDriftSpeed` **70**, `strafeAccel` **62**, `driftSustainedTopSpeed` **59**, `accelCurve`
+  five keys, `yawSpeedFade` re-eased by the owner, `driveLateralPush` **10**. Derivation in
+  `TuningLog.md` > The speed pass.
+  **What this bounds, and it is a shape rather than a number: "less arcade-y" is the acceptance
+  criterion.** It came from a ramp that tapers toward its ceiling, and the measured alternative — a
+  flatter curve that is genuinely QUICKER to 80 m/s — was driven and rejected. **A change that makes
+  the craft accelerate harder through the middle of its range is a regression against this even
+  though it is faster.**
+  **The camera followed the vehicle in the same pass, by the owner's own edit:**
+  `speedLookAheadReference` 80 → **105** and `Lens.FarClipPlane` → **5000**, both as overrides in
+  `Prototype_Scene.unity` and the `HoverCar_Prototype` variant (the base player-controller prefab
+  still reads 80, so **read the live value through the editor, not the base prefab**). The reference
+  is a DIVISOR, so tracking `topSpeed` costs look-ahead at every speed below 105 and buys camera
+  response above 80; that trade was made in play and is part of what was judged.
+  **Two values were deliberately left alone and each is the obvious next knob for a specific
+  complaint**, so reach for the matching one rather than re-opening the set: `boostSpeedMultiplier`
+  1.25 if boost reads flat, and a dedicated response term if the lane change reads mushy — **never
+  `lateralDamp`**.
 
 ### Trick economy
 

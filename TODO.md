@@ -59,7 +59,7 @@ movement, so weapon-subject work stays out of Tier 0 even when the symptom is a 
 
 | Tier | Open |
 |---|---|
-| **0** | 0.12 · 0.32 · 0.33 · 0.36 |
+| **0** | 0.12 |
 | **1** | 1.1 · 1.2 · 1.3 · 1.4 · 1.5 · 1.6 |
 | **2** | 2.2 · 2.4 · 2.5 · 2.7 · 2.9 · 2.11 · 2.12 · 2.13 · 2.14 · 2.15 · 2.16 · 2.17 · 2.18 · 2.19 |
 | **3** | 3.1 · 3.2 · 3.3 · 3.5 · 3.6 · 3.7 · 3.8 · 3.9 · 3.10 · 3.11 · 3.15 · 3.16 · 3.17 |
@@ -106,13 +106,28 @@ is what `0.29`'s fixes uncovered once the craft stopped fighting itself.
 **The pre-alpha 1 movement playtest, four testers, 2026-08-19, re-set this list.** The owner's order,
 approved 2026-08-20, is **`0.27`, then `0.33`, then `0.32`, then `0.36`, with `0.12` last.** Those five
 are the whole of Tier 0 and the whole of what stands between here and PRE-ALPHA 1: **the owner's
-completion criterion is those items built AND judged good in play.** **`0.27` cleared that bar on
-2026-08-20 and four remain.**
+completion criterion is those items built AND judged good in play.** **All four of the built items cleared that bar on 2026-08-20** — `0.27` in the morning, then `0.33`,
+`0.32` and `0.36` together in one drive. **Only `0.12` remains, and it is a decision rather than a
+build.**
 
 14. ~~**0.27**~~ shipped and **judged good in play 2026-08-20**, the same day it was taken. The owner
     drove both repro cases and could not get stuck in either. Outcome in `TuningLog.md` > Closed as
     0.27; the design rules it leaves behind are in `CLAUDE.md` > Modules > Foundation and > Standing
     Decisions. **The milestone blocker is closed and `0.33` is next.**
+15. ~~**0.33**~~, ~~**0.32**~~, ~~**0.36**~~ — **all three shipped and judged good in ONE drive,
+    2026-08-20.** Owner: *"genuinely better than the playtest build ... less arcade-y."* The
+    build-three-then-judge-once sequencing worked exactly as intended and is the reason they are one
+    entry rather than three. Outcome in `TuningLog.md` > The speed pass; acceptance criteria in
+    `CLAUDE.md` > Judged good 2026-08-20. **`0.12` is now the only Tier 0 item left, and the
+    milestone turns on a single decision rather than on any build.**
+
+**What the closing pass actually found, because it contradicts what `0.33` was written on.** The
+complaint was the CEILING, not the ramp. `topSpeed` 80 to **105** with `maxForwardAccel` untouched
+delivered both halves of the owner's ask at once — the three-second ramp they asked for AND a quicker
+approach to every speed below it — because `accelCurve` is read as a fraction of the cap, so the cap
+is the ramp's horizontal scale. **`0.33` had explicitly ruled `topSpeed` out of scope** on the
+grounds that no tester asked for more speed. That inference was the error, and it is now recorded as
+a standing rule in `CLAUDE.md`: **absence of a request is not a bound.**
 
 **`0.33` deliberately precedes `0.32` even though `0.32` had two independent votes and `0.33` had one.**
 They are the same subsystem, and the acceleration shape decides how much time a player spends at the
@@ -161,189 +176,17 @@ turning, drift, and the strafe/drive speed ratio. **Read those before changing a
 items below are bounded by something already confirmed to feel right, and those confirmations are the
 acceptance criteria.
 
-### 0.33 Acceleration is flat, and top speed arrives in about nine tenths of a second
+**ONE ITEM LEFT, and it is not a build.** `0.33`, `0.32` and `0.36` all closed together on
+2026-08-20. **`0.12` is an accepted residual awaiting a decision, so this tier no longer contains
+work** — see `ROADMAP.md` for what that means for the milestone.
 
-**Pre-alpha 1 playtest, 2026-08-19, one tester and the owner's own reading of the run.** Tester 3:
-top speed is reached far too quickly, and acceleration should be much more gradual. **Worked SECOND,
-before `0.32`, and that order is deliberate** — see the working order above.
+**One acceptance criterion was NOT re-run and is recorded here rather than assumed.** `ROADMAP.md`
+requires the two-barrel-roll landing test after anything touching `0.33` or `0.32`. **It has not been
+driven since the speed pass.** The reason it is very likely unaffected: the margin is set by airtime
+and roll rate, and `extraFallGravity`, `airRollTorque` and all three jump impulses were untouched —
+the pass moved horizontal caps only, and `accelCurve`'s airborne effect is forward thrust, which does
+not change hang time. **That is an argument, not a measurement.** Cheap to settle on the next drive.
 
-**There is no curve to tune. There is no curve at all.** `ApplyDrive` computes
-`throttle * blendedFwdAccel` as a constant and applies it until the cap suppresses it outright
-(`HoverController_Propulsion.cs`, the grounded forward branch). Forward drag is mutually exclusive
-with drive and only applies near-zero throttle, so nothing opposes it on the way up either. The shape
-is a straight ramp into a hard ceiling.
-
-**The live numbers, and they are why one tester could feel it.** `maxForwardAccel` **87** against a
-`topSpeed` of **80**, so ignoring the cap the craft reaches top speed in roughly **0.92s**. That is
-about 8.9g held flat. **Measured 2026-08-20 at 0.919s, so the arithmetic was right.**
-
-**Correction, 2026-08-20: this item previously claimed boost scales accel and ceiling by the same
-factor and so does not change the time. It does not.** `boostAccelMultiplier` is 1.5 and
-`boostSpeedMultiplier` is 1.25, so boost reached its HIGHER ceiling in LESS time — 0.828s to 100
-against 0.919s to 80 — and crossed the ordinary 80 at 0.669s. **Boost was the worst case of the
-complaint, not a neutral one.**
-
-**STATUS 2026-08-20: built, measured, NOT yet judged in play.** `accelCurve` added to
-`PropulsionTuning` and written into `VTP_Default.asset`; drive now takes **2.35–2.43s** to 80 against
-0.919s, with the launch unchanged and the tail carrying all of the added time. Reverse and drift are
-both exempt, the second after measuring that shaping a drift turns a held slide into a brake. Full
-before-and-after in `TuningLog.md` > The acceleration ramp. **This stays open until the owner drives
-it**, which is what "done" means for this item.
-
-**Owner's first drive, 2026-08-20: "this definitely feels more sluggish now."** Not a rejection.
-**The owner's decision is that `0.33`, `0.32` and `0.36` are all BUILT first and then judged together
-in one feel pass**, because they move the same subsystem and a ramp tuned before the fade exists
-would only be re-tuned after it. **So this item is gated behind `0.32` and `0.36` for its judgement,
-though not for its build**, which is the reverse of the sequencing reason that put it first.
-
-**`0.32` landing may have already moved this complaint**, which is the reason for judging them
-together rather than in turn: the steering fade means a corner now holds 70 m/s where it used to drop
-to 45, so the craft spends materially more time at speed than it did when the ramp was called
-sluggish. **Re-drive before reaching for the curve.**
-
-**That pass does not need a sweep, because the ramp has a closed form** (`TuningLog.md` > Tuning the
-ramp to a target time). **A target time maps to a curve arithmetically**, validated to within 1% on
-a curve the model had never seen, so the owner can ask for a feel in words — "punchy start, top
-speed in two seconds" — and get keys back without a search. The integral costs one `eval` call and
-no play mode; the play run is for confirming the winner, not finding it.
-
-**The one thing to carry into that pass: the right-hand end of the curve is NOT the sluggishness
-knob.** Raising it five-fold moves time-to-40 by 0.001s and time-to-60 by 0.017s. It buys back the
-last quarter of the range only. Sluggishness lives in the middle keys, and punch lives in how far
-the leading flat run extends.
-
-**This is a structural absence, not a mistuned value**, which is why it gets an item rather than a
-line in `TuningLog.md`. Lowering `maxForwardAccel` alone buys a longer ramp with the same flat shape
-and a softer launch, which is not what was asked for.
-
-**Do this one first because it moves the ground `0.32` is judged on.** How much time a player spends
-near top speed is decided here, and a steering fade tuned against a 0.92s ramp would have to be
-re-judged the moment the ramp changes.
-
-**Bounded by a judged-good entry, and the reopen is deliberate.** `CLAUDE.md` > Judged good in the
-2026-08-16 playtest records speed and turning as bounded by an owner feel report. **`topSpeed` 80 is
-not what is being questioned here** — no tester said the craft was too fast, only that it got there
-too fast — so treat 80 as fixed and the approach to it as free.
-
-**Done looks like:** the owner drives it and judges the ramp good. **Watch the boost read**, which is
-judged good and is the thing most likely to change shape underneath this, and re-check the two-barrel-
-roll landing test if anything here touches airborne drive.
-
-### 0.32 Steering authority does not fade with speed
-
-**Pre-alpha 1 playtest, 2026-08-19, TWO INDEPENDENT TESTERS.** Tester 1: the controls feel a little
-too tight and they should have less direct control of a craft like this, with steering fading away the
-faster they go. Tester 3, separately, asked for less control at high speed alongside the acceleration
-complaint in `0.33`. **Worked THIRD, after `0.33`.**
-
-**A third report looks like it contradicts these and does not.** Tester 4's first impression was that
-steering felt too floaty, then reversed it within thirty seconds as making sense for a hovercraft, and
-went on to call drive mode basically perfect. That report is about LOW speed and it resolved itself.
-Both complaints above are explicitly about high speed. **The reading that fits all three: authority is
-right when slow and too high when fast**, which is one finding with two votes rather than three
-opinions pulling apart.
-
-**There is no speed term in the turning code.** `ApplyTurning` computes
-`turn * P.yawAccel * turnScale * effectiveYawMult`, where the only modifiers are `airTurnMultiplier`
-0.5 while airborne and `driftYawMultiplier` 2.5 while drifting. **Yaw authority at 80 m/s is identical
-to yaw authority at 5 m/s.** Live values: `yawAccel` 15, `yawDamping` 8.
-
-**What a constant yaw acceleration already does, so the fix is not starting from nothing.** Holding a
-fixed yaw rate at a higher linear speed already produces a wider turn radius, which is why this reads
-as a feel gap rather than as the craft turning on a dime at speed. What is missing is the sense that
-speed COSTS you something.
-
-**Bounded by the same judged-good entry as `0.33`, and this is the reopen that matters.** `CLAUDE.md`
-> Judged good in the 2026-08-16 playtest names the yaw pair and the drift yaw multiplier as bounded by
-an owner feel report. **Two testers now push the other way and the owner has accepted the reopen**
-(2026-08-20). The entry is not wrong, it was judged by one driver at one skill level; that is the new
-reason the file asks for, and it should be recorded as a deliberate reopen rather than quietly
-contradicted.
-
-**The design tension is real and the pillars do not settle it.** The motto is "the fun comes from
-control", which argues against taking authority away. "Momentum is the primary skill expression"
-argues that speed should cost something. **The owner's call is that it fades**; what is open is how
-much and over what range.
-
-**Do not touch `driftYawMultiplier` as part of this.** Drift is a judged-good behaviour with its own
-bounded values and its own equilibrium via `maxDriftAngle`. A speed fade that also reshapes drift
-changes two accepted things at once and neither can then be judged.
-
-**Done looks like:** the owner drives it and judges the fade good. **The acceptance test to preserve:**
-the strafe-to-drive ratio and the drift behaviour both still read as they did.
-
-**STATUS 2026-08-20: built, measured, NOT yet judged in play.** `yawSpeedFade` and
-`boostYawMultiplier` added; **`yawAccel` 15 and `yawDamping` 8 did not move**, so the reopen took the
-form of a multiplier over the existing pair rather than a re-tune of it. Yaw rate at top speed
-106.8 → 53.4 deg/s, a 180 going 1.69s → 3.35s, with low speed unchanged to the decimal. Drift,
-strafe and airborne are all exempt and all three were verified. Full result in `TuningLog.md` >
-Steering that fades with speed.
-
-**Two things the baseline changed about how to read this item.** First, **turning at speed already
-cost 35 m/s in two seconds** — the cost existed, it was just paid after the input instead of being
-visible in it, which is what "too tight" was describing. Second, the fade **gave speed back**: the
-craft now holds 70 m/s two seconds into a corner where it used to be down to 45, because it is no
-longer sliding up to 74 degrees off its own nose.
-
-**The owner's sequencing, 2026-08-20: `0.32` and `0.36` are both BUILT before any playtest, and then
-speed, acceleration and turning are judged together in ONE pass** covering `0.33`, `0.32` and `0.36`.
-Nothing here is closed until that pass happens.
-
-### 0.36 Left stick X does nothing in drive mode
-
-**Pre-alpha 1 playtest, 2026-08-19, TWO TESTERS UNPROMPTED.** Both suggested the same thing: the axis
-should push the craft slightly left or right while driving, without taking over steering the way the
-right stick does. **Worked FOURTH.** Owner's constraint, 2026-08-20: **the push must not be large
-enough to feel like strafing or to overlap with it.**
-
-**The axis is already read and already has three consumers.** `PlayerHoverInput` maps left stick X to
-`StrafeX` (the full-stick Vector2 read, so nothing needs rebinding). It currently drives lateral
-movement in strafe mode, the dodge burst's lateral direction, and **roll during air control**
-(`HoverController_Propulsion.cs:1785`).
-
-**The live conflict is air-control roll, and it is the one trap here.** Air control is airborne-only
-and reads the same axis for roll. **Gate the drive-mode push to GROUNDED and the two never meet.** If
-it is not gated, a lateral push fights roll on the same stick with no way for the player to separate
-them, and roll is load-bearing for wall jumps and the trick economy.
-
-**The ceiling has a number already, so this does not need a feel target to start from.**
-`strafeTopSpeed` is 53 against a `topSpeed` of 80, and that **66.25% ratio is itself a judged-good
-entry** (`CLAUDE.md`). The push wants to be an acceleration whose resulting lateral velocity stays
-well clear of 53, or it becomes strafe without the trigger and makes the mode switch pointless.
-
-**Watch the interaction with `0.33` and `0.32`, both of which land first.** A lateral push is felt
-relative to how much authority the player already has, so judge this after the speed and steering work
-rather than alongside it.
-
-**Done looks like:** the owner drives it, the push is useful for line adjustment, and holding L2 still
-feels like a distinct mode rather than more of the same.
-
-**STATUS 2026-08-20: built, measured, NOT yet judged in play.** `driveLateralPush` added at 8; the
-asset diff is one added line and zero deletions, so **`lateralDamp` is untouched at 1**. Settles at
-8 m/s sideways at top speed, which is **5.7 degrees off the line and 15% of the strafe ceiling** — so
-the "must not overlap with strafe" constraint is met with room to spare. Full result in
-`TuningLog.md` > The drive-mode lane change.
-
-**The owner's definition of the feature, which now governs it:** *"definitively not a steering
-mechanism — a lane change, or a way to make a small adjustment to your line or line up a shot a
-little better, without being twitchy."*
-
-**The standstill constraint is met by construction, not by a threshold.** The push is scaled by
-forward speed, so it is a constant ANGLE off the line at any speed and exactly nothing at rest:
-measured 0.00 m/s and 3cm of drift over three seconds at full stick. A fixed sideways speed would
-have been strafing without the trigger.
-
-**The item's named trap is closed structurally.** Air-control roll fades in on the same hover-support
-number this fades out on, so the two can never both own the stick and there is no seam — better than
-the grounded gate the item proposed. Verified in world frame: 0.0036 m/s of drift across 279 airborne
-samples at full stick.
-
-**One thing left open for the playtest, and it is the only one.** The lean arrives over about a
-second and settles over three. **The knob sets distance, not timing** — measured at 4/8/16, the craft
-is 64% of the way to its own final speed at one second in every case. If it reads as mushy, the fix
-is a dedicated response term; **`lateralDamp` is explicitly NOT available for it** (owner,
-2026-08-20: *"I don't want to change lateral damping, period. Too much feel is built around that
-number."*). Not built on spec.
 ### 0.12 A sliver of bumper still clips on the pitch-up
 
 **CONFIRMED STILL PRESENT 2026-08-17.** Owner, asked to glance at it after four separate changes to
@@ -1727,6 +1570,7 @@ reused.
 | **0.31** | **5.13**, which carries the three values and their measurements forward unchanged. **Retired from Tier 0 on 2026-08-20 without being judged.** Owner: the aim feel is good enough for now, defer until weapons are further along. Tier 5 rather than Tier 2 because it was always a feel report rather than code, and it now shares 5.12's gate |
 | **0.27** | `TuningLog.md` > Closed as 0.27, for the ablation and the restore sweep; `CLAUDE.md` > Modules > Foundation and > Standing Decisions for the rules it leaves behind; `CLAUDE.md` > Judged good 2026-08-20 for the acceptance table. Shipped and **judged good in play the same day it was taken**, the owner driving both repro cases: unable to get stuck in either. **This item's own framing was right about the mechanisms and wrong about the fix.** It recommended a dead-man timer on the grounds that it "does not care which gate failed", which is true and is exactly why the obvious implementation fails: forcing authority alone does nothing against a wall, where authority was already held and losing, and suppressing the springs alone does nothing when carried, where righting never armed. **Both halves are required and that was only found by running the half-fix and watching it not work.** Two further corrections worth carrying: the leveling torque is not a contributor and was ablated out, and the craft has never been flung by a recovery, a claim that has now cost two sessions and is filed under `CLAUDE.md` > Disproved by measurement with `Measuring.md` trap 45 |
 | **0.34, 0.35, 0.37** | **2.18, 2.17 and 2.19 respectively.** Issued during the pre-alpha 1 playtest intake on 2026-08-19, never written into this file at Tier 0, and **placed straight into Tier 2 on 2026-08-20** by the same sorting rule: 0.35 is gated on the arena, 0.34 and 0.37 on the control scheme being complete. **Listed here anyway so the three numbers are burned**, because they were discussed by number before they were filed and a number that has ever named a thing is never reused |
+| **0.33**, **0.32**, **0.36** | `TuningLog.md` > The speed pass, for the derivation and the rejected alternative; `CLAUDE.md` > Judged good 2026-08-20 for the acceptance criteria, and > Propulsion for the ratio set the pass leaves behind. **All three shipped and judged good in ONE drive, 2026-08-20** — the build-three-then-judge-once sequencing the owner set on the same day, which worked and is worth reusing. Owner: *"genuinely better than the playtest build ... still really good control but less arcade-y."* **`0.33`'s own framing was the thing that had to be discarded to close it.** It ruled `topSpeed` out of scope because no tester had asked for more speed, and treated the ramp as the only free variable; the complaint was actually the ceiling, and raising `topSpeed` 80 to 105 with `maxForwardAccel` untouched delivered the longer ramp AND a quicker approach to every speed below it, because `accelCurve` is read as a fraction of the cap. **Two corrections travelled with it.** A flatter curve was measured as genuinely QUICKER to 80 m/s (1.92s against 2.30s) and is the more arcade-y one, so "too slow" must not be answered by flattening the ramp. And `0.36`'s one open question — whether the lean arrives quickly enough — was answered by the owner raising `driveLateralPush` to 10 and judging it good, so **no dedicated response term was needed and `lateralDamp` was never touched** |
 
 **The old Tier 4 was a deletion list and is fully executed**, which is why the number was free to reuse for
 verification debt. Three dead APIs were removed. If a lock tone or a HUD pitch indicator is ever wanted, add

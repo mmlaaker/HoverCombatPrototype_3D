@@ -36,6 +36,12 @@ The split across the documentation:
 ### Speed and cornering
 *Closed as M.5, shipped 2026-08-12, judged good 2026-08-13: "this feels much better."*
 
+**SUPERSEDED for the speed values 2026-08-20 — see > The speed pass, below.** Seven of the numbers in
+the table below have moved (`topSpeed` 80 to 105 and the six that hold ratios against it). **What is
+still live here is everything else:** the reasoning about which values must NOT be scaled with top
+speed, the `speedLookAheadReference` coupling, and the whole turn-radius sub-section. The pass that
+superseded it re-used this entry's ratios rather than re-deriving them.
+
 Direction was set by the owner: raise top speed, lower the boost multiplier. 1.5x is high as boost
 multipliers go (most racing games sit nearer 1.15x to 1.3x) and 50% already read as merely okay,
 which is close to proof that more multiplier was not the lever.
@@ -68,6 +74,11 @@ the inspector**, which is why they are worth recording.
 link.** It was 60, which WAS `topSpeed`. Raising top speed without raising it saturates the camera's
 speed look-ahead before you reach top speed, so the camera stops responding to your fastest driving.
 Highest-risk coupling in this cluster; check it first if `topSpeed` ever moves again.
+
+**This warning was collected 2026-08-20** when `topSpeed` went to 105 and the reference followed, now
+via scene and prefab-variant overrides rather than the base prefab. **It also caught a stale code
+comment** that had claimed the reference "is 60" across two re-tunes — the pair kept moving together,
+so the relationship held while the literal rotted. Still nothing enforcing the link.
 
 #### The turn-radius model was wrong, and the corner had to be measured
 
@@ -693,6 +704,129 @@ duration, so a craft alternating in and out of the gate makes no net progress. I
 the reset would not have armed eventually; it only stops discarding work already done. **Raising the
 speed threshold instead would have been a real behaviour change**, because the same number is what
 stops a craft sliding at speed from arming mid-slide.
+
+---
+
+### The speed pass: the ceiling was the complaint, not the ramp
+*Shipped and judged good in play 2026-08-20, the one feel pass that closed `0.33`, `0.32` and `0.36`
+together. Owner: "genuinely better than the playtest build ... feels a lot more realistic now I
+guess? Still really good control but less arcade-y."*
+
+**The owner's report contained two things that looked contradictory and were not.** Top speed arrives
+too slowly AND everything feels too slow, but the stated target was a ramp of **about three
+seconds** — LONGER than the 2.30s the craft was actually doing. That only resolves one way: the
+complaint was never about the ramp. It was that arriving was not worth the trip. **The ask was for a
+higher ceiling, and three seconds was the budget being offered to pay for it.**
+
+#### Why raising the cap made the craft quicker everywhere, not slower
+
+`accelCurve` is read against a **fraction of the cap in force**, never against m/s
+(`CLAUDE.md` > Propulsion). So `topSpeed` is not just the ceiling — **it is the horizontal scale of
+the entire acceleration ramp.** Raising it stretches the same curve over a wider range, which puts
+the flat, powerful part of it over the speeds actually driven.
+
+| time to an ABSOLUTE speed | 20 m/s | 40 | 60 | 80 | 100 | 99% of cap |
+|---|---|---|---|---|---|---|
+| before, cap 80 / accel 87 | 0.23s | 0.55 | 1.14 | — | — | 79 m/s in **2.30s** |
+| after, cap 105 / accel 87 | 0.23s | 0.50 | **0.89** | 1.55 | 2.70 | 104 m/s in **3.02s** |
+
+**`maxForwardAccel` never moved.** One value bought the three-second ramp and a quicker approach to
+every speed below it, which is why the pass needed no sweep and no second run.
+
+#### The seven values, and the ratios six of them exist to hold
+
+| | was | shipped | ratio held |
+|---|---|---|---|
+| `topSpeed` | 80 | **105** | the lever |
+| `maxReverseAccel` | 67 | **88** | 0.838 of `topSpeed`. **This is the brake** |
+| `reverseTopSpeed` | 67 | **88** | 0.838 |
+| `strafeTopSpeed` | 53 | **70** | 0.667, the judged-good strafe/drive ratio |
+| `minDriftSpeed` | 53 | **70** | must equal `strafeTopSpeed`; the profile validator enforces it |
+| `strafeAccel` | 47 | **62** | scaled by the CAP ratio, not against `maxForwardAccel` |
+| `driftSustainedTopSpeed` | 45 | **59** | 0.562, keeps the drift-end margin at ~10% of cap |
+
+**`maxReverseAccel` is the one that would have been missed by treating this as a top-speed change.**
+It doubles as the brake. Left at 67 the stopping distance from top speed goes 48m to **82m**; at 88
+the stop TIME is unchanged at 1.19s and the distance is 63m, which is honest — the craft really is
+carrying more speed into the stop. **`strafeAccel` is scaled against the CAP and not against
+`maxForwardAccel`**, deliberately: what sets strafe's feel is time-to-its-own-cap, so holding
+`strafeAccel / maxForwardAccel` would have made strafe take 1.3x longer to arrive and moved the
+original complaint onto a different axis.
+
+#### Three things deliberately not moved
+
+- **`hardLandingMinSpeed` 58 and `hardLandingMaxSpeed` 85 STAY.** They look like speed ratios and are
+  not: `impactSpeed` is closing speed along the ground normal, driven by the jump impulses and
+  `extraFallGravity`, not by how fast the craft drives. Scaling them with `topSpeed` would quietly
+  switch hard landings off for ordinary jumps. The same call was made for the same reason in the M.5
+  pass above.
+- **`boostSpeedMultiplier` 1.25 STAYS.** 105 gives a boosted 131 m/s, already +26 m/s of payoff. The
+  owner's report named boost specifically, so it was the obvious second knob — and moving it in the
+  same pass would have meant two changes both answering "is boost fast enough" with neither
+  readable. **It remains the next single knob if boost ever reads flat.**
+- **`lateralDamp` 1 STAYS**, per the owner's standing ruling.
+
+#### The middle of `accelCurve` had been deleted, and it was FASTER that way
+
+Mid-session, `git diff` on the asset showed `accelCurve` had lost the keys at **0.4 and 0.7**,
+leaving three, with the 0.15 key's out-slope reset to flat — the curve editor's signature for
+deleting a neighbouring key, not a serialisation fault. Unity's copy was clean, so this was the state
+being driven; the disk file only caught up when Unity flushed. **The recommendation above had been
+built by reading the curve off disk, which described a craft nobody was driving.** Filed as
+`Measuring.md` trap 51.
+
+**The durable finding is which way it cut.** The gutted curve was the QUICKER one:
+
+| at cap 80 | 40 m/s | 60 m/s | reaches 79 |
+|---|---|---|---|
+| committed, 5 keys | 0.55s | 1.14s | 2.30s |
+| gutted, 3 keys | 0.50s | **0.92s** | **1.92s** |
+
+So the craft that was called too slow was already hitting 80 m/s in under two seconds. **That is what
+made the ceiling diagnosis safe rather than a guess** — the faster of the two ramps had been driven
+and rejected. The five-key curve was restored from the commit and verified byte-identical (it does
+not appear in the asset diff at all).
+
+**Faster and better-feeling came apart here, and that is the lesson to carry.** The flatter curve
+delivered more thrust through the whole middle of the range and would have read as MORE arcade-y, not
+less: thrust that stays high and then stops at a wall reads as a governor, while thrust that tapers
+toward a limit reads as physical. **If a future session hears "too slow" and reaches for a flatter
+`accelCurve`, it will get a quicker craft that feels worse.** Sluggishness lives in the ceiling at
+least as often as in the ramp.
+
+#### Two couplings checked because `topSpeed` moved
+
+- **`speedLookAheadReference` 80 to 105, tracking `topSpeed`. The owner's own edit, made during this
+  session.** It is a camera value pinned to a vehicle value with nothing enforcing the link, flagged
+  in the M.5 entry above as the highest-risk coupling if `topSpeed` ever moved — and it is the one
+  place the warning has now been collected on. Left at 80 the look-ahead would have saturated at
+  80 m/s and the top 25 m/s of the range would have produced no further camera response. **The
+  trade it costs is real and was accepted in play:** the reference is a divisor, so raising it
+  reduces look-ahead at every speed below 105 as the price of the camera still responding above 80.
+  Set as **overrides in both `Prototype_Scene.unity` and the `HoverCar_Prototype` variant**, so it
+  outranks the 80 still sitting in `HoverCar_PlayerController.prefab`; live value verified through
+  the editor at 105. **`Lens.FarClipPlane` went to 5000 in the same pass**, the visibility half of
+  the same problem.
+- **`speedLookAheadSlew` 8 needs no re-derivation, and now has more headroom than before.** Its bound
+  was set to be a provable no-op on flooring from rest, with the note that it must be re-derived if
+  that case ever changes. The case did change. Peak look-point travel is
+  `speedLookAheadMax x (dv/dt) / speedLookAheadReference`, and `accelCurve` is flat at 1.0 through
+  the leading run, so `dv/dt` at launch is still `maxForwardAccel` 87: **6 x 87 / 80 = 6.5 m/s
+  before, 6 x 87 / 105 = 5.0 m/s now**, against a limit of 8. Under it in both cases, so the no-op
+  holds and is now less marginal.
+
+#### What the owner judged
+
+**All three items closed on one drive.** The steering fade and the lane change were judged in the
+same pass and both stand as tuned — `yawSpeedFade` re-eased by the owner to hold authority further up
+the range, and `driveLateralPush` raised 8 to **10**. Both of those were the owner's own edits made
+during the session; neither came from a recommendation here.
+
+**The fade interacts with the cap and both changes landed together, which is worth knowing if either
+is ever re-judged.** `YawFadeMultiplier` reads speed over the UNBOOSTED `topSpeed`, so raising the
+cap already hands back authority at every absolute speed — at 60 m/s the craft went from 75% of the
+way along the fade to 57% — on top of the owner's re-easing. The two are not separable in this
+result.
 
 ---
 

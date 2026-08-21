@@ -1146,9 +1146,16 @@ public class HoverCameraController : MonoBehaviour
     /// travelling there.
     ///
     /// Note Boost and FullThrottle share a speed, and that is correct rather
-    /// than lazy: speedLookAheadReference is 60, equal to the vehicle's top
-    /// speed, and the speed term clamps at 1, so everything at or above the
+    /// than lazy: speedLookAheadReference is kept equal to the vehicle's
+    /// topSpeed, and the speed term clamps at 1, so everything at or above the
     /// reference produces identical look-ahead. Boost differs only in FOV.
+    ///
+    /// Do not restate the number here. This comment said "is 60" through two
+    /// separate re-tunes that moved the pair together (60, then 80, then 105
+    /// on 2026-08-20), so the literal went stale twice while the RELATIONSHIP
+    /// it depends on never did. Nothing enforces the link -- it is a camera
+    /// value pinned to a vehicle value by hand -- so if topSpeed moves again,
+    /// this is the first thing to check. TuningLog.md > The speed pass.
     /// </summary>
     private FramingInputs BuildPreviewInputs(CameraPreviewState state)
     {
