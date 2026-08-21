@@ -176,16 +176,22 @@ turning, drift, and the strafe/drive speed ratio. **Read those before changing a
 items below are bounded by something already confirmed to feel right, and those confirmations are the
 acceptance criteria.
 
-**ONE ITEM LEFT, and it is not a build.** `0.33`, `0.32` and `0.36` all closed together on
-2026-08-20. **`0.12` is an accepted residual awaiting a decision, so this tier no longer contains
-work** — see `ROADMAP.md` for what that means for the milestone.
+**THIS TIER IS EMPTY OF WORK. PRE-ALPHA 1 IS COMPLETE**, owner's decision 2026-08-20. `0.33`, `0.32`
+and `0.36` closed together, and **`0.12` was deferred as trivial by the owner** rather than fixed.
+See `ROADMAP.md`.
 
-**One acceptance criterion was NOT re-run and is recorded here rather than assumed.** `ROADMAP.md`
-requires the two-barrel-roll landing test after anything touching `0.33` or `0.32`. **It has not been
-driven since the speed pass.** The reason it is very likely unaffected: the margin is set by airtime
-and roll rate, and `extraFallGravity`, `airRollTorque` and all three jump impulses were untouched —
-the pass moved horizontal caps only, and `accelCurve`'s airborne effect is forward thrust, which does
-not change hang time. **That is an argument, not a measurement.** Cheap to settle on the next drive.
+**`0.12` stays written down, because deferred is not closed.** It still technically violates a hard
+requirement — a sliver of bumper clips on the pitch-up, for a fraction of a second. The owner has now
+declined it twice, most recently as "trivial" when it was the last thing standing between the project
+and the milestone, **which is a stronger signal than the earlier "no big deal right now"**: it was
+weighed against shipping and lost. Do not re-raise it on its own. **Fold it into the next camera
+framing work if that ever happens**, and treat the hard requirement as having an owner-granted
+exception rather than as an open bug.
+
+**The two-barrel-roll acceptance test was re-driven and HOLDS**, owner 2026-08-20, after the speed
+pass. That closes the last outstanding criterion on `0.21` and confirms what the argument predicted:
+the pass moved horizontal caps only, and `extraFallGravity`, `airRollTorque` and the three jump
+impulses were untouched, so trick margin was never in the path.
 
 ### 0.12 A sliver of bumper still clips on the pitch-up
 

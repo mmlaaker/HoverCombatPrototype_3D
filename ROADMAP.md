@@ -15,14 +15,40 @@ ready to ship. Nothing on this roadmap reaches final art.
 
 ---
 
-## PRE-ALPHA 1 — movement, one gun, nothing to shoot at
+## ~~PRE-ALPHA 1~~ — **COMPLETE 2026-08-20**
 
 > Movement physics and machine gun. Greybox art. Test environment. No enemies. Bare minimum VFX.
 
-**Status: playtested 2026-08-19, scope re-set 2026-08-20, and FOUR OF THE FIVE closed the same day.**
+**Owner's declaration, 2026-08-20: the milestone is complete and a build was cut the same day.** Four
+of the five Tier 0 items were built and judged good in play — `0.27` in the morning, then `0.33`,
+`0.32` and `0.36` together in one drive — and **`0.12` was deferred as trivial rather than fixed**.
+The two-barrel-roll acceptance test was re-driven after the speed pass and holds.
+
+**The completion criterion was met on its own terms, with one owner-granted exception.** The bar was
+"the five Tier 0 items built AND judged good in play". `0.12` was never built; the owner weighed it
+against shipping and declined it. **That is the criterion being exercised, not bypassed** — it was
+always the owner's call to make, and the item stays on the books in `TODO.md` rather than being
+marked done.
+
+**What that took, and it is worth reading before setting the next milestone's bar.** The criterion
+was set on 2026-08-20 replacing a percentage estimate ("movement at ~88%, wanting ~95%") that the
+owner judged would never resolve into a decision. **It resolved the same day.** Five items, four
+drives, one deferral. The percentage had been sitting unresolved since 2026-08-14.
+
+**The milestone build, 2026-08-20.** `StandaloneWindows64`, release (not development), one scene,
+**0 errors and 4 warnings** — the same four pre-existing benign ones as the first build on
+2026-08-14, unchanged: the RuntimePipelineManager notice, one obsolete `FindObjectOfType`, and two
+assigned-but-never-used debug fields (`_dbgBleed`, `firedFlashWasFlip`). 118 MB, 23.3s, output to
+`Build/` which `.gitignore` covers. **Player version is still `0.1.0`** — not bumped, because nobody
+asked and the version string has never been used to identify a build here. If builds are ever handed
+to testers who report back by version, that is the moment to start.
+
+---
+
+## The record of how PRE-ALPHA 1 closed
+
 The test environment, greybox art and the machine gun are all in place; the first build runs at
-6.07ms with a 0.39ms spread. **`0.27`, `0.33`, `0.32` and `0.36` are all done and judged good.
-`0.12` is the only item left.**
+6.07ms with a 0.39ms spread.
 
 **The build-three-then-judge-once sequencing worked, and that is worth recording as a method rather
 than as a one-off.** `0.33`, `0.32` and `0.36` all landed on 2026-08-20 and were judged together in
@@ -120,12 +146,25 @@ PRE-ALPHA 1 asks for no enemies at all.
 
 ---
 
-## PRE-ALPHA 2 — weapons become real, and something takes the hits
+## PRE-ALPHA 2 — weapons become real, and something takes the hits · **CURRENT**
 
 > Movement and weapon physics. Grey-box art. Test environment. Enemy punching bag. Placeholder VFX.
 
 The step is **weapon physics** and **a target worth hitting**. The AI punching bag largely exists
 (`1.6` records it as deliberately passive), so most of the work is on the weapons themselves.
+
+**This milestone has no completion criterion yet, and PRE-ALPHA 1 is the argument for setting one
+before starting.** The criterion that closed the last milestone in a day replaced a percentage that
+had not resolved in six. **The shape that worked: name the specific items, and define done as built
+AND judged in play by the owner** — which also makes deferral an explicit, recorded decision rather
+than a thing that quietly never happens. `1.3` is the obvious root, since nothing can die until it
+moves.
+
+**Two carried-over notes.** The `0.12` bumper sliver is deferred, not fixed, and should be folded
+into any camera framing work rather than re-raised alone. And **`4.4`'s remaining half — allocation
+under sustained weapon fire — becomes measurable for the first time in this milestone**, because it
+needs weapons that actually fire in anger; the constraint on how to measure it is that the figure
+must come from a focused editor or a build, never from remote-driving the editor.
 
 | | |
 |---|---|

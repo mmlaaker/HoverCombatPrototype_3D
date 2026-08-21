@@ -36,6 +36,19 @@ First successful build 2026-08-14: `StandaloneWindows64`, Mono2x, **0 errors and
 pre-existing and benign (two assigned-but-unused fields, one obsolete `FindObjectOfType`, one
 "no RuntimePipelineManager" notice). Output to `Build/`, which `.gitignore` already covers.
 
+**That warning set is a BASELINE, and it held exactly on the PRE-ALPHA 1 milestone build
+(2026-08-20): same four, 0 errors, 118 MB, 23.3s.** Two builds a week apart across the whole movement
+and camera workload produced an identical warning list, so **a fifth warning is a real signal** and
+worth reading rather than waving through. The two unused fields are `HoverController_Propulsion._dbgBleed`
+and `HoverController_Foundation.firedFlashWasFlip`; both are written by debug paths whose readers are
+inside editor-stripped gizmo code, which is why they survive as warnings rather than being deleted.
+
+**Check the built assembly's timestamp, not the exe's.** Unity reuses the player stub, so
+`HoverCombatPrototype.exe` can carry a date weeks old on a build that just succeeded — it did on
+2026-08-20, which briefly looked like a build that had not run. The files that prove a fresh build
+are `HoverCombatPrototype_Data/Managed/Assembly-CSharp.dll` (the code) and
+`HoverCombatPrototype_Data/level0` (the scene).
+
 - **`Player.log` is the ONLY channel a build has. There is no console.** It lives at
   `%USERPROFILE%\AppData\LocalLow\Meade Laaker\Hover Combat Prototype\Player.log` and receives every
   `Debug.Log`, including `[MotionTrace] MARKER n`, `[PlaytestReset] RESET n`, all the SESSION

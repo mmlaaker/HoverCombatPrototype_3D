@@ -2660,10 +2660,6 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 4077792696568538528, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: look.speedLookAheadReference
-      value: 105
-      objectReference: {fileID: 0}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
       value: 300
@@ -2760,14 +2756,6 @@ PrefabInstance:
       propertyPath: m_Enabled
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 7329922606537100077, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: Lens.FieldOfView
-      value: 57
-      objectReference: {fileID: 0}
-    - target: {fileID: 7329922606537100077, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
-      propertyPath: Lens.FarClipPlane
-      value: 5000
-      objectReference: {fileID: 0}
     - target: {fileID: 8043566517561028817, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_IsActive
       value: 0
@@ -2818,15 +2806,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.17067233
+      value: 0.17067231
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.y
-      value: -0.000000084293696
+      value: -0.000000042146848
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0.000000015805067
+      value: 0.000000005268356
       objectReference: {fileID: 0}
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
