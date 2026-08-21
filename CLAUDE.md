@@ -195,6 +195,14 @@ rather than to the ground, so terrain does not steer the gun.
   the next change needs a new one.
 - **Leveling torque is the SINGLE attitude authority.** Nothing else may apply pitch or roll torque.
   Propulsion hands over intent; it never applies the torque itself.
+- **`_hoverCentroid` is solved once at the top of `ApplyHoverForces` and read by both probes that
+  need it** (the ceiling duck and the air-control clearance), each of which used to walk the four
+  hover points itself. Safe to share only because NOTHING MOVES between them: `AddForce` does not
+  touch the Transform, and the solver integrates after `FixedUpdate` returns, so every Transform holds
+  the pose the tick started with. **That is also the constraint** -- if anything is ever added that
+  moves the chassis mid-tick (a direct `rb.position` write, a teleport, a warp), this cache is the
+  thing that silently goes stale, and the same reasoning covers the hoisted `chassisOrigin` inside the
+  sensor loop.
 - **The hover sensors are placed, pointed and loaded as if the craft were NOT aiming**, and every
   term in the spring loop shares that frame: ray origin, ray direction, the gap, the closing rate
   and the position the force is applied at. Splitting them puts the spring in one frame and its
@@ -493,6 +501,23 @@ and a framing guard.
 
 **Constraints.**
 
+- **`[DefaultExecutionOrder(-100)]` is load-bearing and must stay.** This writes the Follow Offset and
+  the composer's Target Offset in `LateUpdate`; `CinemachineBrain.LateUpdate` then reads them to place
+  the camera. Both sat at order 0 on DIFFERENT GameObjects (this on `Camera`, the brain on
+  `MainCamera`), so Unity's arbitrary tie-break decided the order and nothing pinned it. **Measured
+  2026-08-20 before pinning: 832 comparable frames, 0 stale -- it was already correct, which is exactly
+  why the attribute matters.** If the tie-break ever flipped, the brain would place the camera from the
+  PREVIOUS frame's offsets: roughly a metre of error at 90 m/s, arriving only on the boost and
+  look-ahead transients the offsets exist to drive, with nothing logged. It would present as "the
+  camera feels slightly behind" and there would be no code change to blame.
+- **`Measure()` finds the worst corner in TANGENT space and converts to an angle once.** The normalize
+  is unnecessary (every use is a ratio of two dots against the same vector) and `max|atan2(y,cf)|`
+  equals `atan(max|y|/cf)` while `cf > 0`, so eight square roots and fourteen `atan2` calls are
+  removable EXACTLY, not approximately. Verified 2026-08-20 across every preview state at three aspect
+  ratios: worst difference **0.0000052 degrees**. **Do not "restore clarity" by putting the per-corner
+  `atan2` back** -- the guard bisects, so this runs up to 14 times a frame, and it does so precisely
+  during hard cornering, boost and drift, which is when the frame can least afford it.
+
 - **SINGLE WRITE AUTHORITY.** Seed a `FramingSolution` from the authored bases, CONTRIBUTE via pure
   methods that touch no Cinemachine state, COMMIT once at the end of `LateUpdate`. Adding an effect
   cannot clobber another because it does not write anything. Writing straight to the transposer,
@@ -701,7 +726,7 @@ rather than an instrument: it measures nothing and exists to run a person throug
 |---|---|---|
 | `FrameSpikeWatch.cs` | "Did a frame die, and what was happening?" | **Detection is nearly free, capture is expensive, because capture only runs on frames that were already ruined.** Detection is RELATIVE (a multiple of a running baseline AND over an absolute floor) because a fixed threshold cries wolf in one environment and stays silent in the other. **The baseline learns only from non-spike frames**, or a bad patch raises the bar until the tool goes quiet exactly when things are worst. Console logging defaults OFF as a measurement decision: logging once became a plausible source of the allocation it was reporting. **Its throttling verdict is broken, see `TODO.md` 4.5** |
 | `AllocationBisect.cs` | "What allocates?" | Ablation, not theory: disables one MonoBehaviour at a time and ranks by what changed. **Read the FLOOR row first** (every candidate disabled at once); if allocation survives that, no per-component blame means anything. Craft must be PARKED. Reads the profiler's per-frame counter, not total-memory deltas |
-| `MotionTrace.cs` | "Did what I SAW match what the physics did, and was it the craft or the camera?" | **Core metric is the residual**: drawn frame delta projected onto direction of travel, minus real speed. Sampled at `beginContextRendering`, not `LateUpdate`, so the camera is read after the brain has committed it. **Zero allocation in the hot path is load-bearing, not tidiness.** Buffer is bounded and stops when full rather than ringing, because the analysis wants one contiguous timeline. **`M` drops a marker**, and it must stay a plain key off the F row (trap 30). **v1.4 adds the three aim angles** — `nose_elev`, `nose_vs_ground`, `ground_elev` — each measured directly rather than derived from the other two, plus `aim_cmd` and `reticle_y`. They are nose ELEVATIONS, not Euler pitch, because Euler pitch inverts the reader's intuition and is contaminated once the craft is banked. **`reticle_y` is READ from `VehicleHUD`, never recomputed**, and `reticle_valid` is false in drive mode so an empty column is obviously empty |
+| `MotionTrace.cs` | "Did what I SAW match what the physics did, and was it the craft or the camera?" | **Core metric is the residual**: drawn frame delta projected onto direction of travel, minus real speed. Sampled at `beginContextRendering`, not `LateUpdate`, so the camera is read after the brain has committed it. **Zero allocation in the hot path is load-bearing, not tidiness.** Buffer is bounded and stops when full rather than ringing, because the analysis wants one contiguous timeline. **All four sample paths must guard on `_full`, not just three** — `FixedUpdate` was missing it until 2026-08-20 and went on paying for a whole `FillShared` at 100Hz after recording had stopped. **It preallocates about 139 MB at `captureSeconds` 3000**, resident in builds too; see `TODO.md` > 4.4. **`M` drops a marker**, and it must stay a plain key off the F row (trap 30). **v1.4 adds the three aim angles** — `nose_elev`, `nose_vs_ground`, `ground_elev` — each measured directly rather than derived from the other two, plus `aim_cmd` and `reticle_y`. They are nose ELEVATIONS, not Euler pitch, because Euler pitch inverts the reader's intuition and is contaminated once the craft is banked. **`reticle_y` is READ from `VehicleHUD`, never recomputed**, and `reticle_valid` is false in drive mode so an empty column is obviously empty |
 | `PlaytestReset.cs` | Escape hatch for a soft-lock or a fall outside the environment | Hold Select (Share) or `R` for 0.6s, read off the device directly so a debug utility never requires editing the shipped input asset. **Restores pose, velocity and ENERGY. Health, shield, ammo and weapon slot are still deliberately untouched**, since topping those up would make it a half-built respawn. **`restoreEnergy` defaults ON, and that is a playtest default, not a measurement one:** a refill is a step change in the pool that no spend explains, so UNTICK IT for any run whose energy trace matters. Owner's call 2026-08-18; the original restore-nothing behaviour is one tickbox away. **The camera must be told** via `NotifyVehicleWarped`. Interpolation is toggled off across the move or the Rigidbody draws the teleport as one streaked frame. Logs `Time.unscaledTime` so the fake speed spike can be discounted in the trace. **`ResetNow()` is the public entry point**, so the warp has exactly one implementation |
 | `PlaytestSession.cs` | Runs one tester through one session: splash, session clock, and a controls overlay gated on elapsed play. **Not an instrument**, and lives on `/PlaytestSession` | **The gate is the point:** the blind period is 90s of PLAY (the clock starts when the splash is dismissed, not on load), so it is identical across testers by construction and the facilitator is out of the loop. **Builds its whole canvas in code**, so nothing can come half-wired; the accepted cost is that layout cannot be authored in the scene and only the two `[TextArea]` copy blocks are editable. **Every alpha is solved from state each frame and nothing else writes one** — an earlier draft set them at the phase transitions, and any path reaching a phase without its transition left an opaque splash over a live session. **Does not pause:** `timeScale` 0 risks a discontinuity in the `Time.unscaledTime` state Foundation and Propulsion carry. **Options both dismisses the splash and toggles the overlay**, because dismissing on any button hands that press to the game and starts the session with a jump. Hold `P` restarts for the next tester: craft home via `ResetNow()`, energy full, slot 0, gate re-locked. **Every phase change is stamped with `Time.unscaledTime`**, so one continuous `Player.log` cuts back into one session per tester, and a pre-unlock Options press is logged as a discoverability reading |
 
@@ -903,6 +928,9 @@ is stable and never reused.**
 | 45 | A magnitude that discards direction describes the wrong event. Speed called a flip recovery a "fling" twice; displacement is the honest instrument |
 | 46 | A test whose two outcomes predict the same number proves nothing and still returns one. State what the FAILING case would print before believing a verification |
 | 47 | A velocity component read in the craft's own frame drifts when nothing acts on the craft, because the axis rotates. World frame for forces, local frame for behaviour |
+| 48 | Frame timing read through `eval` measures the measurement. Remote-driving the editor cost a 3077ms frame; relative micro-benchmarks inside one eval survive, frame-level numbers do not |
+| 49 | Only a constant workload separates "the game got heavier" from "the machine got weaker". `FrameSpikeWatch`'s benchmark hit 3.57ms against 0.30ms and invalidated the window |
+| 50 | An instrument that does not report its sample count lets "no data" read as "no problem". Print the count that could have shown the failure next to the verdict |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).

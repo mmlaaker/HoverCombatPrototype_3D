@@ -496,7 +496,19 @@ public class MotionTrace : MonoBehaviour
     {
         _fixedSteps++;
 
-        if (!_capturing || !traceFixedSteps || _rb == null) return;
+        // `_full` is part of this guard for the same reason it guards the other three
+        // sample paths. Without it, a filled buffer stopped RECORDING but did not stop
+        // WORKING: Next() hands back the last slot, and this method went on paying for
+        // rb.position, a magnitude and a whole FillShared -- two eulerAngles
+        // decompositions, an InverseTransformDirection, a Vector3.Angle and an Atan2 --
+        // a hundred times a second, writing each result into a slot the next tick
+        // overwrote and nothing ever read.
+        //
+        // At the shipped captureSeconds that needs a very long session to reach, so this
+        // is a latent cost rather than one anybody has been paying. It is fixed here
+        // because of WHERE it lands: the physics tick, during the longest sessions, which
+        // is exactly when someone is judging feel and least able to explain a change in it.
+        if (!_capturing || _full || !traceFixedSteps || _rb == null) return;
 
         // Per-tick displacement uses rb.position rather than the transform: the transform
         // is the INTERPOLATED pose and would fold render smoothing back into the physics

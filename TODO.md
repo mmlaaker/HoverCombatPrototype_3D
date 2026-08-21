@@ -1266,6 +1266,28 @@ all. **The build makes this cheap:** idle allocation there is 0.01-0.08 MB/s, so
 allocate will stand out against a floor of essentially zero, which was never true in the editor's
 4.47 MB/s. Fire continuously through a long run and read `alloc_mb_s` in the spike CSV.
 
+**Three findings from the 2026-08-20 performance sweep land here, and none of them is a new item.**
+Full write-up in `TuningLog.md` > The movement and camera performance sweep.
+
+- **`MotionTrace` preallocates about 139 MB** (870,000 samples x 168 bytes, from `captureSeconds`
+  3000) and it is enabled in the scene and auto-captures after warmup, so it ships in builds. **This
+  is an owner decision, not a code change**, because `captureSeconds` is an inspector value: dropping
+  it to a realistic session length returns most of that memory. Note the interaction with the marker
+  history above -- the buffer HAS filled in a real session, at t=666.9s, so the value cannot simply be
+  cut to the shortest plausible run either.
+- **`MotionTrace.FixedUpdate` was missing the `_full` guard its three sibling paths have**, so a
+  filled buffer kept paying for a whole `FillShared` a hundred times a second while recording nothing.
+  Fixed 2026-08-20. **Worth knowing that this was live during the 2026-08-18 session**, which filled
+  at t=666.9s and then ran on with the leak for the remainder.
+- **The chassis uses Continuous collision detection at 1000kg**, flagged and deliberately not changed.
+  At 100Hz it moves about a metre per tick against a roughly 7m hull, so Discrete would probably be
+  safe and cheaper -- but that is a physics-correctness call on a load-bearing pillar with no
+  measurement behind it. **Only worth opening with a reason and a before/after.**
+
+**The idle allocation figure this item wants cannot be gathered over MCP.** Readings during the sweep
+ranged 0.48 to 2.58 MB/s and `eval` traffic pollutes all of them; see `Measuring.md` traps 48 and 49.
+A clean run needs a focused editor or a build with nobody driving it remotely.
+
 **The marker key is CONFIRMED WORKING in a build, 2026-08-20**, on the owner's report from the
 four-tester session. It had never been proven before: the first build run recorded zero markers because
 nobody pressed `M`, and the 2026-08-18 run reported `0 markers` despite the owner spamming `M` for

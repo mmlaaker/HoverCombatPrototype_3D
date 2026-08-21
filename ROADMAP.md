@@ -75,10 +75,22 @@ representative arena; **2.18** (binding ergonomics) and **2.19** (teaching air c
 behind a complete control set; **5.13** (aim feel, was 0.31) behind weapons. **5.14** and **5.15** are
 filed as feedback with no action. See `TODO.md` > Retired numbers for what each number became.
 
+**A performance and optimization sweep of the movement and camera code ran 2026-08-20, after all three
+items landed and before the feel pass, and it does NOT change the milestone.** The owner's reason for
+its timing was that three changes had just touched both load-bearing pillars. **Nothing it found was
+behaviour-affecting**: the hot paths were already allocation-free and correctly cached, the one real
+risk (the camera's execution order against the Cinemachine brain being unpinned) measured as already
+correct and was pinned preventively, and the rest was math and memory. **So the feel pass is still the
+whole of what stands between here and the milestone**, and the three items are still unjudged. Outcome
+in `TuningLog.md` > The movement and camera performance sweep; three findings that need owner decisions
+rather than code are parked in `TODO.md` > 4.4.
+
 **Also worth doing during the next long run, though it gates nothing: 4.4**, now narrowed to
 allocation under sustained weapon fire alone. **Its marker half closed 2026-08-20** — the marker key
 and the pad are both confirmed working in a build, which also retired the standing worry that
-`PlaytestSession` had never been driven by a physical button.
+`PlaytestSession` had never been driven by a physical button. **The sweep added a constraint on how it
+can be measured:** allocation figures gathered while remote-driving the editor are worthless, so this
+needs a focused editor or a build.
 
 Closed on 2026-08-15: the trick energy economy, built and judged good in one session. Everything else
 this milestone carried was closed across 2026-08-17 and 2026-08-19; the full list and where each

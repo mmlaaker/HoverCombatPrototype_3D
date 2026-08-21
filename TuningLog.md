@@ -1700,3 +1700,127 @@ misses 32.7%.
 **Physics is NOT the constraint** (max 2 catch-up steps, 0.12% of frames above one) and neither is
 allocation. The cost is main-thread per-frame work, and **particles scale with it: 6 systems and 32
 particles at one vehicle, 35 systems and 238 particles at six, all before a shot is fired.**
+
+### The movement and camera performance sweep
+*Measured 2026-08-20, after `0.33`, `0.32` and `0.36` all landed and before the feel pass that judges
+them. The owner's reason for taking it here: three changes had just touched both load-bearing pillars,
+and controller feel depends on movement performance being consistent.*
+
+**The headline is that almost nothing was wrong.** Components are cached in `Awake`, the movement and
+camera ticks allocate nothing, six raycasts per tick all route through one `RaycastNonAlloc` site, the
+mesh-normal cache is doing exactly the job its comment claims, and every debug string lives inside
+`OnDrawGizmos` where builds strip it. `PropulsionTuning` and `FoundationTuning` are classes rather than
+structs, so `P.` and `F.` are reference loads and not per-access copies of a large value type. That is
+worth recording because it is the kind of thing that would be expensive and invisible.
+
+**Cinemachine's `SmartUpdate` was checked against the package source rather than against folklore, and
+it is correct here.** `UpdateTracker` counts how often the follow target moves on each clock and only
+picks `FixedUpdate` when fixed moves exceed three times the late moves. With interpolation on, the
+transform moves every rendered frame, so it picks `LateUpdate`. It would only flip to the wrong clock
+below roughly 33fps, where three or more physics ticks land in one frame -- a "gets worse when already
+bad" edge, not a live defect. **Do not change the brain's UpdateMethod on the theory that it fights
+interpolation.**
+
+#### The camera's execution order was undefined, and it happened to be right
+
+`HoverCameraController.LateUpdate` writes the Follow Offset and the composer's Target Offset;
+`CinemachineBrain.LateUpdate` reads them to place the camera. Both sat at execution order 0 on
+different GameObjects, `MonoManager.asset` carries no overrides, and neither declared
+`DefaultExecutionOrder`. Which ran first was Unity's tie-break.
+
+**Measured before changing anything: 832 comparable frames, 0 stale.** Pinning it with
+`[DefaultExecutionOrder(-100)]` therefore changes no behaviour today. It is worth doing because the
+failure it prevents is silent -- the brain placing the camera from the previous frame's offsets, about
+a metre of error at 90 m/s, only on the boost and look-ahead transients, with nothing logged.
+
+**The probe needed two channels and that is the durable lesson.** The follow offset holds still through
+ordinary driving and produced ZERO comparable frames; only the composer's target offset, which tracks
+look-ahead and therefore speed, moved every frame. A single-channel probe would have printed
+`stale = 0` and read as a clean pass. Filed as trap 50.
+
+#### `Measure()` was doing about twice the math it needed
+
+Per call it ran eight `Normalize` and sixteen `Mathf.Atan2`. Both are removable exactly:
+
+- The normalize is unnecessary. Every use of `toCorner` is a RATIO of two dot products against it, and
+  scaling a vector scales both alike.
+- `max|atan2(y, cf)|` equals `atan(max|y|/cf)` because `cf` is positive at that point and `atan` is
+  monotonic. Sixteen `atan2` become two `atan`.
+
+| | per call |
+|---|---|
+| before | **1.606 us** |
+| after | **0.878 us** (-45%) |
+
+Both versions summed to **79077.4500** over 200k iterations -- identical to every digit. End to end
+across every preview state at three aspect ratios, the worst margin difference was **0.0000052
+degrees**, which is float rounding against a margin measured in whole degrees.
+
+**The reason it earns its place is WHEN it runs, not how often on average.** `ContributeFramingGuard`
+early-outs to two `Measure` calls in ordinary driving, then runs a full twelve-step bisection for
+fourteen once the guard engages. The state sweep confirms it engages in FullThrottle, Boost,
+ClimbAtSpeed, DriftLeft, DriftRight and StickFullUp -- the camera's cost rises about sevenfold exactly
+during hard, fast cornering.
+
+That sweep also verified the rewrite end to end: the guard converges vertical margin to **5.0007 to
+5.0025** against a `minFrameMargin` of 5, which is what twelve halvings should deliver. A broken sign
+or a lost monotonicity would have shown up as a bisection that failed to converge, not as a slightly
+wrong number.
+
+#### `MotionTrace` kept working after it stopped recording
+
+Three of its four sample paths guard on `_full`; `FixedUpdate` did not. Once the buffer fills, `Next()`
+hands back the last slot and that path went on paying for `rb.position`, a magnitude and a whole
+`FillShared` -- two `eulerAngles` decompositions, an `InverseTransformDirection`, a `Vector3.Angle` and
+an `Atan2` -- a hundred times a second, writing into a slot the next tick overwrote.
+
+**Initially overstated and corrected by measuring:** the buffer is 870,000 samples covering
+`captureSeconds = 3000`, so it does not fill in a normal session and nobody has been paying this. Fixed
+anyway because of where it lands -- the physics tick, in the longest sessions, which is when someone is
+judging feel and least able to explain a change in it.
+
+The same measurement turned up something larger and left alone: **870,000 x 168 bytes is about 139 MB
+resident**, allocated at startup, in a component that is enabled in the scene and auto-captures after
+warmup, so it ships in builds too. `captureSeconds` is an inspector value and therefore the owner's
+call, not a code change.
+
+#### The rest
+
+Eight constant `Vector3` corners were being rebuilt inside `Measure` -- 112 constructions a frame for a
+value derived from two `static readonly` fields. The hover-point centroid was being walked twice a
+tick, once for the ceiling duck and once for the air-control clearance. `transform.position`, a native
+call, was read twice per hover point inside a loop where it cannot change. `Camera.main` was resolved
+every frame from a path that already knows which camera it means.
+
+**Flagged and deliberately not changed:** the chassis uses Continuous collision detection at 1000kg. At
+100Hz it moves about a metre per tick against a roughly 7m hull, so Discrete would likely be safe and
+cheaper -- but that is a physics-correctness decision on a load-bearing pillar and there is no
+measurement behind it yet.
+
+#### The session's own measurements were partly invalid, and the project's instrument said so
+
+Mid-sweep, `FrameSpikeWatch`'s CPU benchmark -- fixed arithmetic, constant by construction -- read
+**3.57ms against 0.30ms at session start**, then recovered to 0.44ms. A 12x slowdown of work that
+cannot change means the machine got weaker, not the game heavier. Two consecutive frame-time reads in
+the same window returned 3.64ms and 51.8ms with nothing changed between them, and the worst frame
+recorded was 3077ms.
+
+**So frame-level numbers gathered while remote-driving the editor are not evidence about the game**,
+and the editor was unfocused besides. What survives is the relative micro-benchmark above, whose halves
+ran back to back inside one `eval` under identical conditions, and anything `FrameSpikeWatch` samples
+from inside. Filed as traps 48 and 49. **Frame-level before/after has to be driven by a human in a
+focused editor or a build.**
+
+Idle allocation read between 0.48 and 2.58 MB/s, but `eval` traffic pollutes it, so the figure is not
+trustworthy either; `4.4` already owns a clean `AllocationBisect` run.
+
+**Post-change verification.** Craft settles to exactly 0.0000 m/s linear and 0.00000 rad/s angular at
+full `HoverSupport`, ride height 7.000 against a profile `hoverHeight` of 7, ground normal (0,1,0), and
+zero spikes across 1881 frames. Three files, 147 insertions against 27 deletions, with every deleted
+line audited as one of the intended replacements.
+
+**Unity dirtied two files on its own during the sweep and both were reverted.** Float-rounding churn on
+a particle system's prefab-override rotation in the scene, and -- worth naming -- the TMP fallback
+asset's `m_GlyphTable` and `m_CharacterTable` being emptied when the dynamic atlas reset, losing the
+infinity glyph. Same class as the prefab line that silently vanished on 2026-08-20. **Check
+`git status` for asset churn after any session that enters play mode.**

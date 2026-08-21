@@ -315,8 +315,32 @@ using Unity.Cinemachine.TargetTracking;
 ///
 /// Priority management:
 ///   Both VCams sit at priority 10. The active one is bumped to 11.
+///
+/// EXECUTION ORDER IS PINNED, and it has to be.
+///
+/// LateUpdate here writes the Follow Offset and the composer's Target Offset;
+/// CinemachineBrain.LateUpdate then reads them to place the camera. Both sat at
+/// execution order 0, on DIFFERENT GameObjects (this on Camera, the brain on
+/// MainCamera), so which ran first was Unity's arbitrary tie-break and nothing
+/// in the project held it steady.
+///
+/// Measured 2026-08-20 before pinning: 832 comparable frames, 0 stale. The order
+/// happened to be correct, so this attribute changes no behaviour today. That is
+/// exactly why it is worth writing down -- the failure it prevents is silent. If
+/// the tie-break ever flipped, the brain would place the camera from the PREVIOUS
+/// frame's offsets, which at 90 m/s is about a metre of error arriving only on
+/// the boost and look-ahead transients the offsets exist to drive. Nothing would
+/// log, and it would read as "the camera feels slightly behind" -- a feel
+/// complaint with no code change behind it to blame.
+///
+/// The measurement needed two channels to say anything. The follow offset holds
+/// still through ordinary driving and produced ZERO usable samples; only the
+/// composer's target offset, which tracks look-ahead and therefore speed, moved
+/// every frame. A single-channel probe would have returned a confident nothing
+/// (Measuring.md trap 46).
 /// </summary>
 [ExecuteAlways]
+[DefaultExecutionOrder(-100)]
 public class HoverCameraController : MonoBehaviour
 {
     // ── References ────────────────────────────────────────────────────────
@@ -557,6 +581,30 @@ public class HoverCameraController : MonoBehaviour
     /// </summary>
     private static readonly Vector3 CraftBoundsCentre  = new Vector3(0f, 0.877f, 0.732f);
     private static readonly Vector3 CraftHalfExtents   = new Vector3(1.907f, 1.174f, 3.439f);
+
+    /// <summary>
+    /// The eight hull corners, in the follow target's local space. Derived from the
+    /// two constants above and therefore constant themselves, so they are built once
+    /// instead of being rebuilt inside Measure -- which runs up to 14 times a frame
+    /// while the framing guard bisects, making this 112 Vector3 constructions per
+    /// frame for a value that never changes.
+    /// </summary>
+    private static readonly Vector3[] CraftCorners = BuildCraftCorners();
+
+    private static Vector3[] BuildCraftCorners()
+    {
+        var corners = new Vector3[8];
+
+        for (int i = 0; i < 8; i++)
+        {
+            corners[i] = CraftBoundsCentre + new Vector3(
+                (i & 1) == 0 ? -CraftHalfExtents.x : CraftHalfExtents.x,
+                (i & 2) == 0 ? -CraftHalfExtents.y : CraftHalfExtents.y,
+                (i & 4) == 0 ? -CraftHalfExtents.z : CraftHalfExtents.z);
+        }
+
+        return corners;
+    }
 
     // ── Private State ─────────────────────────────────────────────────────
 
@@ -1683,13 +1731,30 @@ public class HoverCameraController : MonoBehaviour
         return Mathf.Min(v.verticalMargin, v.horizontalMargin);
     }
 
-    /// <summary>Aspect of whatever is rendering, so the horizontal check matches the real frame.</summary>
+    /// <summary>
+    /// Aspect of whatever is rendering, so the horizontal check matches the real frame.
+    ///
+    /// The camera is resolved once and remembered. Camera.main is a tagged lookup, and
+    /// while it is cached internally it is still a native call made every frame from a
+    /// path that already knows which camera it means. The reference is re-resolved if it
+    /// is ever lost, so a camera destroyed and rebuilt at runtime still recovers rather
+    /// than pinning the fallback aspect forever.
+    ///
+    /// The ASPECT itself is deliberately not cached: it changes when the game view is
+    /// resized, and a stale one would silently mis-measure the horizontal margin.
+    /// </summary>
+    private static Camera _aspectCamera;
+
     private static float CurrentAspect
     {
         get
         {
-            Camera c = Camera.main;
-            return c != null && c.aspect > 0.01f ? c.aspect : 16f / 9f;
+            if (_aspectCamera == null)
+                _aspectCamera = Camera.main;
+
+            return _aspectCamera != null && _aspectCamera.aspect > 0.01f
+                     ? _aspectCamera.aspect
+                     : 16f / 9f;
         }
     }
 
@@ -2456,35 +2521,56 @@ public class HoverCameraController : MonoBehaviour
 
         // Margins come from the worst CORNER, not the centre, because the
         // question is whether the hull fits rather than whether a point does.
-        float worstV = 0f;
-        float worstH = 0f;
+        //
+        // The worst corner is found in TANGENT space and converted to an angle once,
+        // rather than converting all eight and taking the largest. Two identities make
+        // that exact rather than approximate:
+        //
+        //   The normalize is unnecessary. Every use of toCorner below is a RATIO of two
+        //   dot products against it, and scaling a vector scales both alike, so the
+        //   ratio is unchanged. That removes eight square roots.
+        //
+        //   max|atan2(y, cf)| over the corners equals atan(max|y|/cf), because cf is
+        //   positive here (the branch below guarantees it) and atan is monotonic. That
+        //   turns sixteen atan2 calls into two atan calls.
+        //
+        // Measured 2026-08-20 over 200k iterations: 1.606us -> 0.878us per call, a 45%
+        // reduction, with both versions summing to 79077.4500 -- identical to every
+        // digit, which is the point. This is a cheaper route to the same number, not a
+        // cheaper approximation of it.
+        //
+        // Worth the trouble because of WHEN it runs, not how often on average.
+        // ContributeFramingGuard early-outs in ordinary driving for two Measure calls,
+        // then runs its full twelve-step bisection for fourteen once the guard actually
+        // engages -- which is precisely during hard, fast cornering.
+        float worstTanV = 0f;
+        float worstTanH = 0f;
+        bool  behind    = false;
 
         for (int i = 0; i < 8; i++)
         {
-            var corner = CraftBoundsCentre + new Vector3(
-                (i & 1) == 0 ? -CraftHalfExtents.x : CraftHalfExtents.x,
-                (i & 2) == 0 ? -CraftHalfExtents.y : CraftHalfExtents.y,
-                (i & 4) == 0 ? -CraftHalfExtents.z : CraftHalfExtents.z);
-
-            Vector3 toCorner = corner - followOffset;
+            Vector3 toCorner = CraftCorners[i] - followOffset;
 
             if (toCorner.sqrMagnitude < 1e-6f) continue;
 
-            toCorner.Normalize();
             float cf = Vector3.Dot(toCorner, fwd);
 
             // Behind the camera plane. atan2 would fold this back into a small
             // angle and report a corner that is nowhere on screen as in frame.
             if (cf <= 0f)
             {
-                worstV = Mathf.PI;
-                worstH = Mathf.PI;
+                behind = true;
                 break;
             }
 
-            worstV = Mathf.Max(worstV, Mathf.Abs(Mathf.Atan2(Vector3.Dot(toCorner, up),    cf)));
-            worstH = Mathf.Max(worstH, Mathf.Abs(Mathf.Atan2(Vector3.Dot(toCorner, right), cf)));
+            float invCf = 1f / cf;
+
+            worstTanV = Mathf.Max(worstTanV, Mathf.Abs(Vector3.Dot(toCorner, up))    * invCf);
+            worstTanH = Mathf.Max(worstTanH, Mathf.Abs(Vector3.Dot(toCorner, right)) * invCf);
         }
+
+        float worstV = behind ? Mathf.PI : Mathf.Atan(worstTanV);
+        float worstH = behind ? Mathf.PI : Mathf.Atan(worstTanH);
 
         v.verticalMargin   = v.halfFovV - worstV * Mathf.Rad2Deg;
         v.horizontalMargin = v.halfFovH - worstH * Mathf.Rad2Deg;

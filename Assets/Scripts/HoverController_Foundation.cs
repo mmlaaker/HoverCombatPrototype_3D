@@ -372,6 +372,19 @@ public class HoverController_Foundation : MonoBehaviour
     private float   _squatBlend;             // 0..1, follows the charge down, rate-limited on the way up
 
     /// <summary>
+    /// Centroid of the hover points, solved ONCE per tick at the top of ApplyHoverForces
+    /// and read by both probes that need it (the ceiling duck and the air-control
+    /// clearance). Each used to walk the four points itself, and Transform.position is a
+    /// native call, so the same four reads were being paid for twice a tick.
+    ///
+    /// Safe to share because nothing moves between the two readers. Forces applied
+    /// through AddForce do not touch the Transform; the solver integrates after
+    /// FixedUpdate returns, so every Transform in this tick holds the pose the tick
+    /// started with.
+    /// </summary>
+    private Vector3 _hoverCentroid;
+
+    /// <summary>
     /// Cached triangle and vertex-normal arrays per collision mesh, for
     /// ResolveSurfaceNormal. Static so several vehicles share one copy of the
     /// terrain; the arrays are read-only after the first fill.
@@ -719,7 +732,7 @@ public class HoverController_Foundation : MonoBehaviour
         }
 
         ApplyHoverForces();
-        UpdateAirControlClearance();   // after ApplyHoverForces: reads _effectiveHoverHeight
+        UpdateAirControlClearance();   // after ApplyHoverForces: reads _effectiveHoverHeight and _hoverCentroid
         ApplyExtraGravity();
         ApplyLevelingTorque();
         ApplyAirControlTorque();
@@ -961,10 +974,7 @@ public class HoverController_Foundation : MonoBehaviour
         if (!F.enableCeilingDuck || hoverPoints.Length == 0)
             return F.hoverHeight;
 
-        Vector3 centroid = Vector3.zero;
-        foreach (Transform point in hoverPoints)
-            centroid += point.position;
-        centroid /= hoverPoints.Length;
+        Vector3 centroid = _hoverCentroid;   // solved once per tick, see the field
 
         Vector3 up = transform.up;
 
@@ -1039,6 +1049,15 @@ public class HoverController_Foundation : MonoBehaviour
         // out of the loop; every point feeds forward an equal share of it.
         float gravityMagnitude = Physics.gravity.magnitude * (1f + F.extraGravityMultiplier);
 
+        // Solved before the two probes that read it. See _hoverCentroid.
+        _hoverCentroid = Vector3.zero;
+        if (hoverPoints.Length > 0)
+        {
+            foreach (Transform point in hoverPoints)
+                _hoverCentroid += point.position;
+            _hoverCentroid /= hoverPoints.Length;
+        }
+
         // Reduced when something overhead would otherwise be crushed into, or when the
         // player is holding a jump charge. Applied uniformly to all four points so
         // neither a sloped ceiling nor the squat can tilt the chassis.
@@ -1054,11 +1073,17 @@ public class HoverController_Foundation : MonoBehaviour
         // springs would tilt the chassis to correct a tilt nobody asked them to see.
         Quaternion unaim = UnaimRotation();
 
+        // Read once rather than twice per point. Transform.position is a native call
+        // that resolves the world matrix, and it cannot change inside this loop: the
+        // springs push through AddForce, which the solver does not integrate until
+        // FixedUpdate has returned.
+        Vector3 chassisOrigin = transform.position;
+
         foreach (Transform point in hoverPoints)
         {
             // Sensor placed and pointed where it would be with the aim removed.
             // Rotated about the vehicle origin, so the four keep their layout.
-            Vector3 origin = transform.position + unaim * (point.position - transform.position);
+            Vector3 origin = chassisOrigin + unaim * (point.position - chassisOrigin);
             Vector3 rayDir = unaim * -point.up;
 
             // QueryTriggerInteraction.Ignore (inside the helper): trigger volumes
@@ -1244,10 +1269,7 @@ public class HoverController_Foundation : MonoBehaviour
             return;
         }
 
-        Vector3 centroid = Vector3.zero;
-        foreach (Transform point in hoverPoints)
-            centroid += point.position;
-        centroid /= hoverPoints.Length;
+        Vector3 centroid = _hoverCentroid;   // solved once per tick, see the field
 
         // _rideHeightConstraint, not _effectiveHoverHeight: see ComputeEffectiveHoverHeight.
         // A voluntary squat lowers the craft but creates no room, so measuring against it
