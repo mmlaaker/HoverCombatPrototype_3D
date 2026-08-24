@@ -11156,19 +11156,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: ShapeModule.angle
-      value: 15
+      value: 5
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: ShapeModule.radius.value
-      value: 0.8
+      value: 0.2
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
-      value: 100
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 2296849204943281810, guid: 7f274c0109fb7f14bb72deb4a3a68db6, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits

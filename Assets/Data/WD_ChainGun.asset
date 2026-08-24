@@ -17,10 +17,11 @@ MonoBehaviour:
   projectileMode: 1
   projectilePrefab: {fileID: 0}
   combat:
-    damage: 1
+    damage: 0.22
     maxAmmo: 0
     startingAmmo: 0
-    fireRate: 20
+    fireRate: 90
+    recoilVelocity: 0
   impact:
     impactForce: 200
     splashImpactForce: 0
@@ -62,17 +63,18 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
+    propUpwardBias: 0
     damageLayers:
       serializedVersion: 2
       m_Bits: 4294967295
     explosionPrefab: {fileID: 0}
   emitter:
-    emissionRate: 20
+    emissionRate: 90
     burstCount: 0
-    startSpeed: 150
+    startSpeed: 500
     startSpeedMin: 0
     startLifetime: 0.5
-    coneAngle: 2
+    coneAngle: 1.5
     coneRadius: 0.4
     damageLayers:
       serializedVersion: 2
@@ -87,7 +89,7 @@ MonoBehaviour:
         time: 0
         value: 0
         inSlope: 0
-        outSlope: 1
+        outSlope: 0
         tangentMode: 0
         weightedMode: 0
         inWeight: 0
@@ -95,7 +97,7 @@ MonoBehaviour:
       - serializedVersion: 3
         time: 1
         value: 1
-        inSlope: 1
+        inSlope: 0
         outSlope: 0
         tangentMode: 0
         weightedMode: 0
@@ -104,7 +106,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
-    windDownDuration: 1
+    windDownDuration: 0.75
   weaponLock:
     missileFireMode: 2
     lockAcquireTime: 0.01

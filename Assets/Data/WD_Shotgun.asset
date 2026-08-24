@@ -17,7 +17,7 @@ MonoBehaviour:
   projectileMode: 1
   projectilePrefab: {fileID: 0}
   combat:
-    damage: 0
+    damage: 1.5
     maxAmmo: 0
     startingAmmo: 0
     fireRate: 1.5
@@ -63,6 +63,7 @@ MonoBehaviour:
       m_PreInfinity: 2
       m_PostInfinity: 2
       m_RotationOrder: 4
+    propUpwardBias: 0
     damageLayers:
       serializedVersion: 2
       m_Bits: 4294967295
@@ -70,11 +71,11 @@ MonoBehaviour:
   emitter:
     emissionRate: 0
     burstCount: 30
-    startSpeed: 300
-    startSpeedMin: 100
-    startLifetime: 0.33
-    coneAngle: 15
-    coneRadius: 0.8
+    startSpeed: 500
+    startSpeedMin: 300
+    startLifetime: 0.5
+    coneAngle: 5
+    coneRadius: 0.2
     damageLayers:
       serializedVersion: 2
       m_Bits: 193

@@ -2205,12 +2205,24 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: ShapeModule.angle
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: ShapeModule.radius.value
+      value: 0.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
+      objectReference: {fileID: 0}
+    - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      propertyPath: InitialModule.startLifetime.scalar
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
-      value: 100
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 1064493114267071020, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: InitialModule.startSpeed.minMaxState
@@ -3151,12 +3163,24 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ShapeModule.angle
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: ShapeModule.radius.value
+      value: 0.2
+      objectReference: {fileID: 0}
+    - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
-      value: 300
+      value: 500
+      objectReference: {fileID: 0}
+    - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
+      propertyPath: InitialModule.startLifetime.scalar
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.minScalar
-      value: 100
+      value: 300
       objectReference: {fileID: 0}
     - target: {fileID: 5114646115720650926, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.minMaxState
