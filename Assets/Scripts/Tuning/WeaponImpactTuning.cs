@@ -20,10 +20,15 @@ public class WeaponImpactTuning
              "pellet. Think hundreds, up to a few thousand.\n" +
              "Instantiated applies it once, on the hit. Think tens of thousands before a rocket " +
              "visibly punts a vehicle.\n\n" +
-             "Useful reference point: the craft weighs 1000kg and tops out at 60 m/s, so an impulse " +
-             "of 60000 is exactly one full top speed of knockback. Anything much past that and the " +
-             "target is travelling faster than it can drive, which reads as being removed from the " +
-             "fight rather than disrupted.")]
+             "Useful reference point: the craft weighs 1000kg and tops out at 105 m/s, so an " +
+             "impulse of 105000 is exactly one full top speed of knockback. Anything much past " +
+             "that and the target is travelling faster than it can drive, which reads as being " +
+             "removed from the fight rather than disrupted.\n\n" +
+             "Divide by 1000 to read any value here as metres per second. Measured in play, not " +
+             "derived: the Rocket at 175000 throws a stationary craft at exactly 175 m/s.\n\n" +
+             "This reference said 60 m/s and 60000 until 2026-08-24. The speed pass moved top " +
+             "speed to 105 and nothing rechecked it, so every weapon authored against it was " +
+             "sized against a ceiling that had not existed for some time (TODO 5.16).")]
     [Min(0f)]
     public float impactForce = 50f;
 

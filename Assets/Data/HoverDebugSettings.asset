@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0017cd79c59cb8745804302ef8cddc12, type: 3}
   m_Name: HoverDebugSettings
   m_EditorClassIdentifier: Assembly-CSharp::HoverDebugSettings
-  enableDebugGizmos: 0
+  enableDebugGizmos: 1
   movement: 0
   recovery: 0
-  weapons: 0
+  weapons: 1
   resources: 0
   ai: 0
-  impacts: 0
+  impacts: 1

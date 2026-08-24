@@ -41,6 +41,13 @@ public class RocketForceProbe : MonoBehaviour
              "victim is excluded from the splash pass.")]
     public Vector3 nearMissOffset = Vector3.zero;
 
+    [Tooltip("Non-zero runs a ROCKET JUMP test instead: the firer shoots the ground at this many " +
+             "degrees below its own nose and we measure what the blast does to the FIRER. " +
+             "A diagonal blast is the worst case for self-spin -- an axis-aligned one puts the " +
+             "contact point on the push axis through the centre of mass and produces no rotation " +
+             "at all. The craft is left dynamic for this, obviously.")]
+    public float rocketJumpAngleDeg = 0f;
+
     [Header("Timing")]
     [Tooltip("Seconds to let both craft settle onto their hover before firing. Trap 1.")]
     public float settleSeconds = 3f;
@@ -132,15 +139,36 @@ public class RocketForceProbe : MonoBehaviour
         // is a ~4m lateral error — wider than the craft. Freeze, then point the muzzle
         // at the aim point directly. FireAllMuzzles spawns at muzzle.position/rotation,
         // so this guarantees the geometry under test rather than hoping for it.
-        _playerBody.linearVelocity  = Vector3.zero;
-        _playerBody.angularVelocity = Vector3.zero;
-        _playerBody.isKinematic     = true;
+        bool jumpTest = rocketJumpAngleDeg > 0.01f;
+
+        // The rocket jump test measures what the blast does to the FIRER, so the firer
+        // obviously cannot be kinematic. Every other mode freezes it for aim stability.
+        if (!jumpTest)
+        {
+            _playerBody.linearVelocity  = Vector3.zero;
+            _playerBody.angularVelocity = Vector3.zero;
+            _playerBody.isKinematic     = true;
+        }
 
         // Direct hit, or a deliberate near miss into the ground beside the target.
         // The near miss is the only way a craft takes splash at all: a direct victim is
         // excluded from splash, so it never sees the biased direction at all.
         Vector3 aimPoint;
-        if (nearMissOffset.sqrMagnitude > 0.01f)
+        if (jumpTest)
+        {
+            // Angle the nose down and fire. Where it lands is wherever that ray meets the
+            // ground, which is the honest version of what a player does.
+            Vector3 dir = Quaternion.AngleAxis(rocketJumpAngleDeg, player.transform.right)
+                          * player.transform.forward;
+            aimPoint = Physics.Raycast(muzzle.position, dir, out RaycastHit gnd, 300f)
+                ? gnd.point
+                : muzzle.position + dir * 50f;
+
+            float toGround = Vector3.Distance(muzzle.position, aimPoint);
+            Debug.Log($"[Probe] ROCKET JUMP  angle={rocketJumpAngleDeg:F0}deg below nose  " +
+                      $"ground hit {toGround:F1}m away  muzzleHeight={muzzle.position.y:F2}");
+        }
+        else if (nearMissOffset.sqrMagnitude > 0.01f)
         {
             Vector3 probeFrom = aiRest + nearMissOffset + Vector3.up * 50f;
             aimPoint = Physics.Raycast(probeFrom, Vector3.down, out RaycastHit gh, 200f)
@@ -185,6 +213,14 @@ public class RocketForceProbe : MonoBehaviour
         // ---- Sample -----------------------------------------------------------
         float peakAiSpeed = 0f, peakAiTilt = aiRestTilt, peakAiSpin = 0f, peakPlayerSpeed = 0f;
         float peakAiVertical = 0f, peakAiHeightGain = 0f;
+
+        // Firer-side, for the rocket jump test.
+        var   playerFoundation = player.GetComponent<HoverController_Foundation>();
+        float playerRestTilt   = Vector3.Angle(player.transform.up, Vector3.up);
+        float peakSelfSpin = 0f, peakSelfTilt = playerRestTilt, peakSelfLift = 0f;
+        Vector3 playerStartVel = _playerBody.isKinematic ? Vector3.zero : _playerBody.linearVelocity;
+        Vector3 playerStartPos = _playerBody.position;
+        bool    selfDowned = false;
         float timeToPeak = 0f;
         bool  downedSeen = false;
         var   peakCube = new float[_cubes.Count];
@@ -192,13 +228,22 @@ public class RocketForceProbe : MonoBehaviour
         float   tFire = Time.time;
         float   deathTime = -1f;
         Vector3 deathPos = Vector3.zero, lastRocketPos = muzzle.position;
+        Vector3 firerComAtBlast = _playerBody.worldCenterOfMass;
 
         while (Time.time - tFire < sampleSeconds)
         {
             yield return new WaitForFixedUpdate();
 
             if (rocket != null) lastRocketPos = rocket.transform.position;
-            else if (deathTime < 0f) { deathTime = Time.time - tFire; deathPos = lastRocketPos; }
+            else if (deathTime < 0f)
+            {
+                deathTime = Time.time - tFire;
+                deathPos  = lastRocketPos;
+                // Capture the firer's position NOW. Reading it in the report instead measured
+                // from the blast to wherever the craft had been thrown by the time the sample
+                // window closed, which read as "out of range" on a shot that plainly connected.
+                firerComAtBlast = _playerBody.worldCenterOfMass;
+            }
 
             float s = _aiBody.linearVelocity.magnitude;
             if (s > peakAiSpeed) { peakAiSpeed = s; timeToPeak = Time.time - tFire; }
@@ -216,6 +261,20 @@ public class RocketForceProbe : MonoBehaviour
             if (spin > peakAiSpin) peakAiSpin = spin;
 
             if (_aiFoundation != null && _aiFoundation.IsDowned) downedSeen = true;
+
+            if (!_playerBody.isKinematic)
+            {
+                float ss = _playerBody.angularVelocity.magnitude;
+                if (ss > peakSelfSpin) peakSelfSpin = ss;
+
+                float st = Vector3.Angle(player.transform.up, Vector3.up);
+                if (st > peakSelfTilt) peakSelfTilt = st;
+
+                float sl = (_playerBody.linearVelocity - playerStartVel).magnitude;
+                if (sl > peakSelfLift) peakSelfLift = sl;
+
+                if (playerFoundation != null && playerFoundation.IsDowned) selfDowned = true;
+            }
 
             for (int i = 0; i < _cubes.Count; i++)
             {
@@ -252,6 +311,23 @@ public class RocketForceProbe : MonoBehaviour
         sb.AppendLine($"  -> rocket-jump self-shove is {(firerInMask ? "REACHABLE" : "UNREACHABLE: OverlapSphere can never return the firer")}");
         for (int i = 0; i < _cubes.Count; i++)
             sb.AppendLine($"  {_cubeNames[i],-10} peak {peakCube[i]:F1} m/s");
+        if (jumpTest)
+        {
+            float armingDistance = slotDef.flight.speed * slotDef.flight.armingDelay;
+            float blastToFirer   = deathTime >= 0f
+                ? Vector3.Distance(deathPos, firerComAtBlast) : -1f;
+
+            sb.AppendLine("---------- ROCKET JUMP (the firer) ----------");
+            sb.AppendLine($"arming distance    : {armingDistance:F1} m  (speed {slotDef.flight.speed} x armingDelay {slotDef.flight.armingDelay})");
+            sb.AppendLine($"muzzle height      : {muzzle.position.y - 6.54f:F1} m above ground");
+            sb.AppendLine($"blast to firer     : {blastToFirer:F1} m   (splashRadius {slotDef.blast.splashRadius:F1} m)");
+            sb.AppendLine($"  -> {(blastToFirer < 0f ? "ROCKET NEVER DETONATED" : blastToFirer > slotDef.blast.splashRadius ? "OUT OF RANGE: firer took nothing" : "in range")}");
+            sb.AppendLine($"self shove         : {peakSelfLift:F1} m/s   (air jump 25, charged jump max 40)");
+            sb.AppendLine($"self SPIN          : {peakSelfSpin:F2} rad/s   (~10-14 = commits to a flip)");
+            sb.AppendLine($"self peak tilt     : {peakSelfTilt:F1} deg   (80 = downed ~1.6s)");
+            sb.AppendLine($"firer went DOWNED  : {selfDowned}");
+            sb.AppendLine($"destabilizeFraction: {slotDef.impact.destabilizeFraction:F2}   selfImpactScale {slotDef.impact.selfImpactScale:F2}");
+        }
         sb.AppendLine("================================================");
         Debug.Log(sb.ToString());
 

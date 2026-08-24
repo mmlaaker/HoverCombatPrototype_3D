@@ -17,20 +17,20 @@ MonoBehaviour:
   projectileMode: 0
   projectilePrefab: {fileID: 2681037672598450986, guid: e8b077cee4a756240949d7edea60c0ad, type: 3}
   combat:
-    damage: 0
+    damage: 60
     maxAmmo: 0
     startingAmmo: 0
     fireRate: 1.5
     recoilVelocity: 0
   impact:
-    impactForce: 100000
-    splashImpactForce: 50000
-    destabilizeFraction: 0.15
+    impactForce: 175000
+    splashImpactForce: 87500
+    destabilizeFraction: 0.25
     selfImpactScale: 0.5
   flight:
-    speed: 70
+    speed: 200
     lifetime: 6
-    armingDelay: 0.05
+    armingDelay: 0.0175
   homing:
     turnRate: 0
     homingDelay: 0

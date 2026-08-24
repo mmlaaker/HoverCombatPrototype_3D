@@ -17,28 +17,30 @@ MonoBehaviour:
   projectileMode: 0
   projectilePrefab: {fileID: 2049139610672849644, guid: fe536133abcf6724f8ed6bf3524410a1, type: 3}
   combat:
-    damage: 0
+    damage: 30
     maxAmmo: 0
     startingAmmo: 0
     fireRate: 1.5
     recoilVelocity: 0
   impact:
-    impactForce: 55000
-    splashImpactForce: 28000
-    destabilizeFraction: 0.15
+    impactForce: 60000
+    splashImpactForce: 30000
+    destabilizeFraction: 0.12
     selfImpactScale: 0.5
   flight:
-    speed: 70
+    speed: 170
     lifetime: 6
-    armingDelay: 0.05
+    armingDelay: 0.020588236
   homing:
-    turnRate: 160
+    turnRate: 175
     homingDelay: 0.1
-    flareOffset: 0.5
-    flareDuration: 0.5
+    flareOffset: 0.3
+    flareDuration: 0.12
     flareDirection: 0
+    weaveAmplitude: 0
+    weaveFrequency: 3
   blast:
-    splashRadius: 10
+    splashRadius: 6
     splashFalloff:
       serializedVersion: 2
       m_Curve:
@@ -110,5 +112,9 @@ MonoBehaviour:
   weaponLock:
     missileFireMode: 1
     lockAcquireTime: 0.01
-    lockRange: 80
+    lockRange: 100
     lockConeAngle: 45
+    maxLocks: 1
+    allowRepeatLocks: 1
+    minLocksToFire: 1
+    volleyLaunchInterval: 0

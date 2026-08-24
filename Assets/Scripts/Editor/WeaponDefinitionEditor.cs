@@ -45,12 +45,12 @@ public class WeaponDefinitionEditor : Editor
     private SerializedProperty damage, maxAmmo, startingAmmo, fireRate, recoilVelocity;
     private SerializedProperty impactForce, splashImpactForce, destabilizeFraction;
     private SerializedProperty speed, lifetime, armingDelay;
-    private SerializedProperty turnRate, homingDelay, flareOffset, flareDuration, flareDirection;
+    private SerializedProperty turnRate, homingDelay, flareOffset, flareDuration, flareDirection, weaveAmplitude, weaveFrequency;
     private SerializedProperty splashRadius, splashFalloff, propUpwardBias, blastLayers, explosionPrefab;
     private SerializedProperty emissionRate, burstCount, startSpeed, startSpeedMin, startLifetime,
                                coneAngle, coneRadius, emitterLayers;
     private SerializedProperty useWindUp, windUpDuration, windUpCurve, windDownDuration;
-    private SerializedProperty missileFireMode, lockAcquireTime, lockRange, lockConeAngle;
+    private SerializedProperty missileFireMode, lockAcquireTime, lockRange, lockConeAngle, maxLocks, allowRepeatLocks, minLocksToFire, volleyLaunchInterval;
 
     private SerializedProperty Find(string path) => serializedObject.FindProperty(path);
 
@@ -80,6 +80,8 @@ public class WeaponDefinitionEditor : Editor
         flareOffset    = Find("homing.flareOffset");
         flareDuration  = Find("homing.flareDuration");
         flareDirection = Find("homing.flareDirection");
+        weaveAmplitude = Find("homing.weaveAmplitude");
+        weaveFrequency = Find("homing.weaveFrequency");
 
         splashRadius    = Find("blast.splashRadius");
         splashFalloff   = Find("blast.splashFalloff");
@@ -105,6 +107,10 @@ public class WeaponDefinitionEditor : Editor
         lockAcquireTime = Find("weaponLock.lockAcquireTime");
         lockRange       = Find("weaponLock.lockRange");
         lockConeAngle   = Find("weaponLock.lockConeAngle");
+        maxLocks        = Find("weaponLock.maxLocks");
+        allowRepeatLocks = Find("weaponLock.allowRepeatLocks");
+        minLocksToFire  = Find("weaponLock.minLocksToFire");
+        volleyLaunchInterval = Find("weaponLock.volleyLaunchInterval");
     }
 
     public override void OnInspectorGUI()
@@ -168,6 +174,12 @@ public class WeaponDefinitionEditor : Editor
                     EditorGUILayout.PropertyField(flareDuration);
                     EditorGUILayout.PropertyField(flareDirection);
                 }
+
+                // Independent of the flare: the weave runs for the whole flight, so it is drawn
+                // whether or not a flare is configured.
+                EditorGUILayout.PropertyField(weaveAmplitude);
+                if (weaveAmplitude.hasMultipleDifferentValues || weaveAmplitude.floatValue > 0f)
+                    EditorGUILayout.PropertyField(weaveFrequency);
             }
         }
 
@@ -212,7 +224,18 @@ public class WeaponDefinitionEditor : Editor
             bool scans         = mixedFireMode || fireMode != MissileFireMode.Dumbfire;
             bool hardLock      = mixedFireMode || fireMode == MissileFireMode.HardLock;
 
-            if (hardLock) EditorGUILayout.PropertyField(lockAcquireTime);
+            if (hardLock)
+            {
+                EditorGUILayout.PropertyField(lockAcquireTime);
+                EditorGUILayout.PropertyField(maxLocks);
+                // Only meaningful once a volley can outnumber the targets in front of you.
+                if (maxLocks.hasMultipleDifferentValues || maxLocks.intValue > 1)
+                {
+                    EditorGUILayout.PropertyField(allowRepeatLocks);
+                    EditorGUILayout.PropertyField(minLocksToFire);
+                    EditorGUILayout.PropertyField(volleyLaunchInterval);
+                }
+            }
             if (scans)
             {
                 EditorGUILayout.PropertyField(lockRange);
@@ -220,9 +243,177 @@ public class WeaponDefinitionEditor : Editor
             }
         }
 
+        DrawDerived(weaponType, mode, mixedType, mixedMode);
         DrawWarnings(weaponType, mode, mixedType, mixedMode);
 
         serializedObject.ApplyModifiedProperties();
+    }
+
+    // =====================================================================================
+    // Derived values
+    // =====================================================================================
+    /// <summary>
+    /// Every number here is a PRODUCT of fields above, recomputed on each repaint.
+    /// <para>
+    /// This block exists because five separate defects in one session were all the same shape:
+    /// a value moved and silently changed a quantity that multiplied by it, with nothing
+    /// reporting the change. topSpeed invalidated the force model. topSpeed invalidated missile
+    /// speed. Emission rate silently rescaled DPS. Missile speed tripled the homing turn radius.
+    /// Missile speed tripled the arming distance and killed the rocket jump outright.
+    /// </para><para>
+    /// Documentation was tried first and is what failed: the impactForce tooltip stated the
+    /// coupling correctly, went stale when topSpeed moved 60 -> 105, and then actively caused
+    /// the mis-authoring it was written to prevent. A doc is a COPY of a fact and drifts from it.
+    /// These are computed from the live values, so they cannot drift, and they sit where the
+    /// authoring decision is actually made.
+    /// </para><para>
+    /// Vehicle figures are read from the VehicleTuningProfile asset and the craft prefab rather
+    /// than hardcoded, for exactly the same reason. If either cannot be found this block says so
+    /// instead of quietly substituting a constant -- a wrong number here would be worse than none.
+    /// </para>
+    /// </summary>
+    private void DrawDerived(WeaponType weaponType, ProjectileMode mode, bool mixedType, bool mixedMode)
+    {
+        if (mixedType || mixedMode) return;   // products of mixed values are meaningless
+
+        ResolveVehicleContext(out float topSpeed, out float boosted, out float hoverHeight,
+                              out float craftMass, out string contextNote);
+
+        EditorGUILayout.Space(10);
+        EditorGUILayout.LabelField("Derived — computed live, not authored", EditorStyles.boldLabel);
+
+        using (new EditorGUI.IndentLevelScope())
+        {
+            if (contextNote != null)
+                EditorGUILayout.HelpBox(contextNote, MessageType.Warning);
+
+            if (mode == ProjectileMode.ParticleSystem)
+            {
+                // Per-particle values, so everything scales with emission rate. Barrel count
+                // lives on the vehicle prefab's slot, not here, so this is stated per barrel.
+                float rate = emissionRate.floatValue;
+                float dps  = damage.floatValue * rate;
+                float push = impactForce.floatValue * rate;
+
+                Row("Rounds per second", $"{rate:F0} per barrel");
+                Row("Damage per second", $"{dps:F1} per barrel   (damage {damage.floatValue} x rate)");
+                if (craftMass > 0f)
+                    Row("Push per second held", $"{push / craftMass:F1} m/s per barrel"
+                        + (topSpeed > 0f ? $"   ({push / craftMass / topSpeed:P0} of top speed per second)" : ""));
+
+                if (burstCount.intValue > 0)
+                {
+                    Row("Damage per burst", $"{damage.floatValue * burstCount.intValue:F0} across {burstCount.intValue} pellets");
+                    if (craftMass > 0f)
+                        Row("Push per full burst", $"{impactForce.floatValue * burstCount.intValue / craftMass:F0} m/s if every pellet lands");
+                }
+
+                float pSpeed = startSpeed.floatValue;
+                Row("Effective range", $"{pSpeed * startLifetime.floatValue:F0} m   (speed x lifetime)");
+                if (rate > 0f)
+                    Row("Tracer spacing", $"{pSpeed / rate:F1} m apart   (wide spacing reads as a slow gun)");
+                if (boosted > 0f)
+                    Row("Particle speed", $"{pSpeed:F0} m/s = {pSpeed / boosted:F2}x a boosted craft");
+            }
+            else
+            {
+                if (craftMass > 0f)
+                {
+                    float dv = impactForce.floatValue / craftMass;
+                    Row("Knockback", $"{dv:F0} m/s"
+                        + (topSpeed > 0f ? $" = {dv / topSpeed:F2}x top speed  ({(dv > topSpeed ? "REMOVAL" : "disruption")})" : ""));
+                    Row("Splash knockback", $"{splashImpactForce.floatValue / craftMass:F0} m/s at the blast centre");
+                }
+
+                float armDist = speed.floatValue * armingDelay.floatValue;
+                Row("Arming distance", $"{armDist:F1} m   (speed x arming delay)"
+                    + (hoverHeight > 0f ? $"   craft hovers at {hoverHeight:F1} m" : ""));
+                Row("Max range", $"{speed.floatValue * lifetime.floatValue:F0} m   (speed x lifetime)");
+
+                if (boosted > 0f)
+                    Row("Speed", $"{speed.floatValue:F0} m/s = {speed.floatValue / boosted:F2}x a boosted craft"
+                        + $"   (closes on a runner at {speed.floatValue - boosted:F0} m/s)");
+
+                if (weaponType == WeaponType.Missile && turnRate.floatValue > 0f)
+                    Row("Turn radius", $"{speed.floatValue / (turnRate.floatValue * Mathf.Deg2Rad):F0} m"
+                        + "   (speed / turn rate — raising speed WIDENS this)");
+
+                // The flare has to finish inside the flight or the missile arrives still aiming
+                // wide. Flight time is range / speed, so tripling speed silently broke this on
+                // both homing missiles once already.
+                if (weaponType == WeaponType.Missile && flareDuration.floatValue > 0f
+                    && flareOffset.floatValue > 0f && speed.floatValue > 0f)
+                {
+                    float flareTravel = speed.floatValue * flareDuration.floatValue;
+                    Row("Flare resolves after", $"{flareTravel:F0} m of travel"
+                        + "   (shots closer than this arrive still aiming wide)");
+
+                }
+
+                // The squiggle only shows if the nose can keep up with it. One half-swing takes
+                // half a period, and the heading has to cover the angle to the offset point in
+                // that time — too fast and it averages out into a straight line.
+                if (weaponType == WeaponType.Missile && weaveAmplitude.floatValue > 0f
+                    && weaveFrequency.floatValue > 0f && turnRate.floatValue > 0f)
+                {
+                    float halfSwing   = 0.5f / weaveFrequency.floatValue;
+                    float swingDeg    = Mathf.Atan(weaveAmplitude.floatValue) * Mathf.Rad2Deg * 2f;
+                    float degAvailable = turnRate.floatValue * halfSwing;
+
+                    Row("Weave swing", $"+/-{swingDeg:F0} deg of aim, {weaveFrequency.floatValue:F1} per second");
+                    Row("  nose can follow", $"{degAvailable:F0} deg per half swing"
+                        + (degAvailable < swingDeg
+                            ? "   — TOO FAST, it averages out to straight. Lower the frequency."
+                            : "   — enough to trace it"));
+                }
+            }
+        }
+    }
+
+    private static void Row(string label, string value) =>
+        EditorGUILayout.LabelField(label, value);
+
+    /// <summary>
+    /// Pulls live vehicle figures rather than baking them in. Returns a note instead of a
+    /// silent fallback when something is missing, because a stale constant here would
+    /// reproduce the exact failure this whole block exists to prevent.
+    /// </summary>
+    private static void ResolveVehicleContext(out float topSpeed, out float boosted,
+                                              out float hoverHeight, out float craftMass,
+                                              out string note)
+    {
+        topSpeed = boosted = hoverHeight = craftMass = 0f;
+        note = null;
+
+        var profileGuids = AssetDatabase.FindAssets("t:VehicleTuningProfile");
+        if (profileGuids.Length > 0)
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<VehicleTuningProfile>(
+                AssetDatabase.GUIDToAssetPath(profileGuids[0]));
+            if (profile != null)
+            {
+                topSpeed    = profile.propulsion.topSpeed;
+                boosted     = topSpeed * profile.propulsion.boostSpeedMultiplier;
+                hoverHeight = profile.foundation.hoverHeight;
+            }
+        }
+
+        // Mass lives on the prefab's Rigidbody, not in any profile.
+        foreach (var guid in AssetDatabase.FindAssets("t:Prefab"))
+        {
+            var go = AssetDatabase.LoadAssetAtPath<GameObject>(AssetDatabase.GUIDToAssetPath(guid));
+            if (go == null || go.GetComponent<HoverController_Foundation>() == null) continue;
+            var rb = go.GetComponent<Rigidbody>();
+            if (rb != null) { craftMass = rb.mass; break; }
+        }
+
+        if (topSpeed <= 0f && craftMass <= 0f)
+            note = "No VehicleTuningProfile or craft prefab found, so the comparisons below are omitted "
+                 + "rather than guessed.";
+        else if (topSpeed <= 0f)
+            note = "No VehicleTuningProfile found. Speed and knockback comparisons are omitted.";
+        else if (craftMass <= 0f)
+            note = "No craft prefab with a Rigidbody found. Knockback in m/s is omitted.";
     }
 
     /// <summary>
@@ -305,6 +496,179 @@ public class WeaponDefinitionEditor : Editor
                                MessageType.Info);
             }
         }
+
+        if (!mixedType && !mixedMode)
+            DrawCouplingWarnings(ref any, weaponType, mode);
+    }
+
+    /// <summary>
+    /// Invariants that were each discovered by measurement rather than by reading the code,
+    /// after the value that broke them had already shipped into the assets. Each one describes
+    /// a configuration that compiles, serialises and reads as a DESIGN problem in play, which
+    /// is what makes them expensive: you go and tune the wrong thing.
+    /// </summary>
+    private void DrawCouplingWarnings(ref bool any, WeaponType weaponType, ProjectileMode mode)
+    {
+        ResolveVehicleContext(out float topSpeed, out float boosted, out float hoverHeight,
+                              out float craftMass, out _);
+
+        if (mode == ProjectileMode.Instantiated)
+        {
+            // Killed the rocket jump. Arming distance is speed x delay, so tripling a
+            // projectile's speed triples the range inside which it refuses to detonate.
+            // Nothing flags it: the weapon still fires and still explodes, just never near you.
+            float armDist = speed.floatValue * armingDelay.floatValue;
+            if (hoverHeight > 0f && armDist > hoverHeight)
+                Warn(ref any, $"Arming distance is {armDist:F1}m (speed {speed.floatValue:F0} x arming delay "
+                            + $"{armingDelay.floatValue}), which is further than the craft hovers above the "
+                            + $"ground ({hoverHeight:F1}m). This projectile CANNOT detonate below its own "
+                            + "firer, so rocket jumps and any close-quarters use are dead. Measured: at 10m "
+                            + "arming the self-shove was 1.9 m/s; at 3.5m it was 34. Lower the arming delay "
+                            + "as you raise speed.", MessageType.Warning);
+
+            // The 5.5 rule: projectiles are faster than vehicles.
+            if (boosted > 0f && speed.floatValue > 0f && speed.floatValue < boosted)
+                Warn(ref any, $"Speed {speed.floatValue:F0} is BELOW a boosted craft ({boosted:F0} m/s), so a "
+                            + "target running in a straight line simply outruns this. The design rule is that "
+                            + "speed catches and turn rate is what skill evades.", MessageType.Warning);
+
+            // Raising speed silently widens the turning circle, which reads as "homing is broken".
+            if (weaponType == WeaponType.Missile && turnRate.floatValue > 0f && speed.floatValue > 0f)
+            {
+                float radius = speed.floatValue / (turnRate.floatValue * Mathf.Deg2Rad);
+                if (radius > 80f)
+                    Warn(ref any, $"Turn radius is {radius:F0}m (speed / turn rate). That circle is wider than "
+                                + "most engagements, so this missile will miss anything that is not flying "
+                                + "straight at it. Raising speed widens this proportionally — raise turn rate "
+                                + "with it, or accept it as the evasion dial deliberately.", MessageType.Warning);
+            }
+
+            // Self-spin scales with splash x selfImpactScale x destabilizeFraction. Measured
+            // straight down: 0.30 tilted the firer 50 degrees, 0.45 flipped and downed it.
+            if (destabilizeFraction.floatValue >= 0.4f && splashImpactForce.floatValue > 0f)
+                Warn(ref any, $"destabilizeFraction {destabilizeFraction.floatValue:F2} is at or past the "
+                            + "measured point where a rocket jump flips the player who fired it (0.45 flipped "
+                            + "and downed the firer; 0.30 reached 50 degrees and recovered). Note this ceiling "
+                            + "MOVES with splashImpactForce and selfImpactScale — re-measure if you raise "
+                            + "either.", MessageType.Warning);
+        }
+
+        if (mode == ProjectileMode.ParticleSystem)
+        {
+            // Damage and force are PER PARTICLE, so changing rate silently rescales both.
+            if (boosted > 0f && startSpeed.floatValue > 0f && startSpeed.floatValue < boosted)
+                Warn(ref any, $"Particle speed {startSpeed.floatValue:F0} is below a boosted craft "
+                            + $"({boosted:F0} m/s), so a boosting target outruns these rounds.",
+                            MessageType.Warning);
+
+            if (emissionRate.floatValue > 0f && startSpeed.floatValue > 0f)
+            {
+                float spacing = startSpeed.floatValue / emissionRate.floatValue;
+                if (spacing > 40f)
+                    Warn(ref any, $"Tracers land {spacing:F0}m apart (speed / emission rate), which reads as a "
+                                + "sparse dotted line rather than a stream. Note raising SPEED makes this "
+                                + "worse, not better — rate is the dial that fills the gap.", MessageType.Info);
+            }
+        }
+
+        if (weaponType == WeaponType.Missile && mode == ProjectileMode.Instantiated)
+        {
+            // The flare has to resolve inside the flight or the missile arrives still aiming
+            // wide. This one silently broke both homing weapons when speed was raised.
+            if (flareOffset.floatValue > 0f && flareDuration.floatValue > 0f && speed.floatValue > 0f)
+            {
+                float resolvesAfter = speed.floatValue * flareDuration.floatValue;
+                if (resolvesAfter > 60f)
+                    Warn(ref any, $"The flare does not finish until {resolvesAfter:F0}m of travel "
+                                + $"(speed {speed.floatValue:F0} x duration {flareDuration.floatValue}). "
+                                + "Any shot closer than that arrives still swinging wide and misses. "
+                                + "Shorten the duration, or accept that this weapon only works at "
+                                + "long range.", MessageType.Warning);
+            }
+
+            // Alternate produces exactly two roll angles, so a volley larger than two collapses
+            // into two overlapping stacks and reads as having fired two missiles.
+            if ((MissileFlareMode)flareDirection.enumValueIndex == MissileFlareMode.Alternate
+                && flareOffset.floatValue > 0f && maxLocks.intValue > 2)
+                Warn(ref any, $"Flare Direction is Alternate on a {maxLocks.intValue}-missile volley. "
+                            + "Alternate only ever swings left or right, so the salvo flies as two "
+                            + "overlapping stacks and looks like two missiles. Use Random to fan "
+                            + "them properly.", MessageType.Warning);
+
+            // A weave the nose cannot follow averages out to a straight line: the dial appears
+            // to do nothing at all, which reads as the feature being broken.
+            if (weaveAmplitude.floatValue > 0f && weaveFrequency.floatValue > 0f && turnRate.floatValue > 0f)
+            {
+                float swingDeg     = Mathf.Atan(weaveAmplitude.floatValue) * Mathf.Rad2Deg * 2f;
+                float degAvailable = turnRate.floatValue * (0.5f / weaveFrequency.floatValue);
+                if (degAvailable < swingDeg)
+                    Warn(ref any, $"The weave asks for {swingDeg:F0} deg of aim swing but the nose can "
+                                + $"only cover {degAvailable:F0} deg in half a cycle at Turn Rate "
+                                + $"{turnRate.floatValue:F0}. The missile cannot follow its own squiggle, "
+                                + "so it averages out into a straight line and this looks like it does "
+                                + "nothing. Lower Weave Frequency or raise Turn Rate.", MessageType.Warning);
+            }
+
+            // Weave and flare both work by moving the AIM POINT, which only exists when the
+            // missile has something to aim at.
+            if ((weaveAmplitude.floatValue > 0f || flareOffset.floatValue > 0f)
+                && turnRate.floatValue <= 0f)
+                Warn(ref any, "Flare and Weave both steer the missile toward a shifted aim point, and "
+                            + "this missile has Turn Rate 0 so it never steers at all. Both are inert "
+                            + "here.", MessageType.Warning);
+
+            // Lifetime is a duration, so range moves whenever speed does.
+            if (speed.floatValue > 0f && lifetime.floatValue > 0f)
+            {
+                float maxRange = speed.floatValue * lifetime.floatValue;
+                if (maxRange > 800f)
+                    Warn(ref any, $"Maximum range is {maxRange:F0}m (speed x lifetime). That is usually "
+                                + "an accident rather than a choice: lifetime is a DURATION, so range "
+                                + "grows every time speed does. Around 2s is a few hundred metres at "
+                                + "these speeds.", MessageType.Info);
+            }
+
+            // Straight flight spent not steering, subtracted from an already short flight.
+            if (homingDelay.floatValue > 0f && speed.floatValue > 0f)
+            {
+                float dumbDistance = homingDelay.floatValue * speed.floatValue;
+                if (dumbDistance > 40f)
+                    Warn(ref any, $"Homing Delay is {dumbDistance:F0}m of straight flight at this speed. "
+                                + "Any target closer than that is engaged by what is effectively a "
+                                + "dumbfire, because the missile arrives before it ever steers.",
+                                MessageType.Warning);
+            }
+        }
+
+        // A volley you can never assemble reads as a weapon that simply refuses to fire.
+        if (weaponType == WeaponType.Missile
+            && (MissileFireMode)missileFireMode.enumValueIndex == MissileFireMode.HardLock
+            && minLocksToFire.intValue > maxLocks.intValue)
+            Warn(ref any, $"minLocksToFire ({minLocksToFire.intValue}) is above maxLocks "
+                        + $"({maxLocks.intValue}). It is clamped at runtime so this behaves as "
+                        + "'always require a full volley', but the two values disagree and the "
+                        + "next person to read them will not know which was intended.",
+                        MessageType.Warning);
+
+        // The hold IS the weapon's cost, and it is the product of these two rather than either.
+        if (weaponType == WeaponType.Missile
+            && (MissileFireMode)missileFireMode.enumValueIndex == MissileFireMode.HardLock
+            && maxLocks.intValue > 1)
+        {
+            float fullHold = lockAcquireTime.floatValue * maxLocks.intValue;
+            if (fullHold > 3f)
+                Warn(ref any, $"A full volley takes {fullHold:F1}s of holding "
+                            + $"({lockAcquireTime.floatValue}s x {maxLocks.intValue} locks), which is "
+                            + "longer than most engagements last. Lock Acquire Time is per lock, not "
+                            + "per volley.", MessageType.Warning);
+        }
+
+        // Reads as "the weapon does nothing" while looking correctly configured.
+        if (weaponType == WeaponType.Automatic && fireRate.floatValue > 0f && fireRate.floatValue < 0.5f)
+            Warn(ref any, $"fireRate {fireRate.floatValue} means one shot event every "
+                        + $"{1f / fireRate.floatValue:F0} seconds. For a ParticleSystem weapon the emitters "
+                        + "still play, so this is invisible until ammo or recoil is switched on — then the "
+                        + "weapon stops working with no obvious cause.", MessageType.Warning);
     }
 
     private static void Warn(ref bool any, string message, MessageType severity)

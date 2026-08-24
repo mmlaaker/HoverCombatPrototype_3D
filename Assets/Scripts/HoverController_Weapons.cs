@@ -197,8 +197,42 @@ public class HoverController_Weapons : MonoBehaviour
     /// <summary>Lock progress as 0..1 fraction. 1 = fully locked.</summary>
     public float LockProgress { get; private set; }
 
-    /// <summary>Current lock target transform. Null when not scanning.</summary>
-    public Transform LockTarget { get; private set; }
+    /// <summary>
+    /// Current lock target. The one being acquired if a lock is in progress, otherwise the
+    /// first committed target.
+    ///
+    /// Kept as a single Transform because the HUD, the debug gizmo and the SoftHoming path
+    /// all read it and all of them only ever want "the thing we are pointed at". A volley
+    /// reads <see cref="LockTargets"/> instead.
+    /// </summary>
+    public Transform LockTarget =>
+        _lockCandidate != null ? _lockCandidate
+                               : (_lockTargets.Count > 0 ? _lockTargets[0] : null);
+
+    /// <summary>Every target committed by the current hold. One missile fires per entry.</summary>
+    public IReadOnlyList<Transform> LockTargets => _lockTargets;
+
+    /// <summary>How many locks are banked. Drives the volley size and the HUD readout.</summary>
+    public int LockedCount => _lockTargets.Count;
+
+    /// <summary>
+    /// True when releasing right now would actually launch something. False while a hold is
+    /// still below minLocksToFire, where releasing wastes the attempt entirely.
+    ///
+    /// Exposed for the HUD: "you have locks but not enough to fire" is a distinct state from
+    /// "you are locked and ready", and without it the meter cannot tell the player which one
+    /// they are in.
+    /// </summary>
+    public bool HasFiringSolution
+    {
+        get
+        {
+            var def = ActiveSlot?.definition;
+            if (def == null) return false;
+            int min = Mathf.Clamp(def.weaponLock.minLocksToFire, 1, Mathf.Max(1, def.weaponLock.maxLocks));
+            return _lockTargets.Count >= min;
+        }
+    }
 
     // =========================================================================
     // Private runtime state
@@ -210,6 +244,21 @@ public class HoverController_Weapons : MonoBehaviour
 
     private float lockTimer;
     private MissileLockState prevLockState;
+
+    /// <summary>The target currently being acquired, before it is banked into _lockTargets.</summary>
+    private Transform _lockCandidate;
+
+    /// <summary>Committed locks, in acquisition order. One missile per entry on release.</summary>
+    private readonly List<Transform> _lockTargets = new List<Transform>();
+
+    /// <summary>
+    /// Targets copied out at release, so a staggered volley survives ResetLockState clearing
+    /// the live list. Reused rather than reallocated per volley.
+    /// </summary>
+    private readonly List<Transform> _volleyBuffer = new List<Transform>();
+
+    /// <summary>The in-flight staggered launch, if one is running. Null when firing all at once.</summary>
+    private Coroutine _volleyRoutine;
 
     // Pre-allocated buffer for missile lock scans. OverlapSphereNonAlloc writes
     // into this array, so there is no heap allocation per frame. Size 16 is
@@ -312,7 +361,8 @@ public class HoverController_Weapons : MonoBehaviour
         CurrentLockState = MissileLockState.Idle;
         prevLockState    = MissileLockState.Idle;
         LockProgress     = 0f;
-        LockTarget       = null;
+        _lockCandidate   = null;
+        _lockTargets.Clear();
         lockTimer        = 0f;
     }
 
@@ -544,7 +594,7 @@ public class HoverController_Weapons : MonoBehaviour
                     // FireAllMuzzles reads LockTarget and forwards it via IHomingTarget.
                     ScanForLockTarget(def);
                     FireAllMuzzles(slot);
-                    LockTarget = null; // clear so the gizmo doesn't persist
+                    _lockCandidate = null; // clear so the gizmo doesn't persist
                 }
                 return;
 
@@ -591,7 +641,8 @@ public class HoverController_Weapons : MonoBehaviour
     /// </summary>
     private void TickHardLockMissile(WeaponSlot slot)
     {
-        var def = slot.definition;
+        var def      = slot.definition;
+        int maxLocks = Mathf.Max(1, def.weaponLock.maxLocks);
 
         switch (CurrentLockState)
         {
@@ -603,15 +654,46 @@ public class HoverController_Weapons : MonoBehaviour
                 break;
 
             case MissileLockState.Scanning:
-                if (!input.FireHeld || !IsLockTargetStillLockable(def))
+                // Releasing part-way through a cascade goes through the same gate as a full
+                // release: ReleaseVolley fires only if minLocksToFire is met, and otherwise
+                // drops the whole hold. Letting a partial release always fire turned the
+                // weapon into cheap guaranteed-homing spam, which is the Soft Homing
+                // Missile's job and available here for a fraction of the commitment.
+                if (!input.FireHeld)
                 {
-                    ResetLockState();
+                    ReleaseVolley(slot);
                     break;
                 }
-                lockTimer   += Time.deltaTime;
-                LockProgress = Mathf.Clamp01(lockTimer / def.weaponLock.lockAcquireTime);
+
+                if (!IsStillLockable(_lockCandidate, def))
+                {
+                    // Losing the CANDIDATE does not discard locks already banked. Try to
+                    // move on to somebody else; if there is nobody, hold what we have.
+                    _lockCandidate = null;
+                    lockTimer      = 0f;
+                    if (!AcquireNextCandidate(def, maxLocks))
+                    {
+                        if (_lockTargets.Count > 0) TransitionLockState(MissileLockState.Locked);
+                        else                        ResetLockState();
+                    }
+                    break;
+                }
+
+                lockTimer += Time.deltaTime;
+                UpdateVolleyProgress(def, maxLocks);
+
                 if (lockTimer >= def.weaponLock.lockAcquireTime)
-                    TransitionLockState(MissileLockState.Locked);
+                {
+                    _lockTargets.Add(_lockCandidate);
+                    _lockCandidate = null;
+                    lockTimer      = 0f;
+
+                    // Cascade: keep holding and the next lock starts immediately.
+                    if (!AcquireNextCandidate(def, maxLocks))
+                        TransitionLockState(MissileLockState.Locked);
+
+                    UpdateVolleyProgress(def, maxLocks);
+                }
                 break;
 
             case MissileLockState.Locked:
@@ -619,7 +701,10 @@ public class HoverController_Weapons : MonoBehaviour
                 // die or fly behind you and the missile is still handed its transform:
                 // VehicleHealth disables the GameObject rather than destroying it, so
                 // the reference stays non-null and the missile homes onto a corpse.
-                if (!IsLockTargetStillLockable(def))
+                // Prune rather than drop everything: one target of four escaping the cone
+                // should cost you that missile, not the whole volley.
+                PruneDeadLocks(def);
+                if (_lockTargets.Count == 0)
                 {
                     ResetLockState();
                     break;
@@ -628,17 +713,7 @@ public class HoverController_Weapons : MonoBehaviour
                 // Release-to-fire: releasing FireHeld is the launch trigger.
                 // If we can fire (ammo + cooldown ready), commit and launch.
                 // Otherwise the lock just drops.
-                if (!input.FireHeld)
-                {
-                    if (slot.IsReady && slot.HasAmmo)
-                    {
-                        TransitionLockState(MissileLockState.Committed);
-                        OnMissileLockStateChanged?.Invoke(MissileLockState.Committed);
-                        prevLockState = MissileLockState.Committed;
-                        FireAllMuzzles(slot);
-                    }
-                    ResetLockState();
-                }
+                if (!input.FireHeld) ReleaseVolley(slot);
                 break;
         }
 
@@ -668,7 +743,15 @@ public class HoverController_Weapons : MonoBehaviour
     /// ParticleSystem: calls Play() on each emitter in slot.particleEmitters.
     /// Ammo decrement and cooldown start after dispatch. Automatic manages its own cooldown.
     /// </summary>
-    private void FireAllMuzzles(WeaponSlot slot, bool applyVelocity = true)
+    /// <param name="homingTargetOverride">
+    /// Which target this particular missile chases. A volley fires one missile per committed
+    /// lock, so the target cannot come from shared state — every missile in the salvo would
+    /// then inherit whichever lock happened to be first.
+    /// Null falls back to <see cref="LockTarget"/>, which is the single-missile and
+    /// SoftHoming behaviour.
+    /// </param>
+    private void FireAllMuzzles(WeaponSlot slot, bool applyVelocity = true,
+                                Transform homingTargetOverride = null)
     {
         var def = slot.definition;
 
@@ -731,7 +814,7 @@ public class HoverController_Weapons : MonoBehaviour
                 proj.GetComponent<IProjectileImpactCarrier>()?
                     .SetImpact(def.impact.impactForce, def.impact.splashImpactForce, def.impact.destabilizeFraction);
 
-                proj.GetComponent<IHomingTarget>()?.SetTarget(LockTarget);
+                proj.GetComponent<IHomingTarget>()?.SetTarget(homingTargetOverride ?? LockTarget);
                 if (ShouldDrawDebug) Debug.DrawRay(muzzle.position, muzzle.forward * 3f, Color.red, 0.2f);
             }
         }
@@ -800,15 +883,158 @@ public class HoverController_Weapons : MonoBehaviour
     // Missile lock helpers
     // =========================================================================
 
+    /// <summary>
+    /// Progress across the WHOLE volley, not the lock currently being acquired.
+    ///
+    /// The HUD polls LockProgress straight into a fill bar, so per-lock progress made a
+    /// four-lock weapon fill and reset the meter four times in under two seconds. That reads
+    /// as a glitch rather than as charging, and it hides the only thing the player needs to
+    /// know: how close they are to having a volley worth releasing.
+    /// </summary>
+    private void UpdateVolleyProgress(WeaponDefinition def, int maxLocks)
+    {
+        float partial = _lockCandidate != null && def.weaponLock.lockAcquireTime > 0f
+            ? Mathf.Clamp01(lockTimer / def.weaponLock.lockAcquireTime)
+            : 0f;
+
+        LockProgress = Mathf.Clamp01((_lockTargets.Count + partial) / Mathf.Max(1, maxLocks));
+    }
+
     private bool ScanForLockTarget(WeaponDefinition def)
     {
-        LockTarget = TargetingScan.PickBestInCone(
+        _lockCandidate = TargetingScan.PickBestInCone(
             transform,
             def.weaponLock.lockRange,
             def.weaponLock.lockConeAngle,
             lockTargetLayers,
             _lockScanBuffer);
-        return LockTarget != null;
+        return _lockCandidate != null;
+    }
+
+    /// <summary>
+    /// Picks the next thing to lock in a cascade, or reports that the volley is full.
+    ///
+    /// Prefers somebody NEW: a fresh scan with the committed list excluded, so a volley
+    /// spreads across a crowd rather than piling onto whoever is nearest the nose.
+    ///
+    /// If nothing new qualifies, `allowRepeatLocks` decides whether the weapon can stack
+    /// another missile onto a target it already holds. That switch is what makes the
+    /// weapon work at all in a one-on-one fight, where by definition there is never a
+    /// second target — without it a four-missile volley fires exactly one missile and
+    /// reads as broken rather than as "designed for crowds".
+    /// </summary>
+    private bool AcquireNextCandidate(WeaponDefinition def, int maxLocks)
+    {
+        if (_lockTargets.Count >= maxLocks) return false;
+
+        _lockCandidate = TargetingScan.PickBestInCone(
+            transform, def.weaponLock.lockRange, def.weaponLock.lockConeAngle,
+            lockTargetLayers, _lockScanBuffer, _lockTargets);
+
+        if (_lockCandidate == null && def.weaponLock.allowRepeatLocks)
+            _lockCandidate = TargetingScan.PickBestInCone(
+                transform, def.weaponLock.lockRange, def.weaponLock.lockConeAngle,
+                lockTargetLayers, _lockScanBuffer);
+
+        return _lockCandidate != null;
+    }
+
+    /// <summary>
+    /// Drops committed targets that have stopped qualifying, without disturbing the rest.
+    /// </summary>
+    private void PruneDeadLocks(WeaponDefinition def)
+    {
+        for (int i = _lockTargets.Count - 1; i >= 0; i--)
+            if (!IsStillLockable(_lockTargets[i], def))
+                _lockTargets.RemoveAt(i);
+    }
+
+    /// <summary>
+    /// Launches one missile per committed lock, each handed its own target.
+    ///
+    /// Ammo is spent per missile and the volley is TRUNCATED to what can be paid for, so a
+    /// four-lock hold with two rounds left fires two. Firing all four would put currentAmmo
+    /// negative, and `HasAmmo` tests `> 0`, so the weapon would then be permanently unable
+    /// to fire with no visible reason. Unreachable today because maxAmmo is 0 and ammo never
+    /// decrements (TODO 1.4), which is exactly the kind of latent trap that surfaces months
+    /// later as "the hard lock stopped working".
+    /// </summary>
+    private void ReleaseVolley(WeaponSlot slot)
+    {
+        // Below the minimum the whole hold is wasted. Without this gate the weapon degenerates
+        // into cheap homing spam: bank one lock, release, and you have a guaranteed-tracking
+        // missile for a fraction of a second of holding — strictly better than the Soft Homing
+        // Missile, which is the weapon that is supposed to own that role.
+        int minLocks = Mathf.Clamp(slot.definition.weaponLock.minLocksToFire,
+                                   1, Mathf.Max(1, slot.definition.weaponLock.maxLocks));
+
+        if (slot.IsReady && slot.HasAmmo && _lockTargets.Count >= minLocks)
+        {
+            TransitionLockState(MissileLockState.Committed);
+            OnMissileLockStateChanged?.Invoke(MissileLockState.Committed);
+            prevLockState = MissileLockState.Committed;
+
+            int volley = _lockTargets.Count;
+            if (slot.currentAmmo > 0) volley = Mathf.Min(volley, slot.currentAmmo);
+
+            // Copy the targets out. ResetLockState clears the live list on the next line, and a
+            // staggered volley reads them over the following fraction of a second.
+            _volleyBuffer.Clear();
+            for (int i = 0; i < volley; i++) _volleyBuffer.Add(_lockTargets[i]);
+
+            float interval = slot.definition.weaponLock.volleyLaunchInterval;
+            if (interval <= 0f)
+            {
+                for (int i = 0; i < _volleyBuffer.Count; i++)
+                    FireAllMuzzles(slot, applyVelocity: true, homingTargetOverride: _volleyBuffer[i]);
+            }
+            else
+            {
+                // A second release cannot overlap the first: the buffer is shared, so the old
+                // cascade would start reading the new volley's targets partway through.
+                if (_volleyRoutine != null) StopCoroutine(_volleyRoutine);
+                _volleyRoutine = StartCoroutine(FireVolleyStaggered(slot, interval));
+            }
+        }
+        ResetLockState();
+    }
+
+    /// <summary>
+    /// Walks the volley out one missile at a time so the salvo reads as a cascade rather than
+    /// a single thump. Delays the LAUNCH; the missiles fly normally once away, so later ones
+    /// also arrive later.
+    ///
+    /// Aborts if the player switches weapons. The unfired missiles have not been paid for yet
+    /// (ammo is spent per launch), and firing them anyway would raise OnWeaponFired carrying
+    /// whatever slot index is active by then, which the HUD would read as the WRONG weapon's
+    /// ammo changing.
+    ///
+    /// Times with an explicit accumulator rather than WaitForSeconds, which allocates on every
+    /// yield. A five-missile cascade would otherwise leave five objects for the collector on
+    /// each trigger pull, which is the sort of thing 4.4 exists to stop accumulating.
+    /// </summary>
+    private System.Collections.IEnumerator FireVolleyStaggered(WeaponSlot slot, float interval)
+    {
+        int firedFromSlot = ActiveSlotIndex;
+
+        for (int i = 0; i < _volleyBuffer.Count; i++)
+        {
+            if (ActiveSlotIndex != firedFromSlot) break;
+            if (!slot.HasAmmo)                    break;
+
+            FireAllMuzzles(slot, applyVelocity: true, homingTargetOverride: _volleyBuffer[i]);
+
+            if (i == _volleyBuffer.Count - 1) break;
+
+            float waited = 0f;
+            while (waited < interval)
+            {
+                waited += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        _volleyRoutine = null;
     }
 
     /// <summary>
@@ -825,12 +1051,12 @@ public class HoverController_Weapons : MonoBehaviour
     ///   Escaped    - out of lockRange, or outside lockConeAngle of our nose. Same
     ///                geometry TargetingScan uses, so acquiring and holding agree.
     /// </summary>
-    private bool IsLockTargetStillLockable(WeaponDefinition def)
+    private bool IsStillLockable(Transform target, WeaponDefinition def)
     {
-        if (LockTarget == null || !LockTarget.gameObject.activeInHierarchy)
+        if (target == null || !target.gameObject.activeInHierarchy)
             return false;
 
-        Vector3 toTarget = LockTarget.position - transform.position;
+        Vector3 toTarget = target.position - transform.position;
 
         if (toTarget.sqrMagnitude > def.weaponLock.lockRange * def.weaponLock.lockRange)
             return false;
@@ -845,7 +1071,8 @@ public class HoverController_Weapons : MonoBehaviour
         CurrentLockState = MissileLockState.Idle;
         LockProgress     = 0f;
         lockTimer        = 0f;
-        LockTarget       = null;
+        _lockCandidate   = null;
+        _lockTargets.Clear();
     }
 
     // =========================================================================

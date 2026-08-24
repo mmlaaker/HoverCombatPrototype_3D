@@ -33,12 +33,21 @@ public static class TargetingScan
     /// <param name="coneHalfAngleDegrees">Half-angle of the cone from origin.forward.</param>
     /// <param name="mask">Layers eligible to be targeted.</param>
     /// <param name="scanBuffer">Caller-owned overlap buffer. Reused across calls.</param>
+    /// <param name="exclude">
+    /// Targets already committed by a multi-lock cascade. Skipped so a second lock finds
+    /// somebody NEW rather than re-acquiring whoever is nearest the nose, which would make
+    /// every missile in a volley chase one target regardless of what else is in the cone.
+    /// Null means no exclusions, which is the single-lock and SoftHoming case.
+    /// Compared by root transform, because a scan returns whichever child collider Physics
+    /// happened to hit and the same vehicle can present several.
+    /// </param>
     public static Transform PickBestInCone(
         Transform origin,
         float rangeMeters,
         float coneHalfAngleDegrees,
         LayerMask mask,
-        Collider[] scanBuffer)
+        Collider[] scanBuffer,
+        System.Collections.Generic.List<Transform> exclude = null)
     {
         if (origin == null || scanBuffer == null || scanBuffer.Length == 0)
             return null;
@@ -57,6 +66,14 @@ public static class TargetingScan
             var hit = scanBuffer[i];
             if (hit == null) continue;
             if (hit.transform.root == selfRoot) continue;
+
+            if (exclude != null)
+            {
+                bool alreadyTaken = false;
+                for (int e = 0; e < exclude.Count; e++)
+                    if (exclude[e] != null && exclude[e].root == hit.transform.root) { alreadyTaken = true; break; }
+                if (alreadyTaken) continue;
+            }
 
             Vector3 toTarget = hit.transform.position - origin.position;
             if (toTarget.magnitude > rangeMeters) continue;

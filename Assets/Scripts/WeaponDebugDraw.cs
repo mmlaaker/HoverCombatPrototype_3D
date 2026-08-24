@@ -37,6 +37,52 @@ public static class WeaponDebugDraw
     private static readonly Color ShoveShareColor = new Color(0.2f, 0.5f, 1f, 1f);
     private static readonly Color BlastColor      = new Color(1f, 0.5f, 0f, 1f);
 
+    /// <summary>Seconds a flight path stays on screen. Longer than impact draws: the whole
+    /// point is to compare the shape of several missiles after they have all landed.</summary>
+    public static float PathLifetime = 12f;
+
+    private static readonly Color PathArmedColor = new Color(0.4f, 1f, 0.4f, 1f);
+    private static readonly Color PathSafeColor  = new Color(0.5f, 0.5f, 0.5f, 1f);
+    private static readonly Color AimColor       = new Color(1f, 0.9f, 0.2f, 1f);
+    private static readonly Color AimErrorColor  = new Color(1f, 0.2f, 0.2f, 1f);
+
+    // -------------------------------------------------------------------------
+    // 0. Flight
+    // -------------------------------------------------------------------------
+    /// <summary>
+    /// One step of the path actually flown, drawn as a persistent breadcrumb.
+    ///
+    /// This is the tool for tuning flight SHAPE. Turn rate, flare and weave are all things you
+    /// can only really judge by the curve they produce, and the missile is gone in a fraction of
+    /// a second — far too fast to read live. Drawn segment by segment, the whole path stays up
+    /// after the missile has died, and a volley leaves several paths side by side to compare.
+    ///
+    /// Grey while the projectile is still inert, green once it is armed, so the arming distance
+    /// is visible as the point the trail changes colour rather than being a number you have to
+    /// work out from speed times delay.
+    /// </summary>
+    [Conditional("UNITY_EDITOR")]
+    public static void FlightSegment(Vector3 from, Vector3 to, bool armed)
+    {
+        Debug.DrawLine(from, to, armed ? PathArmedColor : PathSafeColor, PathLifetime);
+    }
+
+    /// <summary>
+    /// Where the missile is steering RIGHT NOW versus where its target actually is.
+    ///
+    /// Yellow is the heading it is chasing; red is the gap between that and the real target.
+    /// The red line IS the flare and the weave made visible: it starts long, and if the tuning
+    /// is right it shrinks to nothing before impact. A red line that is still long as the
+    /// missile arrives is a miss you can see coming, and is exactly the failure that had both
+    /// homing weapons whiffing at close range after a speed change.
+    /// </summary>
+    [Conditional("UNITY_EDITOR")]
+    public static void MissileAim(Vector3 missilePos, Vector3 aimPoint, Vector3 targetPos)
+    {
+        Debug.DrawLine(missilePos, aimPoint, AimColor, 0f);
+        Debug.DrawLine(aimPoint, targetPos, AimErrorColor, 0f);
+    }
+
     // -------------------------------------------------------------------------
     // 1. Impulse split
     // -------------------------------------------------------------------------

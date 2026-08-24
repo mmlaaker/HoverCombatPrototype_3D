@@ -153,6 +153,17 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     private float   flareStartAge;
     private bool    flareReady;
 
+    /// <summary>
+    /// Per-missile offset into the weave, rolled at spawn. Without it every missile in a volley
+    /// squirms in lockstep, which reads as one animation played several times rather than as
+    /// several missiles.
+    /// </summary>
+    private float weavePhase = 0f;
+
+    /// <summary>Previous sample for the debug flight trail. Editor draw only.</summary>
+    private Vector3 _pathPrev;
+    private bool    _pathStarted;
+
     // Drives MissileFlareMode.Alternate. Static so consecutive shots from any launcher split
     // in opposite directions, which is the whole point of alternating.
     private static int _alternateCounter;
@@ -190,6 +201,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     {
         rb = GetComponent<Rigidbody>();
         ProjectileSweep.Configure(GetComponentInChildren<Collider>(), out sweepMask, out sweepRadius);
+        weavePhase = Random.Range(0f, Mathf.PI * 2f);
     }
 
     private void Start()
@@ -275,13 +287,60 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
 
         if (H.flareOffset > 0f && H.flareDuration > 0f)
         {
-            float t = Mathf.Clamp01((age - flareStartAge) / H.flareDuration);
+            float elapsed = age - flareStartAge;
+            float t       = Mathf.Clamp01(elapsed / H.flareDuration);
 
             // SmoothStep rather than a straight lerp: the offset holds early, which is what
             // establishes a visible arc, then eases out instead of snapping onto the target.
             float blend = 1f - Mathf.SmoothStep(0f, 1f, t);
+
             aimPoint += flareOffsetDir * (H.flareOffset * flareBaseRange * blend);
         }
+
+        // Persistent wander, on top of whatever the flare is doing.
+        //
+        // This is deliberately NOT part of the flare. The flare is one arc that decays over
+        // flareDuration; a squiggle has to last the whole flight. Building it into the flare
+        // was tried and cannot work at these speeds: the nose only has turnRate x flareDuration
+        // of heading to spend, which at 235 deg/s and a 0.12s flare is 28 degrees. The aim point
+        // spiralled and the missile simply could not follow it, so it averaged out to a straight
+        // line and the dial did nothing.
+        //
+        // Scaled by the distance REMAINING rather than a fixed offset, which is what keeps
+        // convergence guaranteed: the wander shrinks as the missile closes and the final
+        // approach is always straight at the target. It cannot cause a miss.
+        if (H.weaveAmplitude > 0f && H.weaveFrequency > 0f)
+        {
+            Vector3 toTarget = aimPoint - transform.position;
+            float   remaining = toTarget.magnitude;
+
+            if (remaining > 0.01f)
+            {
+                // A stable basis perpendicular to the heading. Cross with world up, falling back
+                // to world forward when the missile is flying vertically and the first cross
+                // degenerates to zero.
+                Vector3 axis  = transform.forward;
+                Vector3 right = Vector3.Cross(axis, Vector3.up);
+                if (right.sqrMagnitude < 1e-6f) right = Vector3.Cross(axis, Vector3.forward);
+                right.Normalize();
+                Vector3 up = Vector3.Cross(right, axis);
+
+                // The two axes run at different rates on purpose. Matched rates trace a tidy
+                // circle, which reads as a corkscrew; mismatched ones never repeat and read as
+                // an irregular wander, which is the RYNO look.
+                float w = H.weaveFrequency * Mathf.PI * 2f;
+                float lateral  = Mathf.Sin(weavePhase + age * w);
+                float vertical = Mathf.Cos(weavePhase * 1.7f + age * w * 0.63f);
+
+                aimPoint += (right * lateral + up * vertical) * (H.weaveAmplitude * remaining);
+            }
+        }
+
+        // Yellow to where it is steering, red across the gap to the real target. The red line
+        // is the flare and the weave made visible, and watching it shrink to nothing before
+        // impact is how you tell a good flare from one that arrives still swinging.
+        if (ShouldDrawDebug)
+            WeaponDebugDraw.MissileAim(transform.position, aimPoint, homingTarget.position);
 
         Vector3 toAim = aimPoint - transform.position;
         if (toAim.sqrMagnitude < 1e-6f) return;
@@ -314,6 +373,15 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
         Steer(dt);
 
         Vector3 now = rb.position;
+
+        // Breadcrumb the path so the curve survives the missile. Drawn here rather than in
+        // Steer because a Dumbfire never steers and its path is still worth seeing.
+        if (ShouldDrawDebug)
+        {
+            if (!_pathStarted) { _pathPrev = now; _pathStarted = true; }
+            WeaponDebugDraw.FlightSegment(_pathPrev, now, age >= FL.armingDelay);
+            _pathPrev = now;
+        }
 
         // Stay disarmed through armingDelay so the rocket cannot detonate on the firer's own
         // hull at the muzzle, and so the first sweep does not span the spawn point.
