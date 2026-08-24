@@ -162,6 +162,13 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     private static readonly HashSet<IDamageable> _splashedThisExplosion = new();
 
     /// <summary>
+    /// Splash dedupe for things with no IDamageable to key off — props. Parallel to
+    /// _splashedThisExplosion and cleared with it. Static for the same reason: one
+    /// explosion resolves at a time, so this never needs to be per-instance.
+    /// </summary>
+    private static readonly HashSet<Rigidbody> _splashedBodies = new();
+
+    /// <summary>
     /// Receives the whole tuning asset from the firing weapon. Called by FireAllMuzzles before
     /// the projectile's first tick, and the only thing this projectile needs to function.
     /// </summary>
@@ -373,6 +380,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
         exploded = true;
 
         _splashedThisExplosion.Clear();
+        _splashedBodies.Clear();
 
         // Cached: ShouldDrawDebug walks a null check per call and Explode is a hot burst.
         bool debug = ShouldDrawDebug;
@@ -403,6 +411,13 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
             }
 
             var directRb = directHitCollider.GetComponentInParent<Rigidbody>();
+
+            // Excluded from the splash pass below. Previously only the IDamageable was
+            // registered, which was enough while splash ignored everything healthless.
+            // Now that props take splash, a directly-hit crate would otherwise be shoved
+            // twice: once by the direct hit and again by the blast it is standing in.
+            if (directRb != null) _splashedBodies.Add(directRb);
+
             float directForce = directIsOwner ? I.impactForce * I.selfImpactScale : I.impactForce;
 
             WeaponImpact.Apply(directRb, transform.forward, epicenter,
@@ -414,10 +429,25 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
         foreach (var hit in hits)
         {
             var damageable = hit.GetComponentInParent<IDamageable>();
-            if (damageable == null || _splashedThisExplosion.Contains(damageable)) continue;
-            _splashedThisExplosion.Add(damageable);
+            var hitRb      = hit.GetComponentInParent<Rigidbody>();
 
-            var hitRb = hit.GetComponentInParent<Rigidbody>();
+            // A prop is a Rigidbody with no health, and it used to be skipped here, so six
+            // crates sitting inside the blast radius recorded exactly zero movement. Splash
+            // now qualifies on "can it be moved OR can it be hurt" rather than on health
+            // alone: a blast with one thing in the world that responds to it shows you one
+            // object moving, not a radius, a falloff or a direction (TODO 4.6).
+            //
+            // Only the DAMAGE half was ever gated on IDamageable. Direct hits already pushed
+            // a healthless Rigidbody, so this makes splash agree with the path beside it.
+            if (damageable == null && hitRb == null) continue;   // static geometry
+
+            // Dedupe on both keys. A vehicle is a compound collider whose children all
+            // resolve to one IDamageable; a prop has no IDamageable at all, so without the
+            // body set a multi-collider prop would be shoved once per collider.
+            if (damageable != null && _splashedThisExplosion.Contains(damageable)) continue;
+            if (hitRb      != null && _splashedBodies.Contains(hitRb))             continue;
+            if (damageable != null) _splashedThisExplosion.Add(damageable);
+            if (hitRb      != null) _splashedBodies.Add(hitRb);
 
             // Measure from the centre of mass, not the collider's own transform. A vehicle
             // is a compound collider whose children all resolve to one IDamageable, so only
@@ -435,9 +465,12 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
             // separately authored fraction, which is what makes the rocket jump a dial
             // rather than an accident. selfImpactScale 0 excludes it outright, since
             // WeaponImpact.Apply early-outs on a zero magnitude.
-            bool isOwner = damageable == ownerDamageable;
+            // The null guard is load-bearing now that damageable can legitimately be null:
+            // a prop and an owner-less blast would both resolve to null and compare EQUAL,
+            // which would quietly scale every crate's shove by selfImpactScale.
+            bool isOwner = damageable != null && damageable == ownerDamageable;
 
-            if (!isOwner)
+            if (damageable != null && !isOwner)
                 damageable.TakeDamage(C.damage * scale);
 
             // The measured-from point is what silently broke before: children of a compound
@@ -460,7 +493,25 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
                 // that flank. ClosestPointOnBounds rather than Collider.ClosestPoint: the
                 // latter returns the input unchanged for non-convex mesh colliders, which
                 // these vehicles use.
-                Vector3 dir = reference - epicenter;
+                // Props are pushed from a point BELOW the blast so they lift rather than being
+                // pressed into the floor. Direction only: dist and therefore falloff still
+                // measure from the true epicenter, so this never changes how hard a blast hits.
+                //
+                // Craft are deliberately exempt. They hover level with the detonation, so their
+                // push was always roughly horizontal and the bias would be pure downside: the
+                // extra lift lands off-centre on a flank, which is a ROLL input, and the chassis
+                // rolls about three times more easily than it pitches. Measured on one near miss,
+                // a bias of 5 left the shove identical at 8.2 m/s but took peak tilt from 4.6 to
+                // 8.6 degrees, so it bought nothing and moved every craft closer to the 80 degree
+                // downed threshold.
+                //
+                // Keyed on "is it a craft", NOT on "does it lack health". Those are the same
+                // today and would silently diverge the day a crate becomes destructible, which
+                // would drop it back to being stamped flat with nothing reporting why.
+                bool isVehicle = hit.GetComponentInParent<HoverController_Foundation>() != null;
+                float bias     = isVehicle ? 0f : B.propUpwardBias;
+
+                Vector3 dir = reference - (epicenter - Vector3.up * bias);
                 WeaponImpact.Apply(hitRb, dir, hitRb.ClosestPointOnBounds(epicenter),
                                    splashForce, I.destabilizeFraction, scale, debug);
             }

@@ -46,7 +46,7 @@ public class WeaponDefinitionEditor : Editor
     private SerializedProperty impactForce, splashImpactForce, destabilizeFraction;
     private SerializedProperty speed, lifetime, armingDelay;
     private SerializedProperty turnRate, homingDelay, flareOffset, flareDuration, flareDirection;
-    private SerializedProperty splashRadius, splashFalloff, blastLayers, explosionPrefab;
+    private SerializedProperty splashRadius, splashFalloff, propUpwardBias, blastLayers, explosionPrefab;
     private SerializedProperty emissionRate, burstCount, startSpeed, startSpeedMin, startLifetime,
                                coneAngle, coneRadius, emitterLayers;
     private SerializedProperty useWindUp, windUpDuration, windUpCurve, windDownDuration;
@@ -83,6 +83,7 @@ public class WeaponDefinitionEditor : Editor
 
         splashRadius    = Find("blast.splashRadius");
         splashFalloff   = Find("blast.splashFalloff");
+        propUpwardBias  = Find("blast.propUpwardBias");
         blastLayers     = Find("blast.damageLayers");
         explosionPrefab = Find("blast.explosionPrefab");
 
@@ -174,6 +175,7 @@ public class WeaponDefinitionEditor : Editor
         {
             EditorGUILayout.PropertyField(splashRadius);
             EditorGUILayout.PropertyField(splashFalloff);
+            EditorGUILayout.PropertyField(propUpwardBias);
             EditorGUILayout.PropertyField(blastLayers);
             EditorGUILayout.PropertyField(explosionPrefab);
         }

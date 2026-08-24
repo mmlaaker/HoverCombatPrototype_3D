@@ -34,6 +34,24 @@ public class WeaponBlastTuning
              "outer band to survive in.")]
     public AnimationCurve splashFalloff = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f);
 
+    [Tooltip("PROPS ONLY. How far below the explosion to push from, in metres, for everything " +
+             "that is not a craft. Lifts debris instead of stamping it into the floor. Does not " +
+             "change how hard the blast hits, only which way it throws, and it does not touch " +
+             "vehicles at all.\n\n" +
+             "Why props need it and craft do not: a blast shoves outward from its own centre, and " +
+             "a rocket goes off at roughly craft height. A craft is level with that, so its push " +
+             "is already sideways. A crate on the ground is BELOW it, so 'outward' is mostly " +
+             "straight down. Measured on a crate 8m out: 84% of the push drove it into the " +
+             "ground, the floor absorbed it and friction ate the rest, so a crate handed 19,000 " +
+             "of impulse moved 0.00 m/s. The same impulse sideways threw it 18.6m.\n\n" +
+             "Where to start: about half the blast radius. At 0 the blast is unchanged.\n\n" +
+             "Raise it if blasts leave ground debris looking bolted down. There is no vehicle " +
+             "flip risk to trade against, because craft are exempt -- that exemption is the whole " +
+             "reason this is scoped to props rather than applied to the blast as a whole.")]
+    [Min(0f)]
+    [UnityEngine.Serialization.FormerlySerializedAs("upwardBias")]
+    public float propUpwardBias = 0f;
+
     [Tooltip("Which layers the blast catches. Terrain does not need to be in here; the projectile " +
              "already detonates on terrain contact, this is about who takes the damage and force.")]
     public LayerMask damageLayers = ~0;

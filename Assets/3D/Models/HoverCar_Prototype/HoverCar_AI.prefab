@@ -40280,7 +40280,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 12
+      value: 30
       objectReference: {fileID: 0}
     - target: {fileID: 3760090675531602474, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
@@ -40296,7 +40296,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: EmissionModule.rateOverTime.scalar
-      value: 12
+      value: 30
       objectReference: {fileID: 0}
     - target: {fileID: 5123988155465836397, guid: 2d0df9d9b67ccc245bf338c3e7e5fe27, type: 3}
       propertyPath: CollisionModule.collidesWith.m_Bits
