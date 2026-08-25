@@ -1,28 +1,46 @@
 /// <summary>
-/// Which way a missile swings before it turns onto its target.
+/// Which way a missile's flare swings before it curls back onto the target.
 ///
-/// The flare is expressed as a roll angle around the launch axis, so every option here is
-/// really just "which direction is outward for this shot". Alternate and Random exist because a
-/// fixed direction reads as a scripted animation once you have seen it twice; varying it per
-/// shot is what makes a salvo look like a salvo.
+/// All of these are a ROLL ANGLE around one shared frame, and that frame is built from WORLD
+/// up, not from the launching craft. That matters more than it sounds: a hover craft is banked
+/// most of the time it is shooting, and in a chassis-relative frame "left" quietly becomes
+/// "down-left" the moment you fire mid-turn, so the same authored setting produces a different
+/// arc on every shot. Referencing the world instead means what you author is what you see.
+///
+/// The angles, measured from straight up: Loft 0, Right +90, Left -90.
+///
+/// History worth keeping: there used to be a chassis-relative Up and a world-relative Loft
+/// sitting side by side, which were indistinguishable in level flight and diverged only
+/// mid-bank — a distinction nobody could see when testing and everybody would trip over in
+/// play. There was also a Down, which aimed at a point offset x range BELOW the target: tens
+/// of metres underground at any normal range, so the missile flew into the road and exploded.
+/// Its summary claimed it "hugs terrain". Both are gone.
 /// </summary>
 public enum MissileFlareMode
 {
     /// <summary>Left, then right, then left. Best for volleys: they split around the target.</summary>
     Alternate,
 
-    /// <summary>Random roll around the launch axis, so shots fan out in a cone.</summary>
+    /// <summary>
+    /// A random angle anywhere across the upper half — full left, through straight up, to full
+    /// right, and every diagonal between. Continuous, not a pick between the other entries in
+    /// this list, so no two shots take quite the same path.
+    ///
+    /// Deliberately never rolls below horizontal. The lower half is not an arc, it is a hole in
+    /// the ground: the aim point ends up under the map and the missile detonates on the road.
+    /// </summary>
     Random,
 
-    /// <summary>Always out to the launcher's left.</summary>
+    /// <summary>Always out to the world left, level with the horizon.</summary>
     Left,
 
-    /// <summary>Always out to the launcher's right.</summary>
+    /// <summary>Always out to the world right, level with the horizon.</summary>
     Right,
 
-    /// <summary>Always up. Reads as a lofted arc that drops onto the target.</summary>
-    Up,
-
-    /// <summary>Always down. Hugs terrain on the way in.</summary>
-    Down,
+    /// <summary>
+    /// Climbs away, tips over, and drops onto the target from above — missiles you see raining
+    /// down rather than snaking across. Uses world up, so the arc stays vertical no matter how
+    /// hard the launching craft was banked.
+    /// </summary>
+    Loft,
 }

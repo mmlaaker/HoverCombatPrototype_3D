@@ -154,6 +154,25 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     private bool    flareReady;
 
     /// <summary>
+    /// flareDuration after it has been capped against the flight time this particular shot
+    /// actually has. See the note where it is computed in Steer.
+    /// </summary>
+    private float   flareDurationEff;
+
+    /// <summary>
+    /// Most of a shot's STEERABLE flight that the flare is ever allowed to occupy. The missile
+    /// needs the remainder to nose over and converge; at 1.0 it would still be turning at
+    /// impact.
+    ///
+    /// 0.6 was measured against 0.5 on a lofted profile. Tightening it to 0.5 did close the
+    /// miss distance on a 30m crossing shot (6.1m to 4.8m) but converted none of it into hits,
+    /// while costing a third of the visible arc at 60m (7.6m of apex down to 5.0m). That is
+    /// paying the thing the weapon is FOR to fix something this dial cannot reach: a
+    /// point-blank miss is the turning circle being as wide as the range, not the flare.
+    /// </summary>
+    private const float FLARE_MAX_FLIGHT_FRACTION = 0.6f;
+
+    /// <summary>
     /// Per-missile offset into the weave, rolled at spawn. Without it every missile in a volley
     /// squirms in lockstep, which reads as one animation played several times rather than as
     /// several missiles.
@@ -229,19 +248,45 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     /// </summary>
     private Vector3 ComputeFlareOffsetDir()
     {
+        // ---- One frame for every mode, built from WORLD up -----------------------
+        // Every mode below is just a roll angle in this frame, so they are all directly
+        // comparable and none of them drift with the chassis. Previously the frame was
+        // transform.right/transform.up — the launcher's roll — which meant firing mid-bank
+        // silently rotated every arc by however far the car happened to be leaned over.
+        //
+        // The component along forward is removed so the offset is purely sideways-or-upward
+        // relative to the missile: an aim point partly AHEAD of the missile is not an arc, it
+        // is just a longer shot.
+        Vector3 up = Vector3.up - transform.forward * Vector3.Dot(Vector3.up, transform.forward);
+
+        // Firing straight up or straight down leaves nothing perpendicular to lean toward.
+        // Fall back to the missile's own frame, which in that pose is a sane arc plane.
+        if (up.sqrMagnitude < 1e-6f) up = transform.up;
+        up.Normalize();
+
+        Vector3 right = Vector3.Cross(up, transform.forward).normalized;
+
+        // Degrees from straight up: 0 lofts, +90 goes right, -90 goes left.
         float roll;
         switch (H.flareDirection)
         {
+            case MissileFlareMode.Loft:   roll = 0f;   break;
             case MissileFlareMode.Right:  roll = 90f;  break;
-            case MissileFlareMode.Left:   roll = 270f; break;
-            case MissileFlareMode.Up:     roll = 0f;   break;
-            case MissileFlareMode.Down:   roll = 180f; break;
-            case MissileFlareMode.Random: roll = Random.Range(0f, 360f); break;
-            default:                      roll = (_alternateCounter++ % 2 == 0) ? 90f : 270f; break;
+            case MissileFlareMode.Left:   roll = -90f; break;
+
+            // Continuous across the UPPER half only. The lower half is not a flare, it is a
+            // hole in the ground — the aim point sits offset x range below the target, which
+            // at any normal range is tens of metres under the map, and the missile flies into
+            // the road. Restricting the roll is what makes this mode usable for a volley:
+            // full left, straight up, full right and every diagonal between, none of them aimed
+            // at terrain.
+            case MissileFlareMode.Random: roll = Random.Range(-90f, 90f); break;
+
+            default:                      roll = (_alternateCounter++ % 2 == 0) ? 90f : -90f; break;
         }
 
         float r = roll * Mathf.Deg2Rad;
-        return (transform.right * Mathf.Sin(r) + transform.up * Mathf.Cos(r)).normalized;
+        return (right * Mathf.Sin(r) + up * Mathf.Cos(r)).normalized;
     }
 
     /// <summary>
@@ -281,14 +326,32 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
             flareOffsetDir = ComputeFlareOffsetDir();
             flareStartAge  = age;
             flareReady     = true;
+
+            // The flare's two dials are in different units, and that is a trap: flareOffset is
+            // a FRACTION OF RANGE (so it self-adjusts to the shot) while flareDuration is
+            // ABSOLUTE SECONDS (so it does not). On a long shot 0.25s is a quarter of the
+            // flight and the missile arcs and settles. On a 25m shot the whole flight IS 0.17s,
+            // so the missile is still climbing away when it arrives and sails straight over.
+            //
+            // Cap the flare at a fraction of the flight actually available. Long shots are
+            // untouched — they never hit the cap — and short ones get a compressed arc instead
+            // of a guaranteed miss.
+            // Deliberately measured against the WHOLE flight and not against the flight minus
+            // homingDelay, even though the latter is the more defensible description of the
+            // time the missile actually has. Subtracting the delay was tried: it cost a third
+            // of the arc at 60m (7.6m of apex down to 5.3m) and converted no misses into hits,
+            // because the shot it was meant to rescue is lost to the turning circle rather than
+            // to the flare. The arc is what this profile is for, so the arc wins.
+            float flightTime = flareBaseRange / Mathf.Max(1f, FL.speed);
+            flareDurationEff = Mathf.Min(H.flareDuration, flightTime * FLARE_MAX_FLIGHT_FRACTION);
         }
 
         Vector3 aimPoint = homingTarget.position;
 
-        if (H.flareOffset > 0f && H.flareDuration > 0f)
+        if (H.flareOffset > 0f && flareDurationEff > 0f)
         {
             float elapsed = age - flareStartAge;
-            float t       = Mathf.Clamp01(elapsed / H.flareDuration);
+            float t       = Mathf.Clamp01(elapsed / flareDurationEff);
 
             // SmoothStep rather than a straight lerp: the offset holds early, which is what
             // establishes a visible arc, then eases out instead of snapping onto the target.

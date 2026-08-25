@@ -50,8 +50,13 @@ public class WeaponHomingTuning
     // 💫 Flare
     // -------------------------------------------------------------------------
     [Header("💫 Flare")]
-    [Tooltip("How far out to one side the missile swings before curling back in. 0 turns the " +
-             "flare off. 0.2 to 0.4 gives a clear curve you can read on screen.\n\n" +
+    [Tooltip("How far off-target the missile swings before curling back in. 0 turns the flare " +
+             "off. 0.2 to 0.4 gives a clear curve you can read on screen; 0.8 and up is a " +
+             "pronounced arc.\n\n" +
+             "EASIEST WAY TO SET IT: this number is the tangent of the launch angle, so it IS " +
+             "the angle the missile peels off at, and that angle is the same at every range. " +
+             "0.3 leaves at 17 degrees, 0.5 at 27, 0.85 at 40, 1.0 at 45. Pick the departure " +
+             "angle you want to see and use the matching number.\n\n" +
              "Measured as a share of the distance to the target, not a fixed number of metres, so " +
              "the same setting looks right at every range: wide and dramatic at 200m, barely a " +
              "bend at 20m. It costs nothing in accuracy, because the missile aims at a point " +
@@ -73,17 +78,30 @@ public class WeaponHomingTuning
              "The Derived readout below turns this into metres -- 'flare resolves after N m of " +
              "travel'. Anything closer than that number is a shot that arrives still swinging. " +
              "Set it so that distance sits comfortably inside your usual fighting range.\n\n" +
+             "There is a safety net, but do not lean on it: at runtime the flare is capped at " +
+             "60% of the flight time the shot actually has, so a point-blank shot gets a " +
+             "compressed version of the arc instead of sailing straight over. It rescues close " +
+             "range; it cannot rescue a value that is too long for EVERY range.\n\n" +
              "Longer also means the missile spends more of its flight off to one side, which " +
              "gives a moving target more room to leave. Showiness versus reliability.")]
     [Min(0f)]
     public float flareDuration = 0f;
 
-    [Tooltip("Which way 'outward' is for this missile. Alternate and Random vary it per shot, " +
-             "which is what stops a volley looking like the same scripted animation played " +
-             "several times.\n\n" +
+    [Tooltip("Which way the missile swings before curling back in. All of these are the same " +
+             "thing -- an angle measured from straight up -- so they are directly comparable: " +
+             "Loft 0, Right +90, Left -90, and Random anywhere between.\n\n" +
+             "LOFT climbs, tips over and drops onto the target from above. Reach for it when you " +
+             "want missiles seen raining down rather than snaking across the ground.\n\n" +
+             "RANDOM is continuous, not a shuffle of the other entries: any angle from full left, " +
+             "through straight up, to full right, including every diagonal. Best for volleys, " +
+             "because no two missiles take the same path.\n\n" +
              "Careful with Alternate on a volley of more than two: it only ever produces two " +
              "directions, so five missiles fly as three stacked on one path and two on the " +
-             "other, and it reads as having fired two missiles. Random fans them properly.")]
+             "other, and it reads as having fired two missiles. Random fans them properly.\n\n" +
+             "All of them are measured against the WORLD, not the car, so an arc you author is " +
+             "the arc you get whether you fired level or halfway through a bank. Nothing rolls " +
+             "below horizontal either: that is not a flare, it is a hole in the ground -- the aim " +
+             "point ends up under the map and the missile detonates on the road.")]
     public MissileFlareMode flareDirection = MissileFlareMode.Alternate;
 
     [Tooltip("How far the missile wanders off the direct line on its way in, as a share of the " +

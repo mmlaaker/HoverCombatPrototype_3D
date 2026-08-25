@@ -335,8 +335,19 @@ public class WeaponDefinitionEditor : Editor
                         + $"   (closes on a runner at {speed.floatValue - boosted:F0} m/s)");
 
                 if (weaponType == WeaponType.Missile && turnRate.floatValue > 0f)
-                    Row("Turn radius", $"{speed.floatValue / (turnRate.floatValue * Mathf.Deg2Rad):F0} m"
-                        + "   (speed / turn rate — raising speed WIDENS this)");
+                {
+                    float radius = speed.floatValue / (turnRate.floatValue * Mathf.Deg2Rad);
+
+                    // Stated against lock range, because that is the number it has to be judged
+                    // against. A turn radius is not wide or tight on its own — it is wide or
+                    // tight relative to the distance the missile is fired from.
+                    string vsLock = lockRange.floatValue > 0f
+                        ? $"   = {radius / lockRange.floatValue:F2}x lock range ({lockRange.floatValue:F0} m)"
+                        : "";
+
+                    Row("Turn radius", $"{radius:F0} m"
+                        + "   (speed / turn rate — raising speed WIDENS this)" + vsLock);
+                }
 
                 // The flare has to finish inside the flight or the missile arrives still aiming
                 // wide. Flight time is range / speed, so tripling speed silently broke this on
@@ -536,7 +547,21 @@ public class WeaponDefinitionEditor : Editor
             if (weaponType == WeaponType.Missile && turnRate.floatValue > 0f && speed.floatValue > 0f)
             {
                 float radius = speed.floatValue / (turnRate.floatValue * Mathf.Deg2Rad);
-                if (radius > 80f)
+
+                // Judged against LOCK RANGE, not against a fixed number of metres. The old test
+                // was "radius > 80m", and it stayed silent on the Soft Homing missile at a 56m
+                // circle — which measured 0% hits on a crossing target because 56m is over half
+                // of its 100m lock range. A turn radius is only meaningful next to the distance
+                // the missile is actually fired from, so compare the two.
+                float lockR = lockRange.floatValue;
+                if (lockR > 0f && radius > lockR * 0.5f)
+                    Warn(ref any, $"Turn radius is {radius:F0}m but lock range is {lockR:F0}m, so the missile's "
+                                + $"turning circle is {radius / lockR:F2}x the distance it gets fired from. It "
+                                + "cannot correct inside its own engagement: measured, a missile in this state "
+                                + "misses a crossing target outright rather than curving onto it. Raise turn "
+                                + "rate, lower speed, or shorten lock range so the weapon only offers shots it "
+                                + "can service.", MessageType.Warning);
+                else if (lockR <= 0f && radius > 80f)
                     Warn(ref any, $"Turn radius is {radius:F0}m (speed / turn rate). That circle is wider than "
                                 + "most engagements, so this missile will miss anything that is not flying "
                                 + "straight at it. Raising speed widens this proportionally — raise turn rate "

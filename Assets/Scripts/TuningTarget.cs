@@ -53,7 +53,7 @@ public class TuningTarget : MonoBehaviour
     [Header("Manual")]
     [Tooltip("Puts the target back immediately, in any mode. Handy when a shot sends it " +
              "somewhere unexpected and you do not want to wait out the timer.")]
-    public KeyCode resetKey = KeyCode.T;
+    public UnityEngine.InputSystem.Key resetKey = UnityEngine.InputSystem.Key.T;
 
     private Rigidbody _body;
     private VehicleHealth _health;
@@ -74,7 +74,15 @@ public class TuningTarget : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(resetKey)) ReturnHome();
+        // Input System, not the legacy Input class. The first version of this used
+        // Input.GetKeyDown, which in a project switched to the Input System package does not
+        // merely fail to read the key -- it throws InvalidOperationException every single
+        // frame. So the reset key never worked, and it buried the console while it did not
+        // work. Match the pattern the rest of the project already uses (MotionTrace,
+        // PlaytestReset, PlaytestSession): Keyboard.current, null-checked because there is
+        // no keyboard at all on some platforms and in some editor states.
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb != null && kb[resetKey].wasPressedThisFrame) ReturnHome();
     }
 
     private void FixedUpdate()
