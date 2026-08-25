@@ -209,8 +209,8 @@ MonoBehaviour:
     trickMaxLandingFlipAngle: 70
     trickSettleSeconds: 0.25
   health:
-    maxHealth: 500
-    startingHealth: 500
+    maxHealth: 100
+    startingHealth: 100
   shield:
     enableShield: 1
     shieldDuration: 2

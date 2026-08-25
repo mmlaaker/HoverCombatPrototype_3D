@@ -871,13 +871,13 @@ weapons use limited pickup ammo except the Machine Gun, though **nothing enforce
 
 | # | Weapon | Input | Status | Notes |
 |---|---|---|---|---|
-| 1 | Machine Gun | Hold | Implemented | Infinite ammo. Low DPS. Force, **not concussive**. `damage` 0.25 |
-| 2 | Chain Gun | Hold | Implemented | Wind-up and wind-down. Force, not concussive. **No VFX prefab exists** (`TODO.md` 2.20), and `fireRate` sits at the `[Min]` floor of 0.01 (3.6) |
-| 3 | Shotgun | Tap | Implemented | 30-pellet burst, `destabilizeFraction` 1, where spread geometry supplies the rotation. **Deliberate, not a violation of the flip rule** — see 5.16 |
-| 4 | Rocket Launcher | Tap | Implemented | Straight line, no homing. Primary momentum disruption tool. **Force needs re-baselining against `topSpeed` 105** (5.16) |
+| 1 | Machine Gun | Hold | **Tuned 2026-08-24** | Infinite ammo. 60/sec across 2 barrels, 6.0 dps, 12 m/s of push per second held. Force, **not concussive** (`destabilizeFraction` 0) |
+| 2 | Chain Gun | Hold | **Tuned 2026-08-24** | The better Machine Gun that is not free: 90/sec, 19.8 dps, 18 m/s per second held, paid for with a 3s spin-up. Force, not concussive. **No VFX prefab exists** (`TODO.md` 2.20) |
+| 3 | Shotgun | Tap | **Tuned 2026-08-24** | 30-pellet burst, 21 damage on a perfect burst. `destabilizeFraction` 1, where spread geometry supplies the rotation. **Deliberate, not a violation of the flip rule** — see 5.16 |
+| 4 | Rocket Launcher | Tap | **BASELINE, judged 2026-08-24** | Straight line, no homing. **The calibration point for the whole roster** (5.16): 1.26x top speed on a direct hit, 25 damage = 4 hits, 12m blast, 0.25 concussive |
 | 5 | Lob Bomb | Tap | **Not built** | Rocket delivered over an arc. Identical to 4 except in trajectory for now. Needs 6.7 |
-| 6 | Soft Homing | Tap | Implemented | Harassment tool. Low damage and force, small concussive blast |
-| 7 | Hard Lock Missile | Hold to scan and lock, **release to fire** | Implemented, placeholder shape | Lock COMMITS to one target. Intended as a volley across one or several targets. Needs 6.8 |
+| 6 | Soft Homing | Tap | **Tuned 2026-08-24** | Harassment tool. 0.57x top speed, 10 damage, 6m blast, 0.12 concussive. 56m turning circle — deliberately dodgeable |
+| 7 | Hard Lock Missile | Hold to scan and lock, **release to fire** | **Volley built 2026-08-24** | Cascading multi-lock: hold to stack up to `maxLocks`, release fires one missile per lock on a stagger. Each is small (0.59x top speed, 8 damage); the volley is the weapon. See 6.8 |
 | 8 | Hard Lock Chain Lightning | Hold to scan and lock, release | **Not built** | Near-instant damage instead of missiles. No blast, not concussive. Needs 6.8. **Answers the Sniper question** |
 | 9 | Laser Cannon | Hold to charge, release | **Not built** | Sustained beam, pierces targets, force along the axis, no blast. Needs 6.11, **which is gated on 6.12** |
 | 10 | Gravity Well / Repulsor Bomb | Tap to deploy | **Not built** | Lobbed deployable. One active; does not affect deployer. Needs 6.7 |
@@ -966,6 +966,7 @@ is stable and never reused.**
 | 49 | Only a constant workload separates "the game got heavier" from "the machine got weaker". `FrameSpikeWatch`'s benchmark hit 3.57ms against 0.30ms and invalidated the window |
 | 50 | An instrument that does not report its sample count lets "no data" read as "no problem". Print the count that could have shown the failure next to the verdict |
 | 51 | The asset file and the editor's copy drift apart BOTH ways. Read and write tuning through the editor while it is running, and do not assume a diff line is yours |
+| 52 | A value multiplied by speed is not the value you authored: change speed and it silently rescales |
 
 **Four checks in this project have fired during correct play** (the Movement gizmo's drive/drag warning,
 the camera framing verdict, the dodge teleport warning, and `FrameSpikeWatch`'s throttling verdict).

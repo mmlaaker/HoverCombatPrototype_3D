@@ -154,6 +154,26 @@ public class VehicleHUD : MonoBehaviour
              "than a sight, so treat 20 as the practical floor.")]
     [SerializeField] private float reticleProjectionDistance = 200f;
 
+    [Header("Lock-on reticles")]
+    [Tooltip("Where lock markers are parented. Leave empty to disable the whole feature. " +
+             "Usually the Canvas root; anything with a RectTransform works.")]
+    [SerializeField] private RectTransform lockReticleParent;
+
+    [Tooltip("Optional. What a lock marker looks like. Leave empty and it clones the aim " +
+             "reticle instead, so this works with no new art — just tinted differently.")]
+    [SerializeField] private RectTransform lockReticlePrefab;
+
+    [Tooltip("Tint applied to lock markers. Kept distinct from the aim reticle so a locked " +
+             "target does not read as 'where my shot goes'.")]
+    [SerializeField] private Color lockReticleColor = new Color(1f, 0.25f, 0.2f, 0.95f);
+
+    [Tooltip("Size of a lock marker relative to the source sprite.")]
+    [SerializeField] private float lockReticleScale = 1.4f;
+
+    /// <summary>Pooled lock markers. Grown on demand, hidden rather than destroyed.</summary>
+    private readonly System.Collections.Generic.List<RectTransform> _lockReticles =
+        new System.Collections.Generic.List<RectTransform>();
+
     [Tooltip("Canvas-space nudge applied to the reticle after projection. Use this to " +
              "compensate for a consistent mis-aim — e.g. bullets land slightly low-right " +
              "of the reticle. Units are canvas pixels: X+ = right, Y+ = up.")]
@@ -576,9 +596,9 @@ public class VehicleHUD : MonoBehaviour
 
     private void HandleWeaponSwitched(int slotIndex)
     {
+        // SyncWeapon owns the lock group's visibility now, so both this path and the initial
+        // SyncAll agree. Setting it here as well was how the two got to disagree.
         SyncWeapon();
-        bool isMissile = _weapons.ActiveSlot?.definition?.type == WeaponType.Missile;
-        SetMissileLockGroupVisible(isMissile);
     }
 
     private void HandleWeaponFired(int slotIndex, int ammoRemaining)
@@ -662,11 +682,26 @@ public class VehicleHUD : MonoBehaviour
         {
             SetText(weaponNameText, "—");
             SetText(ammoText, "—");
+            // An empty slot has no lock either, and leaving the group up here would strand a
+            // stale meter on screen from whatever was selected before.
+            SetMissileLockGroupVisible(false);
             return;
         }
 
         SetText(weaponNameText, slot.definition.displayName);
         SetText(ammoText, slot.currentAmmo == -1 ? "∞" : slot.currentAmmo.ToString());
+
+        // Hard Lock ONLY. Dumbfire never acquires anything and SoftHoming grabs its target at
+        // the moment of firing, so neither has a lock to report — the meter sat at zero and the
+        // label read IDLE, which says "this weapon is broken" rather than "this weapon does not
+        // work that way".
+        //
+        // Driven from here rather than from the switch handler alone, because that only fires ON
+        // A SWITCH: starting the match already holding a missile left the group at whatever the
+        // scene had saved, and it stayed wrong until you cycled away and back.
+        SetMissileLockGroupVisible(
+            slot.definition.type == WeaponType.Missile
+            && slot.definition.weaponLock.missileFireMode == MissileFireMode.HardLock);
     }
 
     private void SyncReticle()
@@ -741,6 +776,114 @@ public class VehicleHUD : MonoBehaviour
     {
         if (missileLockGroup != null)
             missileLockGroup.SetActive(visible);
+    }
+
+    // =========================================================================
+    // Lock-on target reticles
+    // =========================================================================
+    /// <summary>
+    /// Paints a marker on every committed lock and keeps it pinned to that target on screen.
+    ///
+    /// Runs in LateUpdate, and that is not optional: the camera is Cinemachine-driven and its
+    /// brain resolves in LateUpdate, so projecting from Update uses LAST frame's camera pose.
+    /// The markers would trail the targets by a frame, which at these closing speeds is a
+    /// visible smear rather than a subtlety.
+    ///
+    /// Markers are pooled and hidden rather than created and destroyed, because a five-lock
+    /// volley acquired and released repeatedly would otherwise churn UI objects for the
+    /// collector on every trigger pull.
+    /// </summary>
+    private void LateUpdate()
+    {
+        if (_weapons == null || lockReticleParent == null) return;
+
+        var def = _weapons.ActiveSlot?.definition;
+        bool hardLock = def != null
+                        && def.type == WeaponType.Missile
+                        && def.weaponLock.missileFireMode == MissileFireMode.HardLock;
+
+        if (!hardLock) { HideLockReticlesFrom(0); return; }
+
+        Camera cam = Camera.main;
+        if (cam == null) { HideLockReticlesFrom(0); return; }
+
+        var canvasRect = lockReticleParent as RectTransform;
+        var targets    = _weapons.LockTargets;
+        int shown      = 0;
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            Transform t = targets[i];
+            if (t == null) continue;
+
+            // Locks resolve to whichever child collider the scan happened to return — often a
+            // wheel rim — so marking that transform would pin the reticle to a corner of the
+            // craft. Centre of mass is the point a player reads as "the target".
+            Transform root = t.root;
+            var rootBody   = root.GetComponent<Rigidbody>();
+            Vector3 worldPoint = rootBody != null ? rootBody.worldCenterOfMass : root.position;
+
+            Vector3 screenPos = cam.WorldToScreenPoint(worldPoint);
+
+            // The classic trap: WorldToScreenPoint returns plausible-looking x/y for points
+            // BEHIND the camera, mirrored through the centre. Without this a target you have
+            // flown past paints a reticle on screen as if it were still in front of you.
+            if (screenPos.z <= 0f) continue;
+
+            var marker = GetLockReticle(shown);
+            if (marker == null) break;
+
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvasRect, screenPos, null, out Vector2 localPoint))
+                continue;
+
+            marker.localPosition = localPoint;
+            marker.gameObject.SetActive(true);
+            shown++;
+        }
+
+        HideLockReticlesFrom(shown);
+    }
+
+    /// <summary>Fetches a pooled marker, growing the pool only when a volley gets wider.</summary>
+    private RectTransform GetLockReticle(int index)
+    {
+        while (_lockReticles.Count <= index)
+        {
+            RectTransform created;
+
+            if (lockReticlePrefab != null)
+            {
+                created = Instantiate(lockReticlePrefab, lockReticleParent);
+            }
+            else if (reticleImage != null)
+            {
+                // Fall back to cloning the aim reticle so this works with no new art. It shares
+                // that sprite, which is why the tint below is applied rather than inherited.
+                var clone = Instantiate(reticleImage.gameObject, lockReticleParent);
+                clone.name = "LockReticle";
+                created = clone.GetComponent<RectTransform>();
+            }
+            else
+            {
+                return null;
+            }
+
+            var img = created.GetComponent<Image>();
+            if (img != null) { img.color = lockReticleColor; img.enabled = true; }
+            created.localScale = Vector3.one * lockReticleScale;
+            created.gameObject.SetActive(false);
+            _lockReticles.Add(created);
+        }
+
+        return _lockReticles[index];
+    }
+
+    private void HideLockReticlesFrom(int index)
+    {
+        for (int i = index; i < _lockReticles.Count; i++)
+            if (_lockReticles[i] != null && _lockReticles[i].gameObject.activeSelf)
+                _lockReticles[i].gameObject.SetActive(false);
     }
 
     // =========================================================================

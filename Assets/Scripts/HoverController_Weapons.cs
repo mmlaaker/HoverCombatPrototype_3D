@@ -1135,6 +1135,52 @@ public class HoverController_Weapons : MonoBehaviour
             _gizmoScanBuffer);
     }
 
+    /// <summary>
+    /// The two circles a homing missile is confined to on launch, drawn flat through the nose.
+    ///
+    /// A missile turning at its maximum rate traces a circle of radius speed / turn rate, and it
+    /// cannot get inside that circle no matter how long it chases. So anything sitting INSIDE
+    /// one of these is unreachable: the missile will orbit it rather than converge, which in
+    /// play reads as the homing being broken rather than as the target being too close.
+    ///
+    /// This is the geometry behind "turn rate is the evasion dial" made visible, and it is the
+    /// thing that silently changed when speed was raised: the circles grow with speed even
+    /// though turn rate never moved.
+    ///
+    /// Drawn in the horizontal plane because that is the plane players dodge in.
+    /// </summary>
+    private void DrawTurningCircles(WeaponDefinition def)
+    {
+        if (def.homing.turnRate <= 0f || def.flight.speed <= 0f) return;
+
+        float radius = def.flight.speed / (def.homing.turnRate * Mathf.Deg2Rad);
+
+        Vector3 origin = transform.position;
+        Vector3 flat   = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+        if (flat.sqrMagnitude < 1e-6f) return;
+        flat.Normalize();
+        Vector3 right = Vector3.Cross(Vector3.up, flat);
+
+        Vector3 leftCentre  = origin - right * radius;
+        Vector3 rightCentre = origin + right * radius;
+
+        // Anything the missile currently cares about, tested against both circles.
+        Transform probe = _lockTargets.Count > 0 ? _lockTargets[0] : LockTarget;
+        bool unreachable = probe != null
+            && (Vector3.Distance(new Vector3(probe.position.x, origin.y, probe.position.z), leftCentre)  < radius
+             || Vector3.Distance(new Vector3(probe.position.x, origin.y, probe.position.z), rightCentre) < radius);
+
+        UnityEditor.Handles.color = unreachable ? new Color(1f, 0.3f, 0.2f, 0.9f)
+                                                : new Color(0.4f, 0.8f, 1f, 0.35f);
+        UnityEditor.Handles.DrawWireDisc(leftCentre,  Vector3.up, radius);
+        UnityEditor.Handles.DrawWireDisc(rightCentre, Vector3.up, radius);
+
+        UnityEditor.Handles.Label(origin + flat * radius + Vector3.up * 2f,
+            unreachable
+                ? $"TURN CIRCLE {radius:F0}m — TARGET INSIDE, cannot converge"
+                : $"turn circle {radius:F0}m");
+    }
+
     private void OnDrawGizmos()
     {
         if (!ShouldDrawDebug || !Application.isPlaying) return;
@@ -1185,7 +1231,22 @@ public class HoverController_Weapons : MonoBehaviour
 
             DrawLockCone(def.weaponLock.lockRange, def.weaponLock.lockConeAngle, coneColor);
 
-            if (LockTarget != null)
+            DrawTurningCircles(def);
+
+            // Every committed lock, numbered in firing order. Drawing only LockTarget hid the
+            // whole cascade the moment maxLocks went above 1: four of five locks were invisible.
+            for (int i = 0; i < _lockTargets.Count; i++)
+            {
+                var t = _lockTargets[i];
+                if (t == null) continue;
+                Gizmos.color = Color.green;
+                Gizmos.DrawLine(transform.position, t.position);
+                Gizmos.DrawWireSphere(t.position, 0.5f + i * 0.15f);
+                UnityEditor.Handles.color = Color.green;
+                UnityEditor.Handles.Label(t.position + Vector3.up * (1.5f + i * 0.4f), $"#{i + 1}");
+            }
+
+            if (_lockTargets.Count == 0 && LockTarget != null)
             {
                 Gizmos.color = Color.green;
                 Gizmos.DrawLine(transform.position, LockTarget.position);

@@ -1822,6 +1822,11 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!224 &901474943 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 6080445929868859575, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
+  m_PrefabInstance: {fileID: 4458777512058190225}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &930954329
 GameObject:
   m_ObjectHideFlags: 0
@@ -2270,7 +2275,7 @@ PrefabInstance:
       objectReference: {fileID: 11400000, guid: a531da4c0e79f1a4c9b9d85de9286752, type: 2}
     - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 201.79001
+      value: 201.8
       objectReference: {fileID: 0}
     - target: {fileID: 5927693998371741120, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
       propertyPath: m_LocalPosition.y
@@ -2327,7 +2332,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4246840766707924649, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1990640800}
   m_SourcePrefab: {fileID: 100100000, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
 --- !u!1 &1127220073
 GameObject:
@@ -3320,15 +3328,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.17067231
+      value: 0.17067233
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0.000000004913413
+      value: 0.00000000791515
       objectReference: {fileID: 0}
     - target: {fileID: 8667993891819038235, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.0000000031296048
+      value: 8.528441e-10
       objectReference: {fileID: 0}
     - target: {fileID: 8834798328621652656, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
       propertyPath: InitialModule.startSpeed.scalar
@@ -4901,6 +4909,27 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 1908522503262244674, guid: fcc126500e37bb64aa15df74a321e2ca, type: 3}
   m_PrefabInstance: {fileID: 1266020441}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1990640788 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4246840766707924649, guid: b9213dbb0d6fb2c42ac2fe909213618e, type: 3}
+  m_PrefabInstance: {fileID: 1076790794}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1990640800
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1990640788}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 606810ae1b4b2294d887755b41ee9c5f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TuningTarget
+  mode: 1
+  watchSeconds: 4
+  refillHealthOnReturn: 1
+  resetKey: 116
 --- !u!1 &2055706313
 GameObject:
   m_ObjectHideFlags: 0
@@ -5027,6 +5056,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1910851168}
     - target: {fileID: 3221876747599190860, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
+      propertyPath: lockReticleParent
+      value: 
+      objectReference: {fileID: 901474943}
+    - target: {fileID: 3221876747599190860, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
       propertyPath: reticleProjectionDistance
       value: 100
       objectReference: {fileID: 0}
@@ -5125,6 +5158,10 @@ PrefabInstance:
     - target: {fileID: 6668216421478899418, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7263708861905625257, guid: ad17adbdfb54aa74493890fac079c1db, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

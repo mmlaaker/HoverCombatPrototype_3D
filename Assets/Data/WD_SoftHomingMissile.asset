@@ -17,7 +17,7 @@ MonoBehaviour:
   projectileMode: 0
   projectilePrefab: {fileID: 2049139610672849644, guid: fe536133abcf6724f8ed6bf3524410a1, type: 3}
   combat:
-    damage: 30
+    damage: 10
     maxAmmo: 0
     startingAmmo: 0
     fireRate: 1.5

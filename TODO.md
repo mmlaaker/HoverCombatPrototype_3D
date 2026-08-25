@@ -346,7 +346,20 @@ Separate clearly: **shield invulnerability works**, through a different path. On
 
 Pairs with 1.1: respawning without it is spawn-camping by construction.
 
-### 1.3 Four of six implemented weapons deal zero damage
+### 1.3 Four of six implemented weapons deal zero damage — **DONE 2026-08-24**
+
+**All six now deal damage, framed by the owner against 100 HP.** The ladder, anchored on the Rocket at 4 hits
+to kill: Rocket 25/hit · Shotgun 21/perfect burst · Hard Lock 40/volley (8 x 5) · Soft Homing 10/hit ·
+Chain Gun 19.8 dps · Machine Gun 6.0 dps. **The Rocket is deliberately the hardest single direct hit**,
+which required moving the Shotgun and Soft Homing DOWN — at their validation values both out-damaged it.
+
+**`maxHealth` is back to 100.** It was raised to 500 mid-session as the "nothing dies" guard, and the
+owner’s 4-hits framing supersedes that. **Consequence: the stubbed death path (1.1) is now reachable in a
+normal session.** `TuningTarget` calls `VehicleHealth.Respawn()` so a killed AI recovers itself, but
+`PlaytestReset` deliberately does NOT restore health, so a killed PLAYER is stranded until play mode exits.
+
+*Original problem statement follows.*
+
 
 `WD_Missile`, `WD_SoftHomingMissile`, `WD_HardLockMissile` and `WD_Shotgun` are all at `combat.damage: 0`.
 Only `WD_ChainGun` (1) and `WD_MachineGuns` (**0.25**) do damage. *Read from the assets 2026-08-21; this item and 1.6 both said 0.5 until then, which overstated the AI offense by double.*
@@ -443,7 +456,21 @@ Detonations currently produce no visual at all.
 Note the dependency runs the opposite way from how it used to: the definition states `splashRadius` and the
 VFX is authored to match it, not the reverse.
 
-### 2.7 Automatic weapon fire rates are far too low
+### 2.7 Automatic weapon fire rates are far too low — **DONE 2026-08-24**
+
+**Machine Gun 24/sec -> 60/sec (2 barrels at 30). Chain Gun 20/sec -> 90/sec.** Both `fireRate` values moved
+with them, as the item required.
+
+**The Chain Gun was firing SLOWER than the free Machine Gun**, which inverted "the better Machine Gun that is
+not free". It is now clearly faster, denser and harder-hitting, paid for with the spin-up.
+
+**Two couplings found while doing it.** Damage and force are PER PARTICLE, so changing rate silently rescales
+both — damage values were cut to hold DPS constant rather than smuggle in a buff. And **tracer spacing is
+speed / rate**: at 1000 m/s and 12/sec the Machine Gun’s tracers were 83m apart, which reads as a sparse
+dotted line. Raising SPEED makes that worse, not better; rate is the dial that fills the gap.
+
+*Original entry follows.*
+
 
 Owner note: both automatics "need to increase the firing speed a bunch to keep up with the reticle". Live
 emission is **8/sec per Machine Gun barrel and 20/sec on the Chain Gun**.
@@ -977,7 +1004,15 @@ Uses the allocating `Physics.OverlapSphere` while the rest of the project is scr
 (`RaycastNonAlloc` in the hover springs, `OverlapSphereNonAlloc` in the scans, static reusable buffers in
 `ProjectileSweep`). **Detonations are bursty, so this is garbage generated at exactly the worst moment.**
 
-### 3.6 `WD_MachineGuns.combat.fireRate` is 0.01
+### 3.6 `WD_MachineGuns.combat.fireRate` is 0.01 — **DONE 2026-08-24**
+
+**Now 60, matching the weapon’s real cadence.** The two rate values do different jobs and this is worth
+stating once: `emitter.emissionRate` is the gun — particles per second per barrel, carrying damage and force.
+`combat.fireRate` is only the shot-EVENT tick, driving ammo decrement and camera recoil. For a ParticleSystem
+weapon the emitters play regardless of it, which is exactly why 0.01 sat unnoticed.
+
+*Original entry follows.*
+
 
 That is the `[Min]` attribute floor, giving a **100-second cooldown**. Almost certainly a slider dragged to
 the bottom rather than an intended value. Compare `WD_ChainGun` at 20.
@@ -1257,7 +1292,28 @@ would also be honest, and is what actually answered the question both times.
 is worse than no answer, which is the premise of this whole file.
 
 ---
-### 4.6 Nothing in the scene can be knocked around except the two craft
+### 4.6 Nothing in the scene can be knocked around except the two craft — **UNBLOCKED 2026-08-24**
+
+**A code fix had to land first, and nobody knew it was there.** Rocket splash skipped anything without an
+`IDamageable`, so a crate with a Rigidbody took the blast and received *no force at all*. Six 1000kg cubes
+sitting inside a blast radius recorded exactly 0.0 m/s. That is the "a crate that does not budge is worse
+than no crate" failure arriving as a bug rather than as an authoring mistake. Splash now qualifies on "can
+it be moved OR can it be hurt", and props take force while still taking no damage.
+
+**A second, geometric problem sat underneath it.** A blast pushes outward from its own centre, and a rocket
+detonates at craft height — so for a crate on the ground "outward" is mostly straight DOWN. Measured: 84% of
+the push drove the crate into the floor, and friction ate the rest. The same impulse sideways threw that
+crate 18.6m; along the real blast direction it moved 0.00 m/s. Fixed with `blast.propUpwardBias`, which
+pushes from a point below the blast **for props only — craft are exempt**, verified as bit-identical craft
+behaviour with the bias on and off.
+
+**Also new: `TuningTarget`.** Attach to a vehicle to make it a range target. AutoReturn takes the hit, tumbles,
+then flies back to its mark; Anchored tips and rolls but never travels; Free is a no-op. `T` resets manually.
+This is what makes a solo force-tuning pass practical — a full-force rocket throws a craft ~127m, and a
+five-missile volley threw the AI over 300m.
+
+*Original entry follows.*
+
 
 **Counted from `Assets/Scenes/Prototype_Scene.unity` 2026-08-21: the scene holds exactly two
 Rigidbodies, both non-kinematic, and they are the player craft and the AI craft. There are no dynamic
@@ -1340,7 +1396,26 @@ speed you close on your own blast. That reads as skill (shooting a wall you are 
 means the mechanic is strongest exactly when you are already fastest. If you would rather it were flat,
 measure falloff from the launch position instead of the detonation point.
 
-### 5.5 Homing cannot catch a runner — **DECIDED 2026-08-21: raise the speed**
+### 5.5 Homing cannot catch a runner — **DONE 2026-08-24**
+
+**All three missiles now clear the 131.25 boosted ceiling:** Dumbfire 200 (1.52x), Hard Lock 185 (1.41x),
+Soft Homing 170 (1.30x).
+
+**Raising speed broke three neighbouring systems, and all three were only found by measurement.** Every one
+of them reads in play as a DESIGN problem rather than a broken link, which is what makes them expensive:
+
+1. **Turn radius** is speed / turnRate, so tripling speed nearly tripled the turning circle. Turn rates were
+   raised to compensate and the circles still widened deliberately — 56m on Soft Homing, 45m on Hard Lock —
+   because turn rate is the evasion dial.
+2. **Arming distance** is speed x armingDelay. It went 3.5m -> 10m, which is further than a craft hovers,
+   so the rocket could no longer detonate beneath its own firer. **Rocket jumping was silently dead**:
+   measured 1.9 m/s of self-shove at 10m arming versus 34 m/s at 3.5m. All three delays were re-derived to
+   hold 3.5m.
+3. **Flare convergence.** The flare eases out over `flareDuration`, and flight time is range / speed. The
+   missiles began arriving still aiming ~10m wide and missed everything at close range. Durations cut to 0.12s.
+
+*Original decision follows.*
+
 
 *Was written as an open decision between two acceptable answers. **The owner chose, and the choice is
 now a design rule rather than a per-weapon tuning question.** See `GameDesignDocument.md` >
@@ -1574,7 +1649,55 @@ away by accident.
 
 
 
-### 5.16 The force model is calibrated against a top speed that no longer exists
+### 5.16 The force model is calibrated against a top speed that no longer exists — **DONE 2026-08-24**
+
+**Re-baselined, measured in play, and judged good by the owner.** The Dumbfire Rocket is now the
+calibration point for the whole roster — *"this is the power missile and this will be our baseline to
+work from."* Everything below this line is the record of what it settled at; the original problem
+statement follows it and is kept because the SHAPE of the failure is worth not repeating.
+
+**The baseline, read from `WD_Missile.asset` 2026-08-24:**
+
+| | Value | Meaning |
+|---|---|---|
+| `impactForce` | 132000 | 132 m/s = **1.26x topSpeed**, and 131.25 is a boosted craft's ceiling, so a direct hit throws you at almost exactly your own maximum speed |
+| `damage` | 25 | **4 direct hits** against 100 HP. The hardest single hit in the game, by owner decision |
+| `splashImpactForce` | 80000 | 0.76x topSpeed at the blast centre, 0.61 of a direct hit |
+| `splashRadius` | 12 | Judged: 15 was tried and read as "it cannot miss" |
+| `destabilizeFraction` | 0.25 | *"can spin you out or even flip you at the sweet spots"* |
+| falloff curve | 1.0 / 0.95@20% / 0.60@50% / 0.25@80% / 0 | see below |
+
+**How the two force numbers were derived, because the method matters more than the values.** They
+answer different questions and neither is a ratio of the other. `impactForce` is *what a direct hit
+does*, set against the GDD's fraction-of-top-speed rule. `splashImpactForce` is *what standing next to
+it does*, set independently. The 0.61 between them is a consequence, not an input — it replaced an
+inherited 0.5 that nobody had ever chosen.
+
+**The falloff curve is where the near-miss character actually lives, and its shape was the real fix.**
+The original was a two-key ease that began falling immediately, so the blast was a small hard core with
+a long dead halo — a target visibly inside the sphere took nothing. Two facts drove the reshape:
+
+1. **A sphere's volume is nearly all near its skin.** The inner half of the radius is only 12.5% of the
+   volume. So a long flat plateau spends itself on the tiny core that almost nothing occupies, while
+   the outer half — where most near misses actually land — is what decides the weapon's character.
+2. **A gradient is learnable and a plateau is not.** Every distance now produces a distinguishably
+   different outcome, so a player builds an instinct for "close" versus "clipped". A plateau-and-cliff
+   gives two outcomes and a coin-flip boundary.
+
+**Watch out: the curve and the radius silently rescale each other.** The curve is normalised to the
+radius, so growing the radius pushes the whole falloff outward and every FIXED distance gets more.
+Measured: taking the radius 12 -> 15 raised the force at 9m by 56% without the force number moving.
+Radius buys reach; the force numbers buy punch. Do not change one to fix the other.
+
+**Still true and still the constraint:** do not exceed roughly 0.36 concussive without rechecking
+rocket jumps. Measured 2026-08-24 firing straight down: 0.30 tilted the firer 50 degrees and it
+recovered, 0.45 flipped and downed it. **That ceiling MOVES with `splashImpactForce` and
+`selfImpactScale`, because self-spin is the product of all three.**
+
+<details>
+<summary>The original problem statement, kept for the pattern</summary>
+
+
 
 **The rule is sound and its baseline is stale.** `GameDesignDocument.md` > Knockback and the Flip
 Threshold says to express knockback as a fraction of top speed: a hit imparting more than top speed is
@@ -1609,6 +1732,9 @@ so reshaping the spread for readability (2.20) changes how often it flips.**
 
 **Do not exceed roughly 0.36 concussive** without rechecking rocket jumps — the same value governs
 self-inflicted spin, so past that a player flips themselves (5.3).
+
+</details>
+
 ---
 
 ## Tier 6 — Unimplemented features
@@ -1691,7 +1817,29 @@ Serves two weapons. The Lob Bomb is nearly free once it exists — the owner's s
 Rocket for now except in trajectory,"* likely growing bigger later to pay for the slower delivery. The
 Gravity Bomb (6.9's neighbour, below) reuses the same lob.
 
-### 6.8 Multi-target lock — buys the Hard Lock volley and Chain Lightning
+### 6.8 Multi-target lock — **VOLLEY BUILT 2026-08-24. Chain Lightning still open.**
+
+**The cascade works as 5.1 predicted:** `LockTarget` became a list, `Scanning` loops back on itself with
+committed targets excluded, and the validity rule and release-to-fire carried over unchanged. Verified
+against the live scene — first scan acquires, the exclusion scan correctly finds nobody new, `allowRepeatLocks`
+rescues the one-on-one case, and the cap holds.
+
+**Four new tuning fields**, all defaulting to the previous single-missile behaviour so the other weapons are
+untouched: `maxLocks`, `allowRepeatLocks`, `minLocksToFire`, `volleyLaunchInterval`.
+
+**Two design decisions the owner made during the build, both worth keeping:**
+
+1. **A partial volley fires nothing.** Releasing below `minLocksToFire` drops the whole hold. Without that
+   gate the weapon collapsed into cheap homing spam — one lock and release gave a guaranteed-tracking missile
+   in 0.4s, strictly better than the Soft Homing, which is the weapon that owns that job.
+2. **The meter measures the VOLLEY, not the lock.** `LockProgress` is banked locks plus the one in progress,
+   over the maximum, so it fills once smoothly instead of resetting five times in two seconds.
+
+**Still to do here:** Chain Lightning, which is this same acquisition with near-instant delivery instead of
+missiles. **It is what answers the Sniper question**, so it stays sequenced early.
+
+*Original entry follows.*
+
 
 Lock several targets and fire a volley, rather than the one-lock-one-missile case that ships today.
 **The lock-and-hold primitive already works**; what is missing is holding more than one.
