@@ -6,7 +6,7 @@ using UnityEngine;
 ///
 /// The flare is not a separate flight phase. The projectile always homes, but early on it homes
 /// at a point offset to one side of its target, and that offset shrinks to zero over
-/// flareDuration. Because the aim point ends on the target, convergence is guaranteed by
+/// the flare. Because the aim point ends on the target, convergence is guaranteed by
 /// construction rather than by tuning, so the curve costs nothing in accuracy.
 ///
 /// Pure designer-facing values. No scene refs, no runtime state.
@@ -68,24 +68,26 @@ public class WeaponHomingTuning
     [Range(0f, 1f)]
     public float flareOffset = 0f;
 
-    [Tooltip("Seconds the missile takes to come back in line after swinging wide. 0 turns the " +
-             "flare off.\n\n" +
-             "THE FLARE MUST FINISH BEFORE THE MISSILE ARRIVES, or it is still aiming wide when " +
-             "it gets there and misses. Flight time is range divided by speed, so this is only " +
-             "safe relative to how fast the weapon flies and how close the fight is. Tripling " +
-             "missile speed once left both homing weapons missing everything inside about 40m, " +
-             "because a flare authored for a slow missile never had time to resolve.\n\n" +
-             "The Derived readout below turns this into metres -- 'flare resolves after N m of " +
-             "travel'. Anything closer than that number is a shot that arrives still swinging. " +
-             "Set it so that distance sits comfortably inside your usual fighting range.\n\n" +
-             "There is a safety net, but do not lean on it: at runtime the flare is capped at " +
-             "60% of the flight time the shot actually has, so a point-blank shot gets a " +
-             "compressed version of the arc instead of sailing straight over. It rescues close " +
-             "range; it cannot rescue a value that is too long for EVERY range.\n\n" +
-             "Longer also means the missile spends more of its flight off to one side, which " +
-             "gives a moving target more room to leave. Showiness versus reliability.")]
-    [Min(0f)]
-    public float flareDuration = 0f;
+    [Tooltip("How much of the trip the missile spends swinging wide before it settles onto the " +
+             "target, as a SHARE OF THE FLIGHT rather than a number of seconds. 0 turns the flare " +
+             "off. 0.6 means the arc occupies the first 60% of the journey and the last 40% is " +
+             "the missile converging.\n\n" +
+             "Because it is a share, the arc looks the SAME at every range -- a 30m snap shot and " +
+             "a 125m lob trace the same shape, just scaled. It also cannot be broken by changing " +
+             "the missile's speed or its lock range, which is the entire reason it is expressed " +
+             "this way.\n\n" +
+             "This used to be authored in seconds and it did not survive contact. Seconds are " +
+             "absolute; flight time is not, so the same setting was a dramatic arc up close and a " +
+             "barely visible kink far out -- worst at exactly the ranges you have time to watch " +
+             "it. Raising lock range made it worse, and raising missile speed silently rescaled " +
+             "it. It needed a runtime safety cap just to stop point-blank shots sailing straight " +
+             "over the target. None of that applies now: a share of the flight cannot outlast the " +
+             "flight.\n\n" +
+             "Higher means a bigger, showier arc and less of the trip spent lining up, which " +
+             "gives a moving target more room to leave. Showiness versus reliability. Past about " +
+             "0.65 the missile runs out of room to converge and starts arriving still turning.")]
+    [Range(0f, 0.75f)]
+    public float flareFlightFraction = 0f;
 
     [Tooltip("Which way the missile swings before curling back in. All of these are the same " +
              "thing -- an angle measured from straight up -- so they are directly comparable: " +

@@ -716,7 +716,7 @@ because they change continuously and have no transition to hang an event on.
 | `EmpProjectile.cs` | Soft-homing single shot. No splash, no damage. Applies a freeze, or is absorbed by an active shield | Same `FixedUpdate` ordering constraint as the rocket. Freeze duration is pushed by `HoverController_EMP` so per-vehicle tuning owns it rather than the prefab |
 | `TargetingScan.cs` | Static. "Find the best enemy in front of me right now" | Range is checked against real distance, not the sphere radius. Caller owns the buffer so it allocates nothing |
 | `IProjectileOwner` / `IProjectileDefinitionCarrier` / `IProjectileDamageCarrier` / `IProjectileImpactCarrier` | Spawn-time push from `FireAllMuzzles`, all null-conditional so a prefab implements only what it needs | `IProjectileDefinitionCarrier` supersedes the two narrower pairs: handing over the whole asset means nothing is copied and nothing can drift. The older ones are still honoured so untouched prefabs keep working |
-| `MissileFlareMode.cs` | Enum: `Alternate`, `Random`, `Left`/`Right`/`Up`/`Down` | Alternate and Random exist because a fixed direction reads as a scripted animation the second time you see it |
+| `MissileFlareMode.cs` | Enum: `Alternate`, `Random`, `Left`, `Right`, `Loft` | **Every mode is a roll angle in ONE frame built from WORLD up** (Loft 0, Right +90, Left -90), so a launch mid-bank produces the arc that was authored rather than one rotated by however far the car was leaned. `Random` is CONTINUOUS across the upper half, not a shuffle of the named entries, and never rolls below horizontal — the aim point would be under the map. **`Up` and `Down` were removed 2026-08-25**: `Up` was indistinguishable from `Loft` except mid-bank, and `Down` aimed tens of metres underground and flew into the road |
 | `WeaponDebugDraw.cs` | Scene draws for the impact half: impulse split, splash attribution, particle contacts | Uses `Debug.DrawLine` with a duration, not `OnDrawGizmos`, because impacts are instantaneous and the rocket destroys itself on detonation. Every method is `[Conditional("UNITY_EDITOR")]` |
 
 ### Other vehicle modules
@@ -876,7 +876,7 @@ weapons use limited pickup ammo except the Machine Gun, though **nothing enforce
 | 3 | Shotgun | Tap | **Tuned 2026-08-24** | 30-pellet burst, 21 damage on a perfect burst. `destabilizeFraction` 1, where spread geometry supplies the rotation. **Deliberate, not a violation of the flip rule** — see 5.16 |
 | 4 | Rocket Launcher | Tap | **BASELINE, judged 2026-08-24** | Straight line, no homing. **The calibration point for the whole roster** (5.16): 1.26x top speed on a direct hit, 25 damage = 4 hits, 12m blast, 0.25 concussive |
 | 5 | Lob Bomb | Tap | **Not built** | Rocket delivered over an arc. Identical to 4 except in trajectory for now. Needs 6.7 |
-| 6 | Soft Homing | Tap | **Tuned 2026-08-24** | Harassment tool. 0.57x top speed, 10 damage, 6m blast, 0.12 concussive. 56m turning circle — deliberately dodgeable |
+| 6 | Soft Homing | Tap | **Retuned 2026-08-25** | Harassment tool: slow, visibly arcing, hard to shake but easy to outrun. **The only weapon SLOWER than the craft it chases** (0.95x unboosted, 0.76x boosted), so a full-throttle runner is immune by design and everything else is not. Arcs via `Random` flare. **Slowing it made it more ACCURATE, not less** — turn radius is speed/turnRate, so the circle tightened with the speed |
 | 7 | Hard Lock Missile | Hold to scan and lock, **release to fire** | **Volley built 2026-08-24** | Cascading multi-lock: hold to stack up to `maxLocks`, release fires one missile per lock on a stagger. Each is small (0.59x top speed, 8 damage); the volley is the weapon. See 6.8 |
 | 8 | Hard Lock Chain Lightning | Hold to scan and lock, release | **Not built** | Near-instant damage instead of missiles. No blast, not concussive. Needs 6.8. **Answers the Sniper question** |
 | 9 | Laser Cannon | Hold to charge, release | **Not built** | Sustained beam, pierces targets, force along the axis, no blast. Needs 6.11, **which is gated on 6.12** |
@@ -892,8 +892,20 @@ build a weapon for general use, designate it a Special if it earns that.
 
 **Force and concussive are the authored vocabulary.** Force is `impact.impactForce`; concussive is
 `impact.destabilizeFraction`. **Explosive weapons may flip a vehicle; non-explosive weapons should not**
-(owner rule, 2026-08-21). **Projectiles are faster than vehicles** and should catch a straight runner —
-the boosted ceiling is 131 m/s and all missiles currently sit at 70 (5.5).
+(owner rule, 2026-08-21).
+
+**THE BOOSTED CEILING IS 131.25 m/s AND IT IS THE CLIFF EVERY PROJECTILE SPEED IS JUDGED AGAINST**
+(`topSpeed` 105 x `boostSpeedMultiplier` 1.25). Below it, a target running dead away cannot be
+caught at all: the missile trails until its fuse expires, which reads as broken rather than as
+evasion. Live 2026-08-25: Dumbfire **200** (1.52x), Hard Lock **185** (1.41x), Soft Homing **100**
+(0.76x). **The Soft Homing is deliberately under the cliff** — see its row above — and is the only
+weapon that is. **Boost is capped at 5.0s** (`maxEnergy` 100 / `boostEnergyPerSecond` 20), which is
+what keeps that survivable: a runner can only hold the escape speed for so long.
+
+**Missile speed is the most coupled number on a weapon and changing it silently rescales four
+others** (`Measuring.md` trap 52): arming distance (`speed x armingDelay`), turning circle
+(`speed / turnRate`), maximum range (`speed x lifetime`) and the trail renderer's ribbon length.
+The flare used to be a fifth until it was re-expressed as a share of the flight, 2026-08-25.
 
 `WeaponType.Mine` and `TickMine` already exist, so 12 is much closer than the rest.
 

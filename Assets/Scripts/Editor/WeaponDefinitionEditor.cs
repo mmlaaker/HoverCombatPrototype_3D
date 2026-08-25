@@ -45,7 +45,7 @@ public class WeaponDefinitionEditor : Editor
     private SerializedProperty damage, maxAmmo, startingAmmo, fireRate, recoilVelocity;
     private SerializedProperty impactForce, splashImpactForce, destabilizeFraction;
     private SerializedProperty speed, lifetime, armingDelay;
-    private SerializedProperty turnRate, homingDelay, flareOffset, flareDuration, flareDirection, weaveAmplitude, weaveFrequency;
+    private SerializedProperty turnRate, homingDelay, flareOffset, flareFlightFraction, flareDirection, weaveAmplitude, weaveFrequency;
     private SerializedProperty splashRadius, splashFalloff, propUpwardBias, blastLayers, explosionPrefab;
     private SerializedProperty emissionRate, burstCount, startSpeed, startSpeedMin, startLifetime,
                                coneAngle, coneRadius, emitterLayers;
@@ -78,7 +78,7 @@ public class WeaponDefinitionEditor : Editor
         turnRate       = Find("homing.turnRate");
         homingDelay    = Find("homing.homingDelay");
         flareOffset    = Find("homing.flareOffset");
-        flareDuration  = Find("homing.flareDuration");
+        flareFlightFraction = Find("homing.flareFlightFraction");
         flareDirection = Find("homing.flareDirection");
         weaveAmplitude = Find("homing.weaveAmplitude");
         weaveFrequency = Find("homing.weaveFrequency");
@@ -171,7 +171,7 @@ public class WeaponDefinitionEditor : Editor
                 EditorGUILayout.PropertyField(flareOffset);
                 if (flareOffset.hasMultipleDifferentValues || flareOffset.floatValue > 0f)
                 {
-                    EditorGUILayout.PropertyField(flareDuration);
+                    EditorGUILayout.PropertyField(flareFlightFraction);
                     EditorGUILayout.PropertyField(flareDirection);
                 }
 
@@ -352,13 +352,22 @@ public class WeaponDefinitionEditor : Editor
                 // The flare has to finish inside the flight or the missile arrives still aiming
                 // wide. Flight time is range / speed, so tripling speed silently broke this on
                 // both homing missiles once already.
-                if (weaponType == WeaponType.Missile && flareDuration.floatValue > 0f
+                if (weaponType == WeaponType.Missile && flareFlightFraction.floatValue > 0f
                     && flareOffset.floatValue > 0f && speed.floatValue > 0f)
                 {
-                    float flareTravel = speed.floatValue * flareDuration.floatValue;
-                    Row("Flare resolves after", $"{flareTravel:F0} m of travel"
-                        + "   (shots closer than this arrive still aiming wide)");
+                    // Stated as a departure angle and a share of the trip, because those are the
+                    // two things the flare actually controls and neither depends on range. The
+                    // old readout gave "resolves after N metres", which was only meaningful while
+                    // the duration was authored in seconds.
+                    float departure = Mathf.Atan(flareOffset.floatValue) * Mathf.Rad2Deg;
+                    Row("Flare shape", $"leaves at {departure:F0} deg, settled by "
+                        + $"{flareFlightFraction.floatValue * 100f:F0}% of the way in"
+                        + "   (identical at every range)");
 
+                    float lockR = lockRange.floatValue;
+                    if (lockR > 0f)
+                        Row("Flare at max lock range", $"{lockR / speed.floatValue * flareFlightFraction.floatValue:F2} s "
+                            + $"of a {lockR / speed.floatValue:F2} s flight");
                 }
 
                 // The squiggle only shows if the nose can keep up with it. One half-swing takes
@@ -598,18 +607,17 @@ public class WeaponDefinitionEditor : Editor
 
         if (weaponType == WeaponType.Missile && mode == ProjectileMode.Instantiated)
         {
-            // The flare has to resolve inside the flight or the missile arrives still aiming
-            // wide. This one silently broke both homing weapons when speed was raised.
-            if (flareOffset.floatValue > 0f && flareDuration.floatValue > 0f && speed.floatValue > 0f)
-            {
-                float resolvesAfter = speed.floatValue * flareDuration.floatValue;
-                if (resolvesAfter > 60f)
-                    Warn(ref any, $"The flare does not finish until {resolvesAfter:F0}m of travel "
-                                + $"(speed {speed.floatValue:F0} x duration {flareDuration.floatValue}). "
-                                + "Any shot closer than that arrives still swinging wide and misses. "
-                                + "Shorten the duration, or accept that this weapon only works at "
-                                + "long range.", MessageType.Warning);
-            }
+            // The old warning here checked that the flare resolved inside the flight, and it is
+            // gone because that failure is no longer expressible: the flare is authored as a
+            // SHARE of the flight, so it scales with every shot instead of being a fixed number
+            // of seconds that a close shot could outrun. What is left is the one thing a share
+            // can still get wrong — asking for so much of the trip that nothing is left to
+            // converge in.
+            if (flareOffset.floatValue > 0f && flareFlightFraction.floatValue > 0.65f)
+                Warn(ref any, $"The flare occupies {flareFlightFraction.floatValue * 100f:F0}% of the "
+                            + "flight, which leaves too little of it to converge. The missile arrives "
+                            + "still turning onto the target and misses regardless of range. Measured, "
+                            + "0.6 is the most that still lands reliably.", MessageType.Warning);
 
             // Alternate produces exactly two roll angles, so a volley larger than two collapses
             // into two overlapping stacks and reads as having fired two missiles.

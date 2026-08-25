@@ -329,7 +329,7 @@ public class HomingAccuracyProbe : MonoBehaviour
         sb.AppendLine("speed=" + def.flight.speed + "  turnRate=" + def.homing.turnRate +
                       " deg/s  turn radius=" +
                       (def.flight.speed / (def.homing.turnRate * Mathf.Deg2Rad)).ToString("F1") + " m");
-        sb.AppendLine("flare=" + def.homing.flareOffset + " x range over " + def.homing.flareDuration +
+        sb.AppendLine("flare=" + def.homing.flareOffset + " x range over " + def.homing.flareFlightFraction +
                       "s   homingDelay=" + def.homing.homingDelay + "s   splashRadius=" +
                       def.blast.splashRadius + " m");
         sb.AppendLine("motion=" + motion + "  shots/cell=" + shotsPerCell +

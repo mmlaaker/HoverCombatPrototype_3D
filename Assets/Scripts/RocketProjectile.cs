@@ -154,23 +154,10 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     private bool    flareReady;
 
     /// <summary>
-    /// flareDuration after it has been capped against the flight time this particular shot
-    /// actually has. See the note where it is computed in Steer.
+    /// This shot's flare length in seconds: flareFlightFraction resolved against the flight
+    /// time to the target as it was at launch. See the note where it is computed in Steer.
     /// </summary>
     private float   flareDurationEff;
-
-    /// <summary>
-    /// Most of a shot's STEERABLE flight that the flare is ever allowed to occupy. The missile
-    /// needs the remainder to nose over and converge; at 1.0 it would still be turning at
-    /// impact.
-    ///
-    /// 0.6 was measured against 0.5 on a lofted profile. Tightening it to 0.5 did close the
-    /// miss distance on a 30m crossing shot (6.1m to 4.8m) but converted none of it into hits,
-    /// while costing a third of the visible arc at 60m (7.6m of apex down to 5.0m). That is
-    /// paying the thing the weapon is FOR to fix something this dial cannot reach: a
-    /// point-blank miss is the turning circle being as wide as the range, not the flare.
-    /// </summary>
-    private const float FLARE_MAX_FLIGHT_FRACTION = 0.6f;
 
     /// <summary>
     /// Per-missile offset into the weave, rolled at spawn. Without it every missile in a volley
@@ -298,7 +285,7 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
     /// same detour whether the target was 20m or 200m away, so close shots sailed straight past.
     ///
     /// Instead the missile always homes, but early on it homes at a point offset to one side of
-    /// the target, and that offset shrinks to zero over flareDuration. Because the aim point
+    /// the target, and that offset shrinks to zero over the flare. Because the aim point
     /// *ends* on the target, convergence is guaranteed by construction rather than by tuning,
     /// and the curve comes for free. Scaling the offset by range makes it self-adjusting.
     ///
@@ -327,23 +314,24 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
             flareStartAge  = age;
             flareReady     = true;
 
-            // The flare's two dials are in different units, and that is a trap: flareOffset is
-            // a FRACTION OF RANGE (so it self-adjusts to the shot) while flareDuration is
-            // ABSOLUTE SECONDS (so it does not). On a long shot 0.25s is a quarter of the
-            // flight and the missile arcs and settles. On a 25m shot the whole flight IS 0.17s,
-            // so the missile is still climbing away when it arrives and sails straight over.
+            // Both flare dials are relative to the shot: flareOffset is a fraction of the RANGE
+            // and flareFlightFraction is a fraction of the FLIGHT. That pairing is what makes
+            // the arc scale-free — the same shape at 30m and at 125m, and unaffected by changes
+            // to missile speed or lock range.
             //
-            // Cap the flare at a fraction of the flight actually available. Long shots are
-            // untouched — they never hit the cap — and short ones get a compressed arc instead
-            // of a guaranteed miss.
-            // Deliberately measured against the WHOLE flight and not against the flight minus
-            // homingDelay, even though the latter is the more defensible description of the
-            // time the missile actually has. Subtracting the delay was tried: it cost a third
-            // of the arc at 60m (7.6m of apex down to 5.3m) and converted no misses into hits,
-            // because the shot it was meant to rescue is lost to the turning circle rather than
-            // to the flare. The arc is what this profile is for, so the arc wins.
+            // There is deliberately no safety cap here any more. There used to be one, because
+            // the duration was authored in absolute SECONDS and could therefore exceed the whole
+            // flight on a close shot, leaving the missile still swinging away when it arrived.
+            // A fraction of the flight cannot outlast the flight, so that failure is now
+            // unrepresentable rather than merely caught.
+            //
+            // Measured against the whole flight and not the flight minus homingDelay, even
+            // though the latter better describes the time the missile really has. Subtracting
+            // the delay was tried: it cost a third of the arc at 60m (7.6m of apex down to 5.3m)
+            // and converted no misses into hits, because the shot it was meant to rescue is lost
+            // to the turning circle, not to the flare.
             float flightTime = flareBaseRange / Mathf.Max(1f, FL.speed);
-            flareDurationEff = Mathf.Min(H.flareDuration, flightTime * FLARE_MAX_FLIGHT_FRACTION);
+            flareDurationEff = flightTime * H.flareFlightFraction;
         }
 
         Vector3 aimPoint = homingTarget.position;
@@ -363,8 +351,8 @@ public class RocketProjectile : MonoBehaviour, IProjectileDefinitionCarrier, IHo
         // Persistent wander, on top of whatever the flare is doing.
         //
         // This is deliberately NOT part of the flare. The flare is one arc that decays over
-        // flareDuration; a squiggle has to last the whole flight. Building it into the flare
-        // was tried and cannot work at these speeds: the nose only has turnRate x flareDuration
+        // the flare; a squiggle has to last the whole flight. Building it into the flare
+        // was tried and cannot work at these speeds: the nose only has turnRate x flare duration
         // of heading to spend, which at 235 deg/s and a 0.12s flare is 28 degrees. The aim point
         // spiralled and the missile simply could not follow it, so it averaged out to a straight
         // line and the dial did nothing.

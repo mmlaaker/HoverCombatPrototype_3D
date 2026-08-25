@@ -35,7 +35,7 @@ MonoBehaviour:
     turnRate: 0
     homingDelay: 0
     flareOffset: 0
-    flareDuration: 0
+    flareFlightFraction: 0
     flareDirection: 0
     weaveAmplitude: 0
     weaveFrequency: 3
